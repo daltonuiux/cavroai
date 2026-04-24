@@ -287,6 +287,13 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
       .trim()
 
     totalRawCount++
+
+    // fallback_text candidates are logged for debug visibility only — never included in results
+    if (source === "fallback_text") {
+      logCandidate(name, clean, source, SOURCE_SCORE["fallback_text"], false, "fallback text — debug only")
+      return
+    }
+
     const words = clean.split(" ")
     const lower = clean.toLowerCase()
     const lastWord = words[words.length - 1].toLowerCase()
