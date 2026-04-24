@@ -667,6 +667,18 @@ export function AddClientModal() {
                                     {detectDebug.aiExtraction.rawResponse.slice(0, 400)}
                                   </p>
                                 )}
+                                {detectDebug.aiExtraction.rejectedClients && detectDebug.aiExtraction.rejectedClients.length > 0 && (
+                                  <div className="mt-1.5">
+                                    <p className="text-[10px] text-red-500/60 font-medium mb-0.5">
+                                      Rejected ({detectDebug.aiExtraction.rejectedClients.length}):
+                                    </p>
+                                    {detectDebug.aiExtraction.rejectedClients.map((r, i) => (
+                                      <p key={i} className="font-mono text-[10px] text-muted-foreground/40">
+                                        &quot;{r.name}&quot; — {r.reason}
+                                      </p>
+                                    ))}
+                                  </div>
+                                )}
                               </>
                             ) : (
                               <p className="text-muted-foreground/40">

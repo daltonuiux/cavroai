@@ -147,6 +147,7 @@ export interface DetectDebug {
     model?: string
     rawResponse?: string
     error?: string
+    rejectedClients?: Array<{ name: string; reason: string }>
   }
 }
 
@@ -428,12 +429,14 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
   }
 
   // ── AI client extraction ──────────────────────────────────────────────────
-  // Sends compact page text to Anthropic and asks for a structured list of
-  // client/company names. Returns null if no API key or if the call fails;
-  // the caller then falls back to the heuristic results.
-  async function extractClientsWithAI(
-    compactText: string
-  ): Promise<Array<{ name: string; confidence: "high" | "medium" | "low"; reason: string }> | null> {
+  // Sends compact page text to Anthropic and returns validated client names.
+  // Returns null ONLY on hard failure (no API key, network error, parse error)
+  // so the caller can distinguish "AI ran but found nothing" from "AI could not run".
+  async function extractClientsWithAI(compactText: string): Promise<{
+    clients: Array<{ name: string; confidence: "high" | "medium" | "low"; reason: string }>
+    rejected: Array<{ name: string; reason: string }>
+    rawResponse: string
+  } | null> {
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) return null
 
@@ -451,13 +454,15 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
 Return ONLY valid JSON in this exact format — no markdown, no explanation:
 {"clients":[{"name":"string","confidence":"high|medium|low","reason":"string"}]}
 
+CRITICAL RULE: Do not return any company name unless it appears verbatim in the provided page text below. If a name does not appear word-for-word in the text, do not include it.
+
 Rules:
-- Include ONLY proper company or brand names (e.g. Revolut, Stripe, Airbnb, Linear)
-- If a sentence says "Revolut is a global financial technology company", return "Revolut"
-- If a URL slug is /customers/acme-corp, return "Acme Corp"
-- EXCLUDE: page headings, CTAs ("Get Started"), product features, industry terms ("Banking & Financial Services"), generic service words, geographic names
-- confidence=high: explicitly named as a client or customer; medium: strong contextual signal; low: inferred
-- Return at most 10 clients. If none found, return {"clients":[]}
+- Include ONLY proper company or brand names that appear literally in the page text
+- If the text says "[COMPANY_NAME] is a global financial technology company", return "[COMPANY_NAME]"
+- If a URL slug is /customers/[client-name], return the title-cased version only if the name also appears in the page body
+- EXCLUDE: page headings, CTAs ("Get Started"), product features, industry terms ("Banking & Financial Services"), generic service words, geographic locations, placeholder or example names
+- confidence=high: explicitly named as a client or customer; medium: strong contextual signal; low: inferred from context
+- Return at most 10 clients. If no real client names are found verbatim in the text, return {"clients":[]}
 
 Page text:
 ${compactText}`,
@@ -465,24 +470,37 @@ ${compactText}`,
       ],
     })
 
-    const text = message.content[0].type === "text" ? message.content[0].text : ""
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    const rawResponse = message.content[0].type === "text" ? message.content[0].text : ""
+    const jsonMatch = rawResponse.match(/\{[\s\S]*\}/)
     if (!jsonMatch) return null
 
     const parsed = JSON.parse(jsonMatch[0]) as {
       clients: Array<{ name: string; confidence: string; reason: string }>
     }
 
-    return parsed.clients
-      .filter((c) => typeof c.name === "string" && c.name.trim().length >= 2)
-      .slice(0, 10)
-      .map((c) => ({
-        name: c.name.trim(),
-        confidence: (["high", "medium", "low"].includes(c.confidence)
-          ? c.confidence
-          : "low") as "high" | "medium" | "low",
-        reason: c.reason ?? "",
-      }))
+    // Validate: every returned name must appear verbatim (case-insensitive) in the source text
+    const lowerText = compactText.toLowerCase()
+    const clients: Array<{ name: string; confidence: "high" | "medium" | "low"; reason: string }> = []
+    const rejected: Array<{ name: string; reason: string }> = []
+
+    for (const c of parsed.clients) {
+      if (typeof c.name !== "string" || c.name.trim().length < 2) continue
+      const name = c.name.trim()
+      if (!lowerText.includes(name.toLowerCase())) {
+        rejected.push({ name, reason: "not present in source text" })
+      } else {
+        clients.push({
+          name,
+          confidence: (["high", "medium", "low"].includes(c.confidence)
+            ? c.confidence
+            : "low") as "high" | "medium" | "low",
+          reason: c.reason ?? "",
+        })
+        if (clients.length >= 10) break
+      }
+    }
+
+    return { clients, rejected, rawResponse }
   }
 
   // ── Profile extraction helpers ────────────────────────────────────────────
@@ -672,28 +690,30 @@ ${compactText}`,
   let finalClients: Array<{ name: string; websiteUrl: string }>
 
   try {
-    const aiClients = await extractClientsWithAI(compactText)
-    if (aiClients && aiClients.length > 0) {
-      finalClients = aiClients.map((c) => ({ name: c.name, websiteUrl: "" }))
+    const aiResult = await extractClientsWithAI(compactText)
+    if (aiResult === null) {
+      // Hard failure: no API key — use heuristics
+      finalClients = results.slice(0, 10)
+      aiDebug = { used: false }
+    } else {
+      // AI ran (even if it found nothing or everything was rejected) — do NOT fall back to heuristics
+      finalClients = aiResult.clients.map((c) => ({ name: c.name, websiteUrl: "" }))
       aiDebug = {
         used: true,
         model: "claude-haiku-4-5",
-        rawResponse: JSON.stringify({ clients: aiClients }),
+        rawResponse: aiResult.rawResponse,
+        rejectedClients: aiResult.rejected.length > 0 ? aiResult.rejected : undefined,
       }
       console.log(
-        `[detect] AI extracted ${aiClients.length} clients: [${aiClients.map((c) => c.name).join(", ")}]`
+        `[detect] AI extracted ${aiResult.clients.length} valid clients` +
+        (aiResult.rejected.length > 0
+          ? `, rejected ${aiResult.rejected.length}: [${aiResult.rejected.map((r) => r.name).join(", ")}]`
+          : "") +
+        `: [${aiResult.clients.map((c) => c.name).join(", ")}]`
       )
-    } else if (aiClients !== null) {
-      // AI responded but found nothing — use heuristic results
-      finalClients = results.slice(0, 10)
-      aiDebug = { used: true, model: "claude-haiku-4-5", rawResponse: '{"clients":[]}' }
-      console.log(`[detect] AI found no clients — falling back to heuristics`)
-    } else {
-      // No API key
-      finalClients = results.slice(0, 10)
-      aiDebug = { used: false }
     }
   } catch (err) {
+    // Unexpected error (network, parse) — use heuristics
     finalClients = results.slice(0, 10)
     aiDebug = {
       used: false,
