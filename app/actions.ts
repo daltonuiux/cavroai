@@ -122,6 +122,7 @@ export interface DetectUrlStat {
   htmlLength: number
   rawCandidates: number
   filteredAdded: number
+  usedFallback: boolean
 }
 
 export interface DetectDebug {
@@ -207,9 +208,13 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
     if (clean.length > 60) { reject("too long (> 60 chars)"); return }
     if (seen.has(clean.toLowerCase())) { reject("duplicate"); return }
     if (STOP_WORDS.test(clean)) { reject("stop word"); return }
+    // Reject multi-word phrases that start with a stop word (e.g. "Get Started", "Learn More")
+    if (clean.includes(" ") && STOP_WORDS.test(clean.split(" ")[0])) { reject("starts with stop word"); return }
     if (/^\d+$/.test(clean)) { reject("all digits"); return }
-    if (/\d{4}/.test(clean)) { reject("contains 4-digit number (likely year)"); return }
-    if (clean.split(" ").length > 6) { reject("too many words (> 6)"); return }
+    // Relaxed: only reject actual calendar-year numbers (1900–2099), not all 4-digit sequences
+    if (/\b(19|20)\d{2}\b/.test(clean)) { reject("contains calendar year"); return }
+    // Relaxed: allow up to 8 words (was 6)
+    if (clean.split(" ").length > 8) { reject("too many words (> 8)"); return }
 
     seen.add(clean.toLowerCase())
     results.push({ name: clean, websiteUrl: website })
@@ -323,6 +328,19 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
     }
   }
 
+  // Fallback: plain-text Title Case scan — runs per page when primary extraction finds nothing.
+  // Strips HTML to text, then matches sequences of 1–4 capitalized words.
+  // Stop-word filtering in tryAdd handles the majority of false positives (UI labels, headings).
+  function extractFallback(html: string) {
+    const text = stripTags(html)
+    // Match 1–4 consecutive Title Case words (each 2–30 chars, starting uppercase)
+    for (const m of text.matchAll(
+      /\b([A-Z][a-zA-Z]{1,29}(?:\s+[A-Z][a-zA-Z]{1,29}){0,3})\b/g
+    )) {
+      tryAdd(m[1])
+    }
+  }
+
   const urlStats: DetectUrlStat[] = []
 
   for (const path of CANDIDATE_PATHS) {
@@ -334,9 +352,15 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
 
     const { html, status } = await fetchPage(pageUrl)
     const htmlLength = html ? html.length : 0
+    let usedFallback = false
 
     if (html) {
       extractCandidates(html, pageUrl)
+      // If primary extraction found nothing on a page with real HTML, try text fallback
+      if (allRaw.length === rawBefore && htmlLength > 500) {
+        usedFallback = true
+        extractFallback(html)
+      }
     }
 
     const stat: DetectUrlStat = {
@@ -345,11 +369,12 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
       htmlLength,
       rawCandidates: allRaw.length - rawBefore,
       filteredAdded: results.length - filteredBefore,
+      usedFallback,
     }
     urlStats.push(stat)
 
     console.log(
-      `[detect] ${pageUrl} → status=${status} html=${htmlLength}ch raw=+${stat.rawCandidates} filtered=+${stat.filteredAdded} (total: ${results.length})`
+      `[detect] ${pageUrl} → status=${status} html=${htmlLength}ch raw=+${stat.rawCandidates} filtered=+${stat.filteredAdded}${usedFallback ? " [fallback]" : ""} (total: ${results.length})`
     )
   }
 

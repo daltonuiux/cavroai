@@ -635,17 +635,19 @@ export function AddClientModal() {
                                     <th className="pr-3 pb-1 font-medium">Status</th>
                                     <th className="pr-3 pb-1 font-medium">HTML</th>
                                     <th className="pr-3 pb-1 font-medium">Raw</th>
-                                    <th className="pb-1 font-medium">Added</th>
+                                    <th className="pr-3 pb-1 font-medium">Added</th>
+                                    <th className="pb-1 font-medium">Mode</th>
                                   </tr>
                                 </thead>
                                 <tbody className="font-mono">
                                   {detectDebug.urlStats.map((s) => (
                                     <tr key={s.url} className="border-t border-border/40">
-                                      <td className="pr-3 py-0.5 text-foreground/40 max-w-[160px] truncate">{s.url.replace(detectDebug.normalizedUrl, "")  || "/"}</td>
+                                      <td className="pr-3 py-0.5 text-foreground/40 max-w-[160px] truncate">{s.url.replace(detectDebug.normalizedUrl, "") || "/"}</td>
                                       <td className={`pr-3 py-0.5 ${s.status === 200 ? "text-emerald-600/70" : "text-red-500/70"}`}>{String(s.status)}</td>
                                       <td className="pr-3 py-0.5">{s.htmlLength > 0 ? `${(s.htmlLength / 1000).toFixed(0)}k` : "—"}</td>
                                       <td className="pr-3 py-0.5">{s.rawCandidates}</td>
-                                      <td className="py-0.5">{s.filteredAdded}</td>
+                                      <td className="pr-3 py-0.5">{s.filteredAdded}</td>
+                                      <td className="py-0.5 text-muted-foreground/40">{s.usedFallback ? "txt" : s.htmlLength > 0 ? "struct" : "—"}</td>
                                     </tr>
                                   ))}
                                 </tbody>
