@@ -20,6 +20,9 @@
 # production
 /build
 
+# local filesystem db (replaced by Supabase — do not commit)
+/data
+
 # misc
 .DS_Store
 *.pem

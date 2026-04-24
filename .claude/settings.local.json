@@ -2,7 +2,18 @@
   "permissions": {
     "allow": [
       "Bash(npx create-next-app@latest . --typescript --tailwind --app --no-src-dir --import-alias \"@/*\" --eslint --yes)",
-      "Bash(npx shadcn@latest init --defaults)"
+      "Bash(npx shadcn@latest init --defaults)",
+      "mcp__Claude_Preview__preview_start",
+      "Read(//Users/daltonuiux/dev/ai-intelligence-layer/**)",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d['analyses'][0].keys\\(\\) if d['analyses'] else 'no analyses'\\)\")",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(list\\(d.keys\\(\\)\\)\\)\\); c=d.get\\('clients',[]\\); print\\(json.dumps\\([{'id':x['id'],'name':x['name']} for x in c[:4]]\\)\\)\")",
+      "Bash(npm run *)",
+      "Bash(kill 13216)",
+      "Bash(xargs kill *)",
+      "Bash(node -e ' *)"
     ]
   }
 }
