@@ -604,11 +604,9 @@ export function AddClientModal() {
               <>
                 {detected.length === 0 ? (
                   <div className="px-5 py-12 text-center">
-                    <p className="text-[13px] font-medium text-foreground/70">Nothing found</p>
+                    <p className="text-[13px] font-medium text-foreground/70">No clients detected automatically.</p>
                     <p className="mt-1 text-[12px] text-muted-foreground/55">
-                      We couldn't find client mentions on that page.
-                      <br />
-                      Try the CSV upload instead.
+                      Try CSV upload or add your top 10 clients manually.
                     </p>
                   </div>
                 ) : (
