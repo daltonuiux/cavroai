@@ -125,15 +125,23 @@ export interface DetectUrlStat {
   usedFallback: boolean
 }
 
+export interface CandidateDebugEntry {
+  raw: string
+  cleaned: string
+  source: string
+  score: number
+  accepted: boolean
+  reason: string
+}
+
 export interface DetectDebug {
   inputUrl: string
   normalizedUrl: string
   urlStats: DetectUrlStat[]
   totalRaw: number
   totalFiltered: number
-  firstRaw: string[]
   firstFiltered: Array<{ name: string; websiteUrl: string }>
-  rejectionSamples: Array<{ raw: string; cleaned: string; reason: string }>
+  candidateLog: CandidateDebugEntry[]
 }
 
 export interface DetectResult {
@@ -155,9 +163,8 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
         urlStats: [],
         totalRaw: 0,
         totalFiltered: 0,
-        firstRaw: [],
         firstFiltered: [],
-        rejectionSamples: [{ raw: rawUrl, cleaned: "", reason: "invalid URL — could not parse origin" }],
+        candidateLog: [{ raw: rawUrl, cleaned: "", source: "n/a", score: 0, accepted: false, reason: "invalid URL — could not parse origin" }],
       },
     }
   }
@@ -180,14 +187,70 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
   const FALSE_POSITIVE_PATHS =
     /\/(pricing|blog|contact|login|signup|sign-up|register|terms|privacy|careers|jobs|services|features|docs|documentation|support|faq|help|download|install|resources|webinar|event)\b/i
 
+  // ── Scoring ────────────────────────────────────────────────────────────────
+
+  type CandidateSource =
+    | "img_alt"
+    | "aria_logo"
+    | "data_attr"
+    | "client_section"
+    | "link_slug"
+    | "subpage_heading"
+    | "fallback_text"
+
+  // Base score by source — reflects how reliably that source identifies company names
+  const SOURCE_SCORE: Record<CandidateSource, number> = {
+    link_slug: 4,        // href="/customers/acme-corp" — very high signal
+    img_alt: 3,          // <img alt="Acme logo"> — logo carousels are reliable
+    aria_logo: 3,        // aria-label="Acme logo" — same reliability
+    data_attr: 3,        // data-company="Acme" — structured attribute
+    subpage_heading: 3,  // <h2> inside /customers page
+    client_section: 2,   // text inside a div.clients — noisy but contextual
+    fallback_text: 1,    // plain-text scan — highest noise, needs boosts to pass
+  }
+
+  const MIN_SCORE = 2
+
+  // Single words that are clearly generic business/tech terms — always reject
+  const GENERIC_SINGLE_WORDS = new Set([
+    "ai", "saas", "paas", "iaas", "b2b", "b2c", "api", "sdk", "ui", "ux",
+    "login", "book", "call", "demo", "intro", "example", "platform", "pricing",
+    "blog", "contact", "services", "process", "software", "app", "tool",
+    "solution", "solutions", "product", "products", "feature", "features",
+    "enterprise", "startup", "agency", "dashboard", "report", "analytics",
+    "integration", "integrations", "automation", "overview", "security",
+    "privacy", "terms", "support", "docs", "documentation", "resources",
+  ])
+
+  // If the last word of a candidate matches, it's likely a product phrase, not a company
+  const BAD_SUFFIX_WORDS = new Set([
+    "platform", "example", "process", "pricing", "login", "book", "call",
+    "demo", "intro", "contact", "services", "blog", "tool", "solution",
+    "solutions", "software", "app", "dashboard", "analytics", "integration",
+    "report", "api", "sdk", "update", "updates", "release", "releases",
+  ])
+
+  // Common UI action phrases — reject whole string matches
+  const UI_ACTION_PHRASES =
+    /^(get started|learn more|contact us|book a demo|book demo|book a call|book call|intro call|schedule a demo|schedule demo|sign up|log in|sign in|try free|try it free|try now|start free|start now|watch demo|watch a demo|request a demo|request demo|free trial|start a free trial|view all|see all|read more|find out more|click here|talk to us|talk to sales|speak to us|chat with us|get a quote|get quote|get in touch|download now|watch video|play video|how it works|why us|who we are|what we do|our mission|our vision|our values|join us|apply now|hire us|work with us|coming soon|no credit card)$/i
+
   const seen = new Set<string>()
   const results: Array<{ name: string; websiteUrl: string }> = []
 
-  // Debug instrumentation
-  const allRaw: string[] = []
-  const rejectionSamples: Array<{ raw: string; cleaned: string; reason: string }> = []
+  // Debug
+  let totalRawCount = 0
+  const candidateLog: CandidateDebugEntry[] = []
 
-  function tryAdd(name: string, website = "") {
+  function logCandidate(
+    raw: string, cleaned: string, source: CandidateSource,
+    score: number, accepted: boolean, reason: string
+  ) {
+    if (candidateLog.length < 80) {
+      candidateLog.push({ raw, cleaned, source, score, accepted, reason })
+    }
+  }
+
+  function tryAdd(name: string, source: CandidateSource, website = "") {
     const clean = name
       .trim()
       .replace(/\s+/g, " ")
@@ -196,27 +259,64 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
       .replace(/^[.,;:!?'"()\[\]]+/, "")
       .trim()
 
-    allRaw.push(name)
+    totalRawCount++
+    const words = clean.split(" ")
+    const lower = clean.toLowerCase()
+    const lastWord = words[words.length - 1].toLowerCase()
+    let score = SOURCE_SCORE[source]
 
     const reject = (reason: string) => {
-      if (rejectionSamples.length < 40) {
-        rejectionSamples.push({ raw: name, cleaned: clean, reason })
-      }
+      logCandidate(name, clean, source, score, false, reason)
     }
 
-    if (clean.length < 2) { reject("too short (< 2 chars)"); return }
-    if (clean.length > 60) { reject("too long (> 60 chars)"); return }
-    if (seen.has(clean.toLowerCase())) { reject("duplicate"); return }
-    if (STOP_WORDS.test(clean)) { reject("stop word"); return }
-    // Reject multi-word phrases that start with a stop word (e.g. "Get Started", "Learn More")
-    if (clean.includes(" ") && STOP_WORDS.test(clean.split(" ")[0])) { reject("starts with stop word"); return }
-    if (/^\d+$/.test(clean)) { reject("all digits"); return }
-    // Relaxed: only reject actual calendar-year numbers (1900–2099), not all 4-digit sequences
-    if (/\b(19|20)\d{2}\b/.test(clean)) { reject("contains calendar year"); return }
-    // Relaxed: allow up to 8 words (was 6)
-    if (clean.split(" ").length > 8) { reject("too many words (> 8)"); return }
+    // ── Hard rejects (before scoring) ──────────────────────────────────────
 
-    seen.add(clean.toLowerCase())
+    if (clean.length < 2)  { reject("too short"); return }
+    if (clean.length > 60) { reject("too long"); return }
+    if (seen.has(lower))   { reject("duplicate"); return }
+
+    // "Perlon AI Perlon AI" style — repeated half
+    if (words.length >= 4) {
+      const mid = Math.floor(words.length / 2)
+      if (
+        words.slice(0, mid).join(" ").toLowerCase() ===
+        words.slice(mid).join(" ").toLowerCase()
+      ) { reject("repeated phrase"); return }
+    }
+
+    // All-caps multi-word = CTA (e.g. "BOOK A DEMO")
+    if (words.length > 1 && clean === clean.toUpperCase()) {
+      reject("all-caps phrase"); return
+    }
+
+    if (STOP_WORDS.test(clean))                                    { reject("stop word"); return }
+    if (words.length > 1 && STOP_WORDS.test(words[0]))            { reject("starts with stop word"); return }
+    if (UI_ACTION_PHRASES.test(clean))                             { reject("UI action phrase"); return }
+    if (words.length === 1 && GENERIC_SINGLE_WORDS.has(lower))    { reject("generic single word"); return }
+    if (BAD_SUFFIX_WORDS.has(lastWord))                            { reject(`ends in "${lastWord}"`); return }
+    if (/^\d+$/.test(clean))                                       { reject("all digits"); return }
+    if (/\b(19|20)\d{2}\b/.test(clean))                           { reject("contains calendar year"); return }
+    if (words.length > 8)                                          { reject("too many words"); return }
+
+    // ── Score adjustments ──────────────────────────────────────────────────
+
+    // Sweet spot: 2–4 words is the most common company name length
+    if (words.length >= 2 && words.length <= 4) score += 1
+    // Single word is lower confidence without corroborating signals
+    if (words.length === 1) score -= 1
+    // Known legal/domain suffix strongly implies a real company name
+    if (/\b(Inc|LLC|Ltd|Corp|Co|GmbH|AG|SA|BV|Plc)\b/.test(clean)) score += 2
+    if (/\.(io|com|ai|co|app|dev)\b/i.test(clean))                  score += 1
+
+    // ── Minimum score gate ─────────────────────────────────────────────────
+
+    if (score < MIN_SCORE) {
+      reject(`score ${score} below threshold ${MIN_SCORE}`)
+      return
+    }
+
+    seen.add(lower)
+    logCandidate(name, clean, source, score, true, "ok")
     results.push({ name: clean, websiteUrl: website })
   }
 
@@ -269,7 +369,7 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
           alt
         )
       ) {
-        tryAdd(alt)
+        tryAdd(alt, "img_alt")
       }
     }
 
@@ -278,7 +378,7 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
       const label = m[1].trim()
       if (/logo|homepage|site/i.test(label)) {
         const name = label.replace(/\s+(logo|homepage|site|website)$/i, "").trim()
-        if (name.length > 1) tryAdd(name)
+        if (name.length > 1) tryAdd(name, "aria_logo")
       }
     }
 
@@ -286,7 +386,7 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
     for (const m of html.matchAll(
       /data-(?:company|client|partner|customer|name)=["']([^"']{2,60})["']/gi
     )) {
-      tryAdd(m[1])
+      tryAdd(m[1], "data_attr")
     }
 
     // 4. Sections with client/case-study/testimonial class or id names
@@ -297,7 +397,7 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
       for (const nm of text.matchAll(
         /\b([A-Z][a-zA-Z0-9&.+]*(?:\s[A-Z][a-zA-Z0-9&.+]*){0,4})\b/g
       )) {
-        if (!STOP_WORDS.test(nm[1])) tryAdd(nm[1])
+        if (!STOP_WORDS.test(nm[1])) tryAdd(nm[1], "client_section")
         if (results.length >= 20) break
       }
     }
@@ -313,7 +413,7 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
           .replace(/[-_]/g, " ")
           .replace(/\b\w/g, (c) => c.toUpperCase())
           .trim()
-        tryAdd(name, origin)
+        tryAdd(name, "link_slug", origin)
       }
     }
 
@@ -322,7 +422,7 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
       for (const m of html.matchAll(/<h[1-4][^>]*>([\s\S]{2,100}?)<\/h[1-4]>/gi)) {
         const text = stripTags(m[1]).trim()
         if (text.length >= 2 && text.length <= 60 && /^[A-Z]/.test(text)) {
-          tryAdd(text)
+          tryAdd(text, "subpage_heading")
         }
       }
     }
@@ -333,11 +433,13 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
   // Stop-word filtering in tryAdd handles the majority of false positives (UI labels, headings).
   function extractFallback(html: string) {
     const text = stripTags(html)
-    // Match 1–4 consecutive Title Case words (each 2–30 chars, starting uppercase)
+    // Match 1–4 consecutive Title Case words (each 2–30 chars, starting uppercase).
+    // Source score is 1 (lowest) so single words need company suffix to pass MIN_SCORE;
+    // 2–4 word phrases get +1 and reach exactly threshold.
     for (const m of text.matchAll(
       /\b([A-Z][a-zA-Z]{1,29}(?:\s+[A-Z][a-zA-Z]{1,29}){0,3})\b/g
     )) {
-      tryAdd(m[1])
+      tryAdd(m[1], "fallback_text")
     }
   }
 
@@ -347,7 +449,7 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
     if (results.length >= 10) break
 
     const pageUrl = origin + path
-    const rawBefore = allRaw.length
+    const rawBefore = totalRawCount
     const filteredBefore = results.length
 
     const { html, status } = await fetchPage(pageUrl)
@@ -357,7 +459,7 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
     if (html) {
       extractCandidates(html, pageUrl)
       // If primary extraction found nothing on a page with real HTML, try text fallback
-      if (allRaw.length === rawBefore && htmlLength > 500) {
+      if (totalRawCount === rawBefore && htmlLength > 500) {
         usedFallback = true
         extractFallback(html)
       }
@@ -367,7 +469,7 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
       url: pageUrl,
       status,
       htmlLength,
-      rawCandidates: allRaw.length - rawBefore,
+      rawCandidates: totalRawCount - rawBefore,
       filteredAdded: results.length - filteredBefore,
       usedFallback,
     }
@@ -381,7 +483,7 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
   const final = results.slice(0, 10)
 
   console.log(
-    `[detect] done | URLs tried: ${urlStats.length} | raw candidates: ${allRaw.length} | returning ${final.length}: [${final.map((r) => r.name).join(", ")}]`
+    `[detect] done | URLs tried: ${urlStats.length} | raw candidates: ${totalRawCount} | returning ${final.length}: [${final.map((r) => r.name).join(", ")}]`
   )
 
   return {
@@ -390,11 +492,10 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
       inputUrl: rawUrl,
       normalizedUrl: origin,
       urlStats,
-      totalRaw: allRaw.length,
+      totalRaw: totalRawCount,
       totalFiltered: final.length,
-      firstRaw: allRaw.slice(0, 20),
       firstFiltered: final.slice(0, 20),
-      rejectionSamples,
+      candidateLog,
     },
   }
 }

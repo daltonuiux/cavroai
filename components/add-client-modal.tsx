@@ -657,29 +657,40 @@ export function AddClientModal() {
                           {/* Totals */}
                           <div>
                             <p className="mb-1 font-medium text-foreground/50">Totals</p>
-                            <p>Raw candidates extracted: {detectDebug.totalRaw}</p>
-                            <p>Passed filters: {detectDebug.totalFiltered}</p>
+                            <p>Raw candidates scored: {detectDebug.totalRaw}</p>
+                            <p>Accepted: {detectDebug.totalFiltered}</p>
                           </div>
-                          {/* Raw candidates */}
-                          {detectDebug.firstRaw.length > 0 && (
+                          {/* Candidate log */}
+                          {detectDebug.candidateLog.length > 0 && (
                             <div>
-                              <p className="mb-1 font-medium text-foreground/50">First {detectDebug.firstRaw.length} raw candidates</p>
-                              <p className="font-mono text-[10px] break-all text-foreground/40">
-                                {detectDebug.firstRaw.join(" · ")}
+                              <p className="mb-1 font-medium text-foreground/50">
+                                Candidate log ({detectDebug.candidateLog.length})
                               </p>
-                            </div>
-                          )}
-                          {/* Rejections */}
-                          {detectDebug.rejectionSamples.length > 0 && (
-                            <div>
-                              <p className="mb-1 font-medium text-foreground/50">Rejection samples ({detectDebug.rejectionSamples.length})</p>
-                              <div className="space-y-0.5">
-                                {detectDebug.rejectionSamples.slice(0, 15).map((r, i) => (
-                                  <p key={i} className="font-mono text-[10px]">
-                                    <span className="text-foreground/40">&quot;{r.cleaned || r.raw}&quot;</span>
-                                    <span className="text-muted-foreground/40"> → {r.reason}</span>
-                                  </p>
-                                ))}
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-left text-[10px]">
+                                  <thead>
+                                    <tr className="text-muted-foreground/40">
+                                      <th className="pr-2 pb-1 font-medium">Candidate</th>
+                                      <th className="pr-2 pb-1 font-medium">Source</th>
+                                      <th className="pr-2 pb-1 font-medium">Score</th>
+                                      <th className="pr-2 pb-1 font-medium">Result</th>
+                                      <th className="pb-1 font-medium">Reason</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="font-mono">
+                                    {detectDebug.candidateLog.map((c, i) => (
+                                      <tr key={i} className="border-t border-border/40">
+                                        <td className="pr-2 py-0.5 max-w-[120px] truncate text-foreground/50">{c.cleaned || c.raw}</td>
+                                        <td className="pr-2 py-0.5 text-muted-foreground/40">{c.source}</td>
+                                        <td className="pr-2 py-0.5">{c.score}</td>
+                                        <td className={`pr-2 py-0.5 font-medium ${c.accepted ? "text-emerald-600/70" : "text-red-500/60"}`}>
+                                          {c.accepted ? "✓" : "✗"}
+                                        </td>
+                                        <td className="py-0.5 text-muted-foreground/40 max-w-[140px] truncate">{c.reason}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
                               </div>
                             </div>
                           )}
