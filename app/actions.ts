@@ -142,6 +142,12 @@ export interface DetectDebug {
   totalFiltered: number
   firstFiltered: Array<{ name: string; websiteUrl: string }>
   candidateLog: CandidateDebugEntry[]
+  aiExtraction: {
+    used: boolean
+    model?: string
+    rawResponse?: string
+    error?: string
+  }
 }
 
 export interface DetectResult {
@@ -165,6 +171,7 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
         totalFiltered: 0,
         firstFiltered: [],
         candidateLog: [{ raw: rawUrl, cleaned: "", source: "n/a", score: 0, accepted: false, reason: "invalid URL — could not parse origin" }],
+        aiExtraction: { used: false, error: "invalid URL" },
       },
     }
   }
@@ -374,6 +381,110 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
       .trim()
   }
 
+  // ── Compact text builder ──────────────────────────────────────────────────
+  // Produces a structured, AI-readable summary of a page: headings, alt text,
+  // definition lists, and paragraph text — stripped of all HTML noise.
+  // Per-page output is capped at 4,000 chars; the caller caps the total at 12,000.
+  function buildCompactText(html: string, pageUrl: string): string {
+    const parts: string[] = [`[page: ${pageUrl}]`]
+
+    // <title>
+    const titleM = html.match(/<title[^>]*>([\s\S]{1,200}?)<\/title>/i)
+    if (titleM) parts.push(`[title: ${stripTags(titleM[1]).trim()}]`)
+
+    // <meta name="description">
+    const metaM =
+      html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']{1,200})["']/i) ??
+      html.match(/<meta[^>]+content=["']([^"']{1,200})["'][^>]+name=["']description["']/i)
+    if (metaM) parts.push(`[meta: ${metaM[1].trim()}]`)
+
+    // Headings h1–h4
+    for (const m of html.matchAll(/<h[1-4][^>]*>([\s\S]{1,150}?)<\/h[1-4]>/gi)) {
+      const h = stripTags(m[1]).trim()
+      if (h) parts.push(`## ${h}`)
+    }
+
+    // Image alt text
+    for (const m of html.matchAll(/<img[^>]+alt=["']([^"']{2,100})["'][^>]*/gi)) {
+      parts.push(`[img: ${m[1].trim()}]`)
+    }
+
+    // Definition lists — dt/dd pairs common on case-study pages
+    for (const m of html.matchAll(
+      /<dt[^>]*>([\s\S]{1,60}?)<\/dt>\s*<dd[^>]*>([\s\S]{1,400}?)<\/dd>/gi
+    )) {
+      const label = stripTags(m[1]).trim()
+      const value = stripTags(m[2]).trim()
+      if (label && value) parts.push(`${label}: ${value}`)
+    }
+
+    // Paragraph text (first 400 chars each)
+    for (const m of html.matchAll(/<p[^>]*>([\s\S]{10,800}?)<\/p>/gi)) {
+      const p = stripTags(m[1]).trim()
+      if (p.length >= 10) parts.push(p.slice(0, 400))
+    }
+
+    return parts.join("\n").slice(0, 4000)
+  }
+
+  // ── AI client extraction ──────────────────────────────────────────────────
+  // Sends compact page text to Anthropic and asks for a structured list of
+  // client/company names. Returns null if no API key or if the call fails;
+  // the caller then falls back to the heuristic results.
+  async function extractClientsWithAI(
+    compactText: string
+  ): Promise<Array<{ name: string; confidence: "high" | "medium" | "low"; reason: string }> | null> {
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    if (!apiKey) return null
+
+    const Anthropic = (await import("@anthropic-ai/sdk")).default
+    const anthropic = new Anthropic({ apiKey })
+
+    const message = await anthropic.messages.create({
+      model: "claude-haiku-4-5",
+      max_tokens: 600,
+      messages: [
+        {
+          role: "user",
+          content: `Extract real company or client names from this web page text. The page is a portfolio, case study listing, or client showcase.
+
+Return ONLY valid JSON in this exact format — no markdown, no explanation:
+{"clients":[{"name":"string","confidence":"high|medium|low","reason":"string"}]}
+
+Rules:
+- Include ONLY proper company or brand names (e.g. Revolut, Stripe, Airbnb, Linear)
+- If a sentence says "Revolut is a global financial technology company", return "Revolut"
+- If a URL slug is /customers/acme-corp, return "Acme Corp"
+- EXCLUDE: page headings, CTAs ("Get Started"), product features, industry terms ("Banking & Financial Services"), generic service words, geographic names
+- confidence=high: explicitly named as a client or customer; medium: strong contextual signal; low: inferred
+- Return at most 10 clients. If none found, return {"clients":[]}
+
+Page text:
+${compactText}`,
+        },
+      ],
+    })
+
+    const text = message.content[0].type === "text" ? message.content[0].text : ""
+    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) return null
+
+    const parsed = JSON.parse(jsonMatch[0]) as {
+      clients: Array<{ name: string; confidence: string; reason: string }>
+    }
+
+    return parsed.clients
+      .filter((c) => typeof c.name === "string" && c.name.trim().length >= 2)
+      .slice(0, 10)
+      .map((c) => ({
+        name: c.name.trim(),
+        confidence: (["high", "medium", "low"].includes(c.confidence)
+          ? c.confidence
+          : "low") as "high" | "medium" | "low",
+        reason: c.reason ?? "",
+      }))
+  }
+
   // ── Profile extraction helpers ────────────────────────────────────────────
 
   // Given a raw field value (already tag-stripped), extract a company name.
@@ -516,6 +627,7 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
   }
 
   const urlStats: DetectUrlStat[] = []
+  const pageCompactTexts: string[] = []
 
   for (const path of CANDIDATE_PATHS) {
     if (results.length >= 10) break
@@ -529,6 +641,8 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
     let usedFallback = false
 
     if (html) {
+      // Collect compact text for AI extraction (total capped at 12,000 chars later)
+      pageCompactTexts.push(buildCompactText(html, pageUrl))
       extractCandidates(html, pageUrl)
       // If primary extraction found nothing on a page with real HTML, try text fallback
       if (totalRawCount === rawBefore && htmlLength > 500) {
@@ -552,22 +666,57 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
     )
   }
 
-  const final = results.slice(0, 10)
+  // ── AI extraction (primary) with heuristic fallback ──────────────────────
+  const compactText = pageCompactTexts.join("\n\n").slice(0, 12000)
+  let aiDebug: DetectDebug["aiExtraction"] = { used: false }
+  let finalClients: Array<{ name: string; websiteUrl: string }>
+
+  try {
+    const aiClients = await extractClientsWithAI(compactText)
+    if (aiClients && aiClients.length > 0) {
+      finalClients = aiClients.map((c) => ({ name: c.name, websiteUrl: "" }))
+      aiDebug = {
+        used: true,
+        model: "claude-haiku-4-5",
+        rawResponse: JSON.stringify({ clients: aiClients }),
+      }
+      console.log(
+        `[detect] AI extracted ${aiClients.length} clients: [${aiClients.map((c) => c.name).join(", ")}]`
+      )
+    } else if (aiClients !== null) {
+      // AI responded but found nothing — use heuristic results
+      finalClients = results.slice(0, 10)
+      aiDebug = { used: true, model: "claude-haiku-4-5", rawResponse: '{"clients":[]}' }
+      console.log(`[detect] AI found no clients — falling back to heuristics`)
+    } else {
+      // No API key
+      finalClients = results.slice(0, 10)
+      aiDebug = { used: false }
+    }
+  } catch (err) {
+    finalClients = results.slice(0, 10)
+    aiDebug = {
+      used: false,
+      error: err instanceof Error ? err.message : "AI extraction failed",
+    }
+    console.log(`[detect] AI extraction failed (${aiDebug.error}) — using heuristic results`)
+  }
 
   console.log(
-    `[detect] done | URLs tried: ${urlStats.length} | raw candidates: ${totalRawCount} | returning ${final.length}: [${final.map((r) => r.name).join(", ")}]`
+    `[detect] done | URLs tried: ${urlStats.length} | raw candidates: ${totalRawCount} | returning ${finalClients.length}: [${finalClients.map((c) => c.name).join(", ")}]`
   )
 
   return {
-    clients: final,
+    clients: finalClients,
     debug: {
       inputUrl: rawUrl,
       normalizedUrl: origin,
       urlStats,
       totalRaw: totalRawCount,
-      totalFiltered: final.length,
-      firstFiltered: final.slice(0, 20),
+      totalFiltered: finalClients.length,
+      firstFiltered: finalClients.slice(0, 20),
       candidateLog,
+      aiExtraction: aiDebug,
     },
   }
 }

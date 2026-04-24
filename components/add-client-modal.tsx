@@ -654,6 +654,28 @@ export function AddClientModal() {
                               </table>
                             </div>
                           </div>
+                          {/* AI extraction */}
+                          <div>
+                            <p className="mb-1 font-medium text-foreground/50">AI extraction</p>
+                            {detectDebug.aiExtraction.used ? (
+                              <>
+                                <p className="text-emerald-600/70">
+                                  ✓ Used {detectDebug.aiExtraction.model}
+                                </p>
+                                {detectDebug.aiExtraction.rawResponse && (
+                                  <p className="font-mono text-[10px] break-all text-foreground/40 mt-1">
+                                    {detectDebug.aiExtraction.rawResponse.slice(0, 400)}
+                                  </p>
+                                )}
+                              </>
+                            ) : (
+                              <p className="text-muted-foreground/40">
+                                {detectDebug.aiExtraction.error
+                                  ? `✗ Failed: ${detectDebug.aiExtraction.error}`
+                                  : "Not used (no API key) — heuristic results shown"}
+                              </p>
+                            )}
+                          </div>
                           {/* Totals */}
                           <div>
                             <p className="mb-1 font-medium text-foreground/50">Totals</p>
