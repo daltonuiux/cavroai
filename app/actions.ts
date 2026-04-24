@@ -114,15 +114,51 @@ export async function bulkAddClients(
   return { added }
 }
 
-export async function detectClientsFromWebsite(
-  rawUrl: string
-): Promise<Array<{ name: string; websiteUrl: string }>> {
+// ─── Debug types ─────────────────────────────────────────────────────────────
+
+export interface DetectUrlStat {
+  url: string
+  status: number | "timeout" | "error"
+  htmlLength: number
+  rawCandidates: number
+  filteredAdded: number
+}
+
+export interface DetectDebug {
+  inputUrl: string
+  normalizedUrl: string
+  urlStats: DetectUrlStat[]
+  totalRaw: number
+  totalFiltered: number
+  firstRaw: string[]
+  firstFiltered: Array<{ name: string; websiteUrl: string }>
+  rejectionSamples: Array<{ raw: string; cleaned: string; reason: string }>
+}
+
+export interface DetectResult {
+  clients: Array<{ name: string; websiteUrl: string }>
+  debug: DetectDebug
+}
+
+export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectResult> {
   const base = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`
   let origin: string
   try {
     origin = new URL(base).origin
   } catch {
-    return []
+    return {
+      clients: [],
+      debug: {
+        inputUrl: rawUrl,
+        normalizedUrl: base,
+        urlStats: [],
+        totalRaw: 0,
+        totalFiltered: 0,
+        firstRaw: [],
+        firstFiltered: [],
+        rejectionSamples: [{ raw: rawUrl, cleaned: "", reason: "invalid URL — could not parse origin" }],
+      },
+    }
   }
 
   // Paths to attempt in order — stop early once we have enough results
@@ -146,6 +182,10 @@ export async function detectClientsFromWebsite(
   const seen = new Set<string>()
   const results: Array<{ name: string; websiteUrl: string }> = []
 
+  // Debug instrumentation
+  const allRaw: string[] = []
+  const rejectionSamples: Array<{ raw: string; cleaned: string; reason: string }> = []
+
   function tryAdd(name: string, website = "") {
     const clean = name
       .trim()
@@ -154,21 +194,30 @@ export async function detectClientsFromWebsite(
       .replace(/[.,;:!?'"()\[\]]+$/, "")
       .replace(/^[.,;:!?'"()\[\]]+/, "")
       .trim()
-    if (
-      clean.length < 2 ||
-      clean.length > 60 ||
-      seen.has(clean.toLowerCase()) ||
-      STOP_WORDS.test(clean) ||
-      /^\d+$/.test(clean) ||
-      /\d{4}/.test(clean) ||
-      clean.split(" ").length > 6
-    )
-      return
+
+    allRaw.push(name)
+
+    const reject = (reason: string) => {
+      if (rejectionSamples.length < 40) {
+        rejectionSamples.push({ raw: name, cleaned: clean, reason })
+      }
+    }
+
+    if (clean.length < 2) { reject("too short (< 2 chars)"); return }
+    if (clean.length > 60) { reject("too long (> 60 chars)"); return }
+    if (seen.has(clean.toLowerCase())) { reject("duplicate"); return }
+    if (STOP_WORDS.test(clean)) { reject("stop word"); return }
+    if (/^\d+$/.test(clean)) { reject("all digits"); return }
+    if (/\d{4}/.test(clean)) { reject("contains 4-digit number (likely year)"); return }
+    if (clean.split(" ").length > 6) { reject("too many words (> 6)"); return }
+
     seen.add(clean.toLowerCase())
     results.push({ name: clean, websiteUrl: website })
   }
 
-  async function fetchPage(url: string): Promise<string | null> {
+  async function fetchPage(
+    url: string
+  ): Promise<{ html: string | null; status: number | "timeout" | "error" }> {
     try {
       const res = await fetch(url, {
         headers: {
@@ -178,10 +227,11 @@ export async function detectClientsFromWebsite(
         },
         signal: AbortSignal.timeout(6000),
       })
-      if (!res.ok) return null
-      return res.text()
-    } catch {
-      return null
+      if (!res.ok) return { html: null, status: res.status }
+      return { html: await res.text(), status: res.status }
+    } catch (e) {
+      if (e instanceof Error && e.name === "TimeoutError") return { html: null, status: "timeout" }
+      return { html: null, status: "error" }
     }
   }
 
@@ -273,31 +323,55 @@ export async function detectClientsFromWebsite(
     }
   }
 
-  const attempted: string[] = []
+  const urlStats: DetectUrlStat[] = []
 
   for (const path of CANDIDATE_PATHS) {
     if (results.length >= 10) break
 
     const pageUrl = origin + path
-    attempted.push(pageUrl)
+    const rawBefore = allRaw.length
+    const filteredBefore = results.length
 
-    const html = await fetchPage(pageUrl)
+    const { html, status } = await fetchPage(pageUrl)
+    const htmlLength = html ? html.length : 0
+
     if (html) {
-      const before = results.length
       extractCandidates(html, pageUrl)
-      console.log(
-        `[detect] ${pageUrl} → +${results.length - before} candidates (total: ${results.length})`
-      )
-    } else {
-      console.log(`[detect] ${pageUrl} → skipped (not reachable)`)
     }
+
+    const stat: DetectUrlStat = {
+      url: pageUrl,
+      status,
+      htmlLength,
+      rawCandidates: allRaw.length - rawBefore,
+      filteredAdded: results.length - filteredBefore,
+    }
+    urlStats.push(stat)
+
+    console.log(
+      `[detect] ${pageUrl} → status=${status} html=${htmlLength}ch raw=+${stat.rawCandidates} filtered=+${stat.filteredAdded} (total: ${results.length})`
+    )
   }
 
   const final = results.slice(0, 10)
+
   console.log(
-    `[detect] done | URLs tried: ${attempted.length} | returning ${final.length}: [${final.map((r) => r.name).join(", ")}]`
+    `[detect] done | URLs tried: ${urlStats.length} | raw candidates: ${allRaw.length} | returning ${final.length}: [${final.map((r) => r.name).join(", ")}]`
   )
-  return final
+
+  return {
+    clients: final,
+    debug: {
+      inputUrl: rawUrl,
+      normalizedUrl: origin,
+      urlStats,
+      totalRaw: allRaw.length,
+      totalFiltered: final.length,
+      firstRaw: allRaw.slice(0, 20),
+      firstFiltered: final.slice(0, 20),
+      rejectionSamples,
+    },
+  }
 }
 
 export interface ClientContext {

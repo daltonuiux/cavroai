@@ -18,6 +18,7 @@ import {
   bulkAddClients,
   detectClientsFromWebsite,
 } from "@/app/actions"
+import type { DetectDebug } from "@/app/actions"
 import type { RelationshipType } from "@/lib/types"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -168,6 +169,7 @@ export function AddClientModal() {
   // Detect
   const [detectUrl, setDetectUrl] = useState("")
   const [detected, setDetected] = useState<ImportClient[]>([])
+  const [detectDebug, setDetectDebug] = useState<DetectDebug | null>(null)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [detectError, setDetectError] = useState("")
 
@@ -208,6 +210,7 @@ export function AddClientModal() {
     setCsvError("")
     setDetectUrl("")
     setDetected([])
+    setDetectDebug(null)
     setSelected(new Set())
     setDetectError("")
     setName("")
@@ -266,9 +269,10 @@ export function AddClientModal() {
     setScreen("detect-loading")
     startTransition(async () => {
       try {
-        const results = await detectClientsFromWebsite(detectUrl.trim())
-        setDetected(results)
-        setSelected(new Set(results.map((_, i) => i)))
+        const { clients, debug } = await detectClientsFromWebsite(detectUrl.trim())
+        setDetected(clients)
+        setDetectDebug(debug)
+        setSelected(new Set(clients.map((_, i) => i)))
         setScreen("detect-results")
       } catch {
         setDetectError("Could not reach that URL. Try again.")
@@ -603,11 +607,83 @@ export function AddClientModal() {
             {screen === "detect-results" && (
               <>
                 {detected.length === 0 ? (
-                  <div className="px-5 py-12 text-center">
+                  <div className="px-5 py-10 text-center">
                     <p className="text-[13px] font-medium text-foreground/70">No clients detected automatically.</p>
                     <p className="mt-1 text-[12px] text-muted-foreground/55">
                       Try CSV upload or add your top 10 clients manually.
                     </p>
+                    {detectDebug && (
+                      <details className="mt-6 text-left">
+                        <summary className="inline-flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                          Debug details
+                        </summary>
+                        <div className="mt-3 space-y-4 rounded-md border border-border bg-muted/20 p-3 text-[11px] text-muted-foreground/70">
+                          {/* URL info */}
+                          <div>
+                            <p className="mb-1 font-medium text-foreground/50">URLs</p>
+                            <p className="font-mono text-[10px]">input: {detectDebug.inputUrl}</p>
+                            <p className="font-mono text-[10px]">origin: {detectDebug.normalizedUrl}</p>
+                          </div>
+                          {/* Per-URL stats */}
+                          <div>
+                            <p className="mb-1 font-medium text-foreground/50">Fetch results</p>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left text-[10px]">
+                                <thead>
+                                  <tr className="text-muted-foreground/40">
+                                    <th className="pr-3 pb-1 font-medium">URL</th>
+                                    <th className="pr-3 pb-1 font-medium">Status</th>
+                                    <th className="pr-3 pb-1 font-medium">HTML</th>
+                                    <th className="pr-3 pb-1 font-medium">Raw</th>
+                                    <th className="pb-1 font-medium">Added</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="font-mono">
+                                  {detectDebug.urlStats.map((s) => (
+                                    <tr key={s.url} className="border-t border-border/40">
+                                      <td className="pr-3 py-0.5 text-foreground/40 max-w-[160px] truncate">{s.url.replace(detectDebug.normalizedUrl, "")  || "/"}</td>
+                                      <td className={`pr-3 py-0.5 ${s.status === 200 ? "text-emerald-600/70" : "text-red-500/70"}`}>{String(s.status)}</td>
+                                      <td className="pr-3 py-0.5">{s.htmlLength > 0 ? `${(s.htmlLength / 1000).toFixed(0)}k` : "—"}</td>
+                                      <td className="pr-3 py-0.5">{s.rawCandidates}</td>
+                                      <td className="py-0.5">{s.filteredAdded}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                          {/* Totals */}
+                          <div>
+                            <p className="mb-1 font-medium text-foreground/50">Totals</p>
+                            <p>Raw candidates extracted: {detectDebug.totalRaw}</p>
+                            <p>Passed filters: {detectDebug.totalFiltered}</p>
+                          </div>
+                          {/* Raw candidates */}
+                          {detectDebug.firstRaw.length > 0 && (
+                            <div>
+                              <p className="mb-1 font-medium text-foreground/50">First {detectDebug.firstRaw.length} raw candidates</p>
+                              <p className="font-mono text-[10px] break-all text-foreground/40">
+                                {detectDebug.firstRaw.join(" · ")}
+                              </p>
+                            </div>
+                          )}
+                          {/* Rejections */}
+                          {detectDebug.rejectionSamples.length > 0 && (
+                            <div>
+                              <p className="mb-1 font-medium text-foreground/50">Rejection samples ({detectDebug.rejectionSamples.length})</p>
+                              <div className="space-y-0.5">
+                                {detectDebug.rejectionSamples.slice(0, 15).map((r, i) => (
+                                  <p key={i} className="font-mono text-[10px]">
+                                    <span className="text-foreground/40">&quot;{r.cleaned || r.raw}&quot;</span>
+                                    <span className="text-muted-foreground/40"> → {r.reason}</span>
+                                  </p>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </details>
+                    )}
                   </div>
                 ) : (
                   <>

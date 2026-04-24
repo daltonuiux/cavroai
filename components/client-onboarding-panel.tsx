@@ -200,7 +200,7 @@ export function ClientOnboardingPanel() {
     setDetectStep("loading")
     startTransition(async () => {
       try {
-        const results = await detectClientsFromWebsite(detectUrl.trim())
+        const { clients: results } = await detectClientsFromWebsite(detectUrl.trim())
         setDetected(results)
         setSelected(new Set(results.map((_, i) => i)))
         setDetectStep("results")
