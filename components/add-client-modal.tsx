@@ -18,7 +18,7 @@ import {
   bulkAddClients,
   detectClientsFromWebsite,
 } from "@/app/actions"
-import type { DetectDebug } from "@/app/actions"
+import type { DetectDebug, DetectedClient } from "@/app/actions"
 import type { RelationshipType } from "@/lib/types"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -125,6 +125,19 @@ function InlineInput({
   )
 }
 
+function ConfidenceBadge({ confidence }: { confidence: "high" | "medium" | "low" }) {
+  const styles = {
+    high:   "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    low:    "bg-zinc-500/10 text-zinc-500",
+  }
+  return (
+    <span className={`shrink-0 rounded px-1 py-px text-[9px] font-semibold uppercase tracking-wide ${styles[confidence]}`}>
+      {confidence}
+    </span>
+  )
+}
+
 function PrimaryButton({
   type = "button",
   onClick,
@@ -168,7 +181,7 @@ export function AddClientModal() {
 
   // Detect
   const [detectUrl, setDetectUrl] = useState("")
-  const [detected, setDetected] = useState<ImportClient[]>([])
+  const [detected, setDetected] = useState<DetectedClient[]>([])
   const [detectDebug, setDetectDebug] = useState<DetectDebug | null>(null)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [detectError, setDetectError] = useState("")
@@ -776,9 +789,17 @@ export function AddClientModal() {
                               checked={isSelected}
                               onChange={() => toggleSelect(i)}
                             />
-                            <p className="w-28 shrink-0 truncate text-[12px] font-medium text-foreground">
-                              {client.name}
-                            </p>
+                            <div className="w-32 shrink-0 min-w-0">
+                              <p className="truncate text-[12px] font-medium text-foreground">
+                                {client.name}
+                              </p>
+                              <div className="mt-0.5 flex items-center gap-1">
+                                <ConfidenceBadge confidence={client.confidence} />
+                                <p className="truncate text-[10px] text-muted-foreground/45">
+                                  {client.reason}
+                                </p>
+                              </div>
+                            </div>
                             <input
                               value={client.websiteUrl}
                               onChange={(e) => updateDetectedWebsite(i, e.target.value)}

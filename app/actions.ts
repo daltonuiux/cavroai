@@ -140,7 +140,7 @@ export interface DetectDebug {
   urlStats: DetectUrlStat[]
   totalRaw: number
   totalFiltered: number
-  firstFiltered: Array<{ name: string; websiteUrl: string }>
+  firstFiltered: DetectedClient[]
   candidateLog: CandidateDebugEntry[]
   aiExtraction: {
     used: boolean
@@ -149,12 +149,19 @@ export interface DetectDebug {
     error?: string
     rejectedClients?: Array<{ name: string; reason: string }>
   }
-  finalReturnedClients: Array<{ name: string; websiteUrl: string }>
+  finalReturnedClients: DetectedClient[]
   finalRejected: Array<{ name: string; reason: string }>
 }
 
+export interface DetectedClient {
+  name: string
+  websiteUrl: string
+  confidence: "high" | "medium" | "low"
+  reason: string
+}
+
 export interface DetectResult {
-  clients: Array<{ name: string; websiteUrl: string }>
+  clients: DetectedClient[]
   debug: DetectDebug
 }
 
@@ -225,6 +232,18 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
     fallback_text: 1,
   }
 
+  // Human-readable confidence labels for each heuristic source
+  const SOURCE_LABEL: Record<Exclude<CandidateSource, "fallback_text">, { confidence: "high" | "medium" | "low"; reason: string }> = {
+    profile_field:    { confidence: "high",   reason: "Found in case study profile" },
+    profile_sentence: { confidence: "high",   reason: "Mentioned in company profile" },
+    link_slug:        { confidence: "high",   reason: "Found in client page URL" },
+    img_alt:          { confidence: "medium", reason: "Found in client logo" },
+    aria_logo:        { confidence: "medium", reason: "Found in client logo" },
+    data_attr:        { confidence: "medium", reason: "Found in data attribute" },
+    subpage_heading:  { confidence: "medium", reason: "Found in client page heading" },
+    client_section:   { confidence: "low",    reason: "Found in client section" },
+  }
+
   const MIN_SCORE = 2
 
   // Single words that are clearly generic business/tech terms — always reject
@@ -262,7 +281,7 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
     /\b(example|examples|setup|step|steps|deliverability|sequence|sequences|tailored|outreach|pipeline|template|templates|workflow|workflows|onboarding|playbook)\b/i
 
   const seen = new Set<string>()
-  const results: Array<{ name: string; websiteUrl: string }> = []
+  const results: DetectedClient[] = []
 
   // Debug
   let totalRawCount = 0
@@ -353,7 +372,8 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
 
     seen.add(lower)
     logCandidate(name, clean, source, score, true, "ok")
-    results.push({ name: clean, websiteUrl: website })
+    const label = SOURCE_LABEL[source as keyof typeof SOURCE_LABEL] ?? { confidence: "low" as const, reason: "Heuristic match" }
+    results.push({ name: clean, websiteUrl: website, ...label })
   }
 
   async function fetchPage(
@@ -671,15 +691,15 @@ ${compactText}`,
 
   // Runs on every code path before the function returns.
   // Guarantees: name ≥ 3 chars, not a placeholder, present verbatim in scraped text.
-  function finalValidate(
-    clients: Array<{ name: string; websiteUrl: string }>,
+  function finalValidate<T extends { name: string; websiteUrl: string }>(
+    clients: T[],
     scrapedText: string
   ): {
-    accepted: Array<{ name: string; websiteUrl: string }>
+    accepted: T[]
     rejected: Array<{ name: string; reason: string }>
   } {
     const lower = scrapedText.toLowerCase()
-    const accepted: Array<{ name: string; websiteUrl: string }> = []
+    const accepted: T[] = []
     const rejected: Array<{ name: string; reason: string }> = []
     const seen = new Set<string>()
 
@@ -747,7 +767,7 @@ ${compactText}`,
   // ── AI extraction (primary) with heuristic fallback ──────────────────────
   const compactText = pageCompactTexts.join("\n\n").slice(0, 12000)
   let aiDebug: DetectDebug["aiExtraction"] = { used: false }
-  let preValidationClients: Array<{ name: string; websiteUrl: string }>
+  let preValidationClients: DetectedClient[]
   let aiWasCalled = false
 
   try {
@@ -759,7 +779,12 @@ ${compactText}`,
     } else {
       // AI ran — never fall back to heuristics regardless of how many names survived
       aiWasCalled = true
-      preValidationClients = aiResult.clients.map((c) => ({ name: c.name, websiteUrl: "" }))
+      preValidationClients = aiResult.clients.map((c) => ({
+        name: c.name,
+        websiteUrl: "",
+        confidence: c.confidence,
+        reason: c.reason,
+      }))
       aiDebug = {
         used: true,
         model: "claude-haiku-4-5",
