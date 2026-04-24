@@ -692,8 +692,21 @@ export function AddClientModal() {
                           <div>
                             <p className="mb-1 font-medium text-foreground/50">Totals</p>
                             <p>Raw candidates scored: {detectDebug.totalRaw}</p>
-                            <p>Accepted: {detectDebug.totalFiltered}</p>
+                            <p>Passed final gate: {detectDebug.finalReturnedClients.length}</p>
                           </div>
+                          {/* Final gate rejections */}
+                          {detectDebug.finalRejected.length > 0 && (
+                            <div>
+                              <p className="mb-1 font-medium text-foreground/50">
+                                Final gate rejected ({detectDebug.finalRejected.length})
+                              </p>
+                              {detectDebug.finalRejected.map((r, i) => (
+                                <p key={i} className="font-mono text-[10px] text-red-500/60">
+                                  &quot;{r.name}&quot; — {r.reason}
+                                </p>
+                              ))}
+                            </div>
+                          )}
                           {/* Candidate log */}
                           {detectDebug.candidateLog.length > 0 && (
                             <div>

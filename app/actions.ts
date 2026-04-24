@@ -149,6 +149,8 @@ export interface DetectDebug {
     error?: string
     rejectedClients?: Array<{ name: string; reason: string }>
   }
+  finalReturnedClients: Array<{ name: string; websiteUrl: string }>
+  finalRejected: Array<{ name: string; reason: string }>
 }
 
 export interface DetectResult {
@@ -173,6 +175,8 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
         firstFiltered: [],
         candidateLog: [{ raw: rawUrl, cleaned: "", source: "n/a", score: 0, accepted: false, reason: "invalid URL — could not parse origin" }],
         aiExtraction: { used: false, error: "invalid URL" },
+        finalReturnedClients: [],
+        finalRejected: [],
       },
     }
   }
@@ -644,6 +648,55 @@ ${compactText}`,
     }
   }
 
+  // ── Final output validation ───────────────────────────────────────────────
+  // Hard-blocked placeholder / example names. These must never appear in output
+  // regardless of what the AI or heuristics produce, even if they exist in the page.
+  const PLACEHOLDER_NAMES = new Set([
+    "acme", "acme corp", "acme corporation", "acme inc", "acme co",
+    "tesco",
+    "example", "example corp", "example company", "example inc", "example co",
+    "test company", "test corp", "test inc", "test client", "test user",
+    "company name", "client name", "your company", "your client",
+    "foo", "bar", "foobar", "foo inc", "bar corp",
+    "lorem ipsum", "placeholder", "sample company", "sample client",
+    "widget corp", "globex", "initech", "hooli",
+  ])
+
+  // Runs on every code path before the function returns.
+  // Guarantees: name ≥ 3 chars, not a placeholder, present verbatim in scraped text.
+  function finalValidate(
+    clients: Array<{ name: string; websiteUrl: string }>,
+    scrapedText: string
+  ): {
+    accepted: Array<{ name: string; websiteUrl: string }>
+    rejected: Array<{ name: string; reason: string }>
+  } {
+    const lower = scrapedText.toLowerCase()
+    const accepted: Array<{ name: string; websiteUrl: string }> = []
+    const rejected: Array<{ name: string; reason: string }> = []
+    const seen = new Set<string>()
+
+    for (const c of clients) {
+      const name = c.name.trim()
+      const nameLower = name.toLowerCase()
+
+      if (name.length < 3) {
+        rejected.push({ name, reason: "too short (< 3 chars)" })
+      } else if (PLACEHOLDER_NAMES.has(nameLower)) {
+        rejected.push({ name, reason: "blocked placeholder/example name" })
+      } else if (seen.has(nameLower)) {
+        rejected.push({ name, reason: "duplicate" })
+      } else if (!lower.includes(nameLower)) {
+        rejected.push({ name, reason: "not present in scraped page text" })
+      } else {
+        seen.add(nameLower)
+        accepted.push(c)
+      }
+    }
+
+    return { accepted, rejected }
+  }
+
   const urlStats: DetectUrlStat[] = []
   const pageCompactTexts: string[] = []
 
@@ -687,17 +740,19 @@ ${compactText}`,
   // ── AI extraction (primary) with heuristic fallback ──────────────────────
   const compactText = pageCompactTexts.join("\n\n").slice(0, 12000)
   let aiDebug: DetectDebug["aiExtraction"] = { used: false }
-  let finalClients: Array<{ name: string; websiteUrl: string }>
+  let preValidationClients: Array<{ name: string; websiteUrl: string }>
+  let aiWasCalled = false
 
   try {
     const aiResult = await extractClientsWithAI(compactText)
     if (aiResult === null) {
-      // Hard failure: no API key — use heuristics
-      finalClients = results.slice(0, 10)
+      // No API key — use heuristics (AI was never called)
+      preValidationClients = results.slice(0, 10)
       aiDebug = { used: false }
     } else {
-      // AI ran (even if it found nothing or everything was rejected) — do NOT fall back to heuristics
-      finalClients = aiResult.clients.map((c) => ({ name: c.name, websiteUrl: "" }))
+      // AI ran — never fall back to heuristics regardless of how many names survived
+      aiWasCalled = true
+      preValidationClients = aiResult.clients.map((c) => ({ name: c.name, websiteUrl: "" }))
       aiDebug = {
         used: true,
         model: "claude-haiku-4-5",
@@ -713,17 +768,39 @@ ${compactText}`,
       )
     }
   } catch (err) {
-    // Unexpected error (network, parse) — use heuristics
-    finalClients = results.slice(0, 10)
+    // Network/parse error — use heuristics only if AI was never successfully called
+    if (!aiWasCalled) {
+      preValidationClients = results.slice(0, 10)
+    } else {
+      preValidationClients = []
+    }
     aiDebug = {
       used: false,
       error: err instanceof Error ? err.message : "AI extraction failed",
     }
-    console.log(`[detect] AI extraction failed (${aiDebug.error}) — using heuristic results`)
+    console.log(`[detect] AI extraction failed (${aiDebug.error}) — ${aiWasCalled ? "returning empty" : "using heuristic results"}`)
+  }
+
+  // ── Final validation gate (runs on every code path) ───────────────────────
+  // Applies regardless of whether clients came from AI or heuristics.
+  const { accepted: finalClients, rejected: finalRejected } = finalValidate(
+    preValidationClients!,
+    compactText
+  )
+
+  if (finalRejected.length > 0) {
+    console.log(
+      `[detect] final gate rejected ${finalRejected.length}: [${finalRejected.map((r) => `${r.name} (${r.reason})`).join(", ")}]`
+    )
+    // Merge into aiDebug.rejectedClients so they appear in the debug panel
+    aiDebug = {
+      ...aiDebug,
+      rejectedClients: [...(aiDebug.rejectedClients ?? []), ...finalRejected],
+    }
   }
 
   console.log(
-    `[detect] done | URLs tried: ${urlStats.length} | raw candidates: ${totalRawCount} | returning ${finalClients.length}: [${finalClients.map((c) => c.name).join(", ")}]`
+    `[detect] done | URLs tried: ${urlStats.length} | raw: ${totalRawCount} | returning ${finalClients.length}: [${finalClients.map((c) => c.name).join(", ")}]`
   )
 
   return {
@@ -737,6 +814,8 @@ ${compactText}`,
       firstFiltered: finalClients.slice(0, 20),
       candidateLog,
       aiExtraction: aiDebug,
+      finalReturnedClients: finalClients,
+      finalRejected,
     },
   }
 }
