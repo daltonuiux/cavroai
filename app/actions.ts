@@ -182,7 +182,7 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
   ]
 
   const STOP_WORDS =
-    /^(the|a|an|and|or|we|our|they|their|this|that|these|those|it|is|are|was|were|be|been|have|has|do|does|will|would|could|should|may|might|can|logo|image|icon|photo|banner|button|menu|link|more|next|prev|close|open|get|see|read|learn|view|click|home|page|site|web|company|team|about|contact|work|services|blog|news|media|press|careers|jobs|privacy|terms|legal|copyright|all|rights|reserved|inc|llc|ltd|co|corp|you|your|with|for|in|on|at|to|by|of|from|into|through|during|before|after|above|below|between|out|off|over|under|again|further|then|once|here|there|when|where|why|how|what|which|who|whom|new|old|first|last|next|back|up|down|left|right|true|false)$/i
+    /^(the|a|an|and|or|we|our|they|their|this|that|these|those|it|is|are|was|were|be|been|have|has|do|does|will|would|could|should|may|might|can|logo|image|icon|photo|banner|button|menu|link|more|next|prev|close|open|get|see|read|learn|view|click|home|page|site|web|company|team|about|contact|work|services|blog|news|media|press|careers|jobs|privacy|terms|legal|copyright|all|rights|reserved|inc|llc|ltd|co|corp|you|your|with|for|in|on|at|to|by|of|from|into|through|during|before|after|above|below|between|out|off|over|under|again|further|then|once|here|there|when|where|why|how|what|which|who|whom|new|old|first|last|next|back|up|down|left|right|true|false|most|every|each|some|any|best|top|other|others|many|few|no|not|only|just|so|very|such|own|same|different|similar|various|certain|both|either|neither|several|much|more|less|least)$/i
 
   const FALSE_POSITIVE_PATHS =
     /\/(pricing|blog|contact|login|signup|sign-up|register|terms|privacy|careers|jobs|services|features|docs|documentation|support|faq|help|download|install|resources|webinar|event)\b/i
@@ -190,23 +190,27 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
   // ── Scoring ────────────────────────────────────────────────────────────────
 
   type CandidateSource =
-    | "img_alt"
-    | "aria_logo"
-    | "data_attr"
-    | "client_section"
-    | "link_slug"
-    | "subpage_heading"
-    | "fallback_text"
+    | "profile_field"    // explicit labeled field: "Client: Revolut" or <dt>About</dt><dd>Revolut is a...</dd>
+    | "profile_sentence" // "[Company] is a/an ..." at sentence start
+    | "link_slug"        // href="/customers/acme-corp"
+    | "img_alt"          // <img alt="Acme logo">
+    | "aria_logo"        // aria-label="Acme logo"
+    | "data_attr"        // data-company="Acme"
+    | "subpage_heading"  // <h2> inside /customers page
+    | "client_section"   // text inside a div.clients — noisy but contextual
+    | "fallback_text"    // plain-text scan — highest noise
 
   // Base score by source — reflects how reliably that source identifies company names
   const SOURCE_SCORE: Record<CandidateSource, number> = {
-    link_slug: 4,        // href="/customers/acme-corp" — very high signal
-    img_alt: 3,          // <img alt="Acme logo"> — logo carousels are reliable
-    aria_logo: 3,        // aria-label="Acme logo" — same reliability
-    data_attr: 3,        // data-company="Acme" — structured attribute
-    subpage_heading: 3,  // <h2> inside /customers page
-    client_section: 2,   // text inside a div.clients — noisy but contextual
-    fallback_text: 1,    // plain-text scan — highest noise, needs boosts to pass
+    profile_field: 5,    // highest — explicitly labelled as a company field
+    profile_sentence: 4, // high — "Revolut is a global..." is strong structural signal
+    link_slug: 4,        // high — /customers/acme-corp slug
+    img_alt: 3,
+    aria_logo: 3,
+    data_attr: 3,
+    subpage_heading: 3,
+    client_section: 2,
+    fallback_text: 1,
   }
 
   const MIN_SCORE = 2
@@ -220,19 +224,30 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
     "enterprise", "startup", "agency", "dashboard", "report", "analytics",
     "integration", "integrations", "automation", "overview", "security",
     "privacy", "terms", "support", "docs", "documentation", "resources",
+    "deliverability", "sequence", "sequences", "outreach", "pipeline",
+    "onboarding", "workflow", "workflows", "template", "templates",
   ])
 
   // If the last word of a candidate matches, it's likely a product phrase, not a company
   const BAD_SUFFIX_WORDS = new Set([
-    "platform", "example", "process", "pricing", "login", "book", "call",
+    "platform", "example", "examples", "process", "pricing", "login", "book", "call",
     "demo", "intro", "contact", "services", "blog", "tool", "solution",
     "solutions", "software", "app", "dashboard", "analytics", "integration",
     "report", "api", "sdk", "update", "updates", "release", "releases",
+    // New: generic noise suffixes seen in the wild
+    "ai", "saas", "steps", "setup", "sequence", "sequences",
+    "sales", "deliverability", "info", "tips", "guide", "guides",
+    "template", "templates", "workflow", "workflows",
   ])
 
   // Common UI action phrases — reject whole string matches
   const UI_ACTION_PHRASES =
     /^(get started|learn more|contact us|book a demo|book demo|book a call|book call|intro call|schedule a demo|schedule demo|sign up|log in|sign in|try free|try it free|try now|start free|start now|watch demo|watch a demo|request a demo|request demo|free trial|start a free trial|view all|see all|read more|find out more|click here|talk to us|talk to sales|speak to us|chat with us|get a quote|get quote|get in touch|download now|watch video|play video|how it works|why us|who we are|what we do|our mission|our vision|our values|join us|apply now|hire us|work with us|coming soon|no credit card)$/i
+
+  // Phrase-level penalty words — candidates containing these get a heavy score deduction.
+  // Catches product/feature description phrases that slip past the hard-reject lists.
+  const PENALTY_PHRASES =
+    /\b(example|examples|setup|step|steps|deliverability|sequence|sequences|tailored|outreach|pipeline|template|templates|workflow|workflows|onboarding|playbook)\b/i
 
   const seen = new Set<string>()
   const results: Array<{ name: string; websiteUrl: string }> = []
@@ -307,6 +322,8 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
     // Known legal/domain suffix strongly implies a real company name
     if (/\b(Inc|LLC|Ltd|Corp|Co|GmbH|AG|SA|BV|Plc)\b/.test(clean)) score += 2
     if (/\.(io|com|ai|co|app|dev)\b/i.test(clean))                  score += 1
+    // Heavy deduction for generic product/feature language anywhere in the phrase
+    if (PENALTY_PHRASES.test(lower)) score -= 3
 
     // ── Minimum score gate ─────────────────────────────────────────────────
 
@@ -357,9 +374,64 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
       .trim()
   }
 
+  // ── Profile extraction helpers ────────────────────────────────────────────
+
+  // Given a raw field value (already tag-stripped), extract a company name.
+  // Tries "X is a/an ..." first (highest precision), then falls back to the
+  // first 1–4 Title Case words.
+  function extractCompanyFromValue(value: string, source: CandidateSource) {
+    const v = value.trim()
+    // "Revolut is a global financial technology company..." → "Revolut"
+    const isAMatch = v.match(
+      /^([A-Z][a-zA-Z0-9&.+]{0,24}(?:\s+[A-Z][a-zA-Z0-9&.+]{0,24}){0,3})\s+is\s+(?:a|an)\s+/
+    )
+    if (isAMatch) { tryAdd(isAMatch[1].trim(), source); return }
+    // No "is a/an" — take the first 1–4 Title Case words directly
+    const firstWords = v.match(
+      /^([A-Z][a-zA-Z0-9&.+]{0,24}(?:\s+[A-Z][a-zA-Z0-9&.+]{0,24}){0,3})/
+    )
+    if (firstWords) tryAdd(firstWords[1].trim(), source)
+  }
+
+  // High-priority pass: looks for explicitly labelled profile fields (About, Client, Company…)
+  // and the "[Company] is a/an …" sentence pattern common in case study About sections.
+  // Runs before all other extraction so profile-page company names are found first.
+  function extractProfileContent(html: string) {
+    const text = stripTags(html)
+
+    // A: <dt>Label</dt><dd>Value</dd> — definition-list structured case study pages
+    for (const m of html.matchAll(
+      /<dt[^>]*>\s*([^<]{2,40}?)\s*<\/dt>\s*<dd[^>]*>([\s\S]{1,600}?)<\/dd>/gi
+    )) {
+      const label = m[1].trim().toLowerCase().replace(/\s+/g, " ")
+      if (/^(about|company|client|customer|name|who\s+we\s+helped)/.test(label)) {
+        extractCompanyFromValue(stripTags(m[2]), "profile_field")
+      }
+    }
+
+    // B: Plain-text "Label: Value" — common in list-format case studies and blog posts
+    // Restricted to high-signal labels only (avoids "Industry:", "HQ:", etc.)
+    for (const m of text.matchAll(
+      /\b(about|company|client|customer)\s*:[ \t]*([^\n]{3,300})/gi
+    )) {
+      extractCompanyFromValue(m[2], "profile_field")
+    }
+
+    // C: "[Company] is a/an …" at a sentence boundary — catches About paragraphs
+    // Only sentence-start matches to reduce "Banking is a competitive industry" false positives.
+    for (const m of text.matchAll(
+      /(?:^|[.!?\n]\s*)([A-Z][a-zA-Z0-9&.]{0,24}(?:\s+[A-Z][a-zA-Z0-9&.]{0,24}){0,2})\s+is\s+(?:a|an)\s+/gm
+    )) {
+      tryAdd(m[1].trim(), "profile_sentence")
+    }
+  }
+
   function extractCandidates(html: string, pageUrl: string) {
     const isSubPage =
       /\/(customers?|clients?|case-studies?|work|portfolio|testimonials?|about)/.test(pageUrl)
+
+    // 0. Profile content — highest priority, runs before all structured extraction
+    extractProfileContent(html)
 
     // 1. Image alt text — logo carousels almost always use company names as alt
     for (const m of html.matchAll(/<img[^>]+alt=["']([^"']{2,60})["'][^>]*>/gi)) {
