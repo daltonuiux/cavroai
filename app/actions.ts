@@ -167,24 +167,35 @@ export interface DetectResult {
   debug: DetectDebug
 }
 
-// Best-effort domain guess from a company name.
-// Used only when no external link or slug-derived URL is available,
-// and only for high/medium confidence candidates.
-function inferDomain(name: string): string | null {
-  const clean = name
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, "")
+// Best-effort domain inference from a company name.
+// Examples:
+//   Revolut            → https://revolut.com
+//   Kleene AI          → https://kleene.ai
+//   Kleene.ai          → https://kleene.ai
+//   HOOP Chips         → https://hoopchips.com
+//   Acme Inc           → https://acme.com  (suffix stripped)
+function inferWebsiteFromName(name: string): string | null {
+  // Detect ".ai" or " AI" before stripping anything
+  const hasAiSignal = /\bai\b|\.ai\b/i.test(name)
+
+  // Strip legal suffixes
+  const withoutSuffix = name
+    .replace(/\b(ltd|limited|inc|llc|corp|corporation|co|plc|gmbh|ag|sa|bv)\b\.?/gi, "")
     .trim()
 
-  if (!clean) return null
+  // Build slug: lowercase, strip non-alphanumeric, drop the word "ai" itself
+  const parts = withoutSuffix
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length > 0 && w !== "ai")
+    .slice(0, 3)
 
-  const parts = clean.split(/\s+/).slice(0, 3)
   if (parts.length === 0) return null
 
   const base = parts.join("")
-
-  if (clean.includes("ai")) return `https://${base}.ai`
-  return `https://${base}.com`
+  return hasAiSignal ? `https://${base}.ai` : `https://${base}.com`
 }
 
 export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectResult> {
@@ -547,12 +558,8 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
     logCandidate(name, clean, source, score, "company", ctx.rule, true, "ok")
     const label = SOURCE_LABEL[source as keyof typeof SOURCE_LABEL] ?? { confidence: "low" as const, reason: "Heuristic match" }
 
-    // Priority: explicit website arg > external link map > inferred domain (high/medium only)
-    let resolvedWebsite = website || externalLinkMap.get(lower) || ""
-    if (!resolvedWebsite && label.confidence !== "low") {
-      resolvedWebsite = inferDomain(clean) ?? ""
-    }
-
+    // Explicit website arg or external link map — full enrichment runs later
+    const resolvedWebsite = website || externalLinkMap.get(lower) || ""
     results.push({ name: clean, websiteUrl: resolvedWebsite, ...label })
   }
 
@@ -989,7 +996,7 @@ ${compactText}`,
       aiWasCalled = true
       preValidationClients = aiResult.clients.map((c) => ({
         name: c.name,
-        websiteUrl: "",
+        websiteUrl: externalLinkMap.get(c.name.toLowerCase()) ?? "",
         confidence: c.confidence,
         reason: c.reason,
       }))
@@ -1032,29 +1039,55 @@ ${compactText}`,
     console.log(
       `[detect] final gate rejected ${finalRejected.length}: [${finalRejected.map((r) => `${r.name} (${r.reason})`).join(", ")}]`
     )
-    // Merge into aiDebug.rejectedClients so they appear in the debug panel
     aiDebug = {
       ...aiDebug,
       rejectedClients: [...(aiDebug.rejectedClients ?? []), ...finalRejected],
     }
   }
 
+  // ── Final website enrichment ──────────────────────────────────────────────
+  // Runs on every client regardless of AI or heuristic path.
+  // Priority: existing url > external link map > inferred (high/medium only)
+  type WebsiteSource = "explicit" | "external_link" | "inferred" | "empty"
+  const enrichedClients: DetectedClient[] = finalClients.map((c) => {
+    let websiteUrl = c.websiteUrl.trim()
+    let src: WebsiteSource
+
+    if (websiteUrl) {
+      src = "explicit"
+    } else {
+      const linked = externalLinkMap.get(c.name.toLowerCase())
+      if (linked) {
+        websiteUrl = linked
+        src = "external_link"
+      } else if (c.confidence !== "low") {
+        websiteUrl = inferWebsiteFromName(c.name) ?? ""
+        src = websiteUrl ? "inferred" : "empty"
+      } else {
+        src = "empty"
+      }
+    }
+
+    console.log(`[detect:website] ${src.padEnd(13)} ${c.name} → ${websiteUrl || "(none)"}`)
+    return { ...c, websiteUrl }
+  })
+
   console.log(
-    `[detect] done | URLs tried: ${urlStats.length} | raw: ${totalRawCount} | returning ${finalClients.length}: [${finalClients.map((c) => c.name).join(", ")}]`
+    `[detect] done | URLs tried: ${urlStats.length} | raw: ${totalRawCount} | returning ${enrichedClients.length}: [${enrichedClients.map((c) => `${c.name} (${c.websiteUrl || "no-url"})`).join(", ")}]`
   )
 
   return {
-    clients: finalClients,
+    clients: enrichedClients,
     debug: {
       inputUrl: rawUrl,
       normalizedUrl: origin,
       urlStats,
       totalRaw: totalRawCount,
-      totalFiltered: finalClients.length,
-      firstFiltered: finalClients.slice(0, 20),
+      totalFiltered: enrichedClients.length,
+      firstFiltered: enrichedClients.slice(0, 20),
       candidateLog,
       aiExtraction: aiDebug,
-      finalReturnedClients: finalClients,
+      finalReturnedClients: enrichedClients,
       finalRejected,
     },
   }
