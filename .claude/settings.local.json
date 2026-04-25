@@ -13,7 +13,8 @@
       "Bash(npm run *)",
       "Bash(kill 13216)",
       "Bash(xargs kill *)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(python3)"
     ]
   }
 }
