@@ -798,7 +798,7 @@ export function AddClientModal() {
                         return (
                           <div
                             key={i}
-                            className={`flex items-start gap-3 px-5 py-3 transition-opacity ${
+                            className={`flex items-center gap-3 px-5 py-3 transition-opacity ${
                               !isSelected
                                 ? "opacity-35"
                                 : client.confidence === "low"
@@ -806,23 +806,28 @@ export function AddClientModal() {
                                 : ""
                             }`}
                           >
-                            <div className="mt-0.5 shrink-0">
+                            {/* Left: checkbox — fixed */}
+                            <div className="w-4 shrink-0 flex items-center justify-center">
                               <RowCheckbox
                                 checked={isSelected}
                                 onChange={() => toggleSelect(i)}
                               />
                             </div>
+
+                            {/* Middle: client info — flexible */}
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-[13px] font-medium text-foreground leading-snug">
+                              <p className="truncate text-[13px] font-medium leading-none text-foreground">
                                 {client.name}
                               </p>
-                              <div className="mt-1 flex items-start gap-1.5">
+                              <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
                                 <ConfidenceBadge confidence={client.confidence} />
-                                <p className="text-[11px] text-muted-foreground/50 leading-snug line-clamp-2">
+                                <span className="truncate text-[11px] text-muted-foreground/50">
                                   {client.reason}
-                                </p>
+                                </span>
                               </div>
                             </div>
+
+                            {/* Right: website input — fixed */}
                             <input
                               value={client.websiteUrl}
                               onChange={(e) => updateDetectedWebsite(i, e.target.value)}
@@ -830,7 +835,7 @@ export function AddClientModal() {
                                 if (!isSelected) toggleSelect(i)
                               }}
                               placeholder="website.com"
-                              className="mt-0.5 w-36 shrink-0 h-8 rounded border border-border bg-background px-2 text-[11px] text-foreground placeholder:text-muted-foreground/35 outline-none transition-colors focus:border-foreground/30"
+                              className="w-36 shrink-0 h-8 rounded border border-border bg-background px-2 text-[11px] text-foreground placeholder:text-muted-foreground/35 outline-none transition-colors focus:border-foreground/30"
                             />
                           </div>
                         )
