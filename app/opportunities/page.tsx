@@ -1,14 +1,17 @@
-import { getClients, getLatestAnalysesForClients } from "@/lib/db"
+import Link from "next/link"
+import { getAgencyProfile, getClients, getLatestAnalysesForClients } from "@/lib/db"
 import { OpportunitiesList } from "@/components/opportunities-list"
 import type { OpportunityRow } from "@/components/opportunities-list"
 import type { Analysis } from "@/lib/types"
 
 function deriveScore(analysis: Analysis): number {
-  // Base on evidence count first (most reliable signal of quality)
+  // Prefer fitScore from agency-aware analysis
+  if (analysis.fitScore !== undefined && analysis.fitScore > 0) return analysis.fitScore
+  // Fall back to evidence count
   const evidenceCount = analysis.evidence?.length ?? 0
   if (evidenceCount >= 3) return 85
   if (evidenceCount === 2) return 60
-  // Fall back to opportunity impact for older analyses without evidence field
+  // Fall back to opportunity impact for older analyses
   const top = analysis.opportunities?.[0]
   if (top) return { high: 85, medium: 60, low: 30 }[top.impact]
   return 0
@@ -26,85 +29,79 @@ export default async function OpportunitiesPage() {
     </div>
   )
 
-  let rows: OpportunityRow[]
+  // Fetch agency profile + clients in parallel
+  let agencyProfile = null
+  let rows: OpportunityRow[] = []
 
   try {
-    const clients = await getClients()
+    const [profile, clients] = await Promise.all([
+      getAgencyProfile().catch(() => null),
+      getClients(),
+    ])
 
-    if (clients.length === 0) {
-      return (
-        <div>
-          {header}
-          <div className="rounded-md border border-dashed border-border px-6 py-12 text-center">
-            <p className="text-[13px] font-medium text-foreground">No opportunities yet</p>
-            <p className="mt-1 text-[12px] text-muted-foreground">
-              Add clients first to start surfacing warm opportunities.
-            </p>
-          </div>
-        </div>
-      )
-    }
+    agencyProfile = profile
 
-    const analysesMap = await getLatestAnalysesForClients(clients.map((c) => c.id))
+    if (clients.length > 0) {
+      const analysesMap = await getLatestAnalysesForClients(clients.map((c) => c.id))
 
-    rows = clients
-      .map((client): OpportunityRow => {
-        const analysis = analysesMap.get(client.id)
+      rows = clients
+        .map((client): OpportunityRow => {
+          const analysis = analysesMap.get(client.id)
 
-        // No analysis yet
-        if (!analysis || analysis.status !== "complete") {
+          if (!analysis || analysis.status !== "complete") {
+            return {
+              id: client.id,
+              company: client.name,
+              websiteUrl: client.websiteUrl,
+              hasAnalysis: false,
+              showOpportunity: false,
+              score: 0,
+              confidence: null,
+              headline: "",
+              signals: [],
+              whatsHappening: "",
+              whatToDo: "",
+              outreach: "",
+              suggestedPitch: "",
+              fitScore: undefined,
+              fitReason: undefined,
+              evidence: undefined,
+            }
+          }
+
+          const top = analysis.opportunities?.[0] ?? null
+          const showOpportunity =
+            analysis.showOpportunity !== undefined
+              ? analysis.showOpportunity
+              : top !== null && top.impact !== "low"
+
+          const whatsHappening =
+            analysis.whatIsHappening || top?.whatsHappening || analysis.summary || ""
+          const whatToDo = analysis.whatToDo || top?.whatToDo || ""
+          const outreach = analysis.outreach || top?.outreach || analysis.suggestedPitch || ""
+
           return {
             id: client.id,
             company: client.name,
             websiteUrl: client.websiteUrl,
-            hasAnalysis: false,
-            showOpportunity: false,
-            score: 0,
-            confidence: null,
-            headline: "",
-            signals: [],
-            whatsHappening: "",
-            whatToDo: "",
-            outreach: "",
-            suggestedPitch: "",
-            evidence: undefined,
+            hasAnalysis: true,
+            showOpportunity,
+            score: showOpportunity ? deriveScore(analysis) : 0,
+            confidence: (top?.impact ?? null) as "high" | "medium" | "low" | null,
+            headline: top?.headline || whatsHappening.split(".")[0] || "",
+            signals: analysis.strategicDirection ?? [],
+            whatsHappening,
+            whatToDo,
+            outreach,
+            suggestedPitch: analysis.suggestedPitch || "",
+            warmReason: top?.warmReason,
+            fitScore: analysis.fitScore,
+            fitReason: analysis.fitReason,
+            evidence: analysis.evidence,
           }
-        }
-
-        const top = analysis.opportunities?.[0] ?? null
-
-        // showOpportunity: use stored value if present (new analyses), otherwise
-        // fall back to deriving from opportunities array (older analyses)
-        const showOpportunity =
-          analysis.showOpportunity !== undefined
-            ? analysis.showOpportunity
-            : top !== null && top.impact !== "low"
-
-        // Prefer top-level fields written by new prompt; fall back to nested opportunity fields
-        const whatsHappening =
-          analysis.whatIsHappening || top?.whatsHappening || analysis.summary || ""
-        const whatToDo = analysis.whatToDo || top?.whatToDo || ""
-        const outreach = analysis.outreach || top?.outreach || analysis.suggestedPitch || ""
-
-        return {
-          id: client.id,
-          company: client.name,
-          websiteUrl: client.websiteUrl,
-          hasAnalysis: true,
-          showOpportunity,
-          score: showOpportunity ? deriveScore(analysis) : 0,
-          confidence: (top?.impact ?? null) as "high" | "medium" | "low" | null,
-          headline: top?.headline || whatsHappening.split(".")[0] || "",
-          signals: analysis.strategicDirection ?? [],
-          whatsHappening,
-          whatToDo,
-          outreach,
-          suggestedPitch: analysis.suggestedPitch || "",
-          warmReason: top?.warmReason,
-          evidence: analysis.evidence,
-        }
-      })
-      .sort((a, b) => b.score - a.score)
+        })
+        .sort((a, b) => b.score - a.score)
+    }
   } catch (err) {
     console.error("OpportunitiesPage fetch error:", err)
     return (
@@ -123,7 +120,38 @@ export default async function OpportunitiesPage() {
   return (
     <div>
       {header}
-      <OpportunitiesList rows={rows} />
+
+      {/* No-profile gate */}
+      {!agencyProfile && (
+        <div className="mb-5 rounded-md border border-amber-500/20 bg-amber-500/5 px-4 py-4 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[13px] font-semibold text-amber-600 dark:text-amber-400">
+              Complete your agency profile to generate tailored opportunities
+            </p>
+            <p className="mt-0.5 text-[12px] text-amber-600/70 dark:text-amber-400/70">
+              Without a profile, analysis is generic and cannot assess fit. Any existing results may not reflect your agency&apos;s services or ideal clients.
+            </p>
+          </div>
+          <Link
+            href="/profile"
+            className="shrink-0 rounded-md bg-amber-500 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-amber-600 transition-colors"
+          >
+            Set up profile
+          </Link>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {rows.length === 0 ? (
+        <div className="rounded-md border border-dashed border-border px-6 py-12 text-center">
+          <p className="text-[13px] font-medium text-foreground">No opportunities yet</p>
+          <p className="mt-1 text-[12px] text-muted-foreground">
+            Add clients first to start surfacing warm opportunities.
+          </p>
+        </div>
+      ) : (
+        <OpportunitiesList rows={rows} hasAgencyProfile={!!agencyProfile} />
+      )}
     </div>
   )
 }

@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache"
 import {
   createClient,
   createAnalysis,
+  getAgencyProfile,
   getClientById,
   getAnalysisByClientId,
   updateAnalysis,
@@ -35,9 +36,12 @@ export async function addClient(
 
   after(async () => {
     try {
-      const freshClient = await getClientById(client.id)
-      const signals = await gatherSignals(websiteUrl)
-      const result = await analyzeWebsite(websiteUrl, signals, [], freshClient ?? client)
+      const [freshClient, agencyProfile, signals] = await Promise.all([
+        getClientById(client.id),
+        getAgencyProfile().catch(() => null),
+        gatherSignals(websiteUrl),
+      ])
+      const result = await analyzeWebsite(websiteUrl, signals, [], freshClient ?? client, agencyProfile ?? undefined)
       await updateAnalysis(analysis.id, {
         ...result,
         status: "complete",
@@ -87,9 +91,12 @@ export async function bulkAddClients(
       })
       after(async () => {
         try {
-          const freshClient = await getClientById(client.id)
-          const signals = await gatherSignals(url)
-          const result = await analyzeWebsite(url, signals, [], freshClient ?? client)
+          const [freshClient, agencyProfile, signals] = await Promise.all([
+            getClientById(client.id),
+            getAgencyProfile().catch(() => null),
+            gatherSignals(url),
+          ])
+          const result = await analyzeWebsite(url, signals, [], freshClient ?? client, agencyProfile ?? undefined)
           await updateAnalysis(analysis.id, {
             ...result,
             status: "complete",
@@ -1128,10 +1135,13 @@ export async function reanalyzeClient(clientId: string) {
 
   after(async () => {
     try {
-      const signals = await gatherSignals(client.websiteUrl)
+      const [agencyProfile, signals] = await Promise.all([
+        getAgencyProfile().catch(() => null),
+        gatherSignals(client.websiteUrl),
+      ])
       const changes = prevSignals ? detectChanges(prevSignals, signals) : []
       const changeSummary = summarizeChanges(changes)
-      const result = await analyzeWebsite(client.websiteUrl, signals, changes, client)
+      const result = await analyzeWebsite(client.websiteUrl, signals, changes, client, agencyProfile ?? undefined)
       await updateAnalysis(prevAnalysis.id, {
         ...result,
         status: "complete",

@@ -56,6 +56,28 @@ export interface EvidenceItem {
   sourceText: string
 }
 
+// ---------------------------------------------------------------------------
+// Agency profile — describes the user's own agency so analysis can assess fit
+// ---------------------------------------------------------------------------
+
+export interface AgencyProfile {
+  id: string
+  userId?: string
+  agencyName: string
+  website?: string
+  positioning?: string
+  services: string[]
+  idealClientTypes: string[]
+  industries: string[]
+  minBudget?: number
+  maxBudget?: number
+  geography?: string
+  proofPoints: string[]
+  badFitClients: string[]
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Analysis {
   id: string
   clientId: string
@@ -72,13 +94,15 @@ export interface Analysis {
   lastAnalyzedAt?: string
   errorMessage?: string
   createdAt: string
-  // Evidence-based fields added in evidence update
-  // Requires DB migration: see lib/db.ts header comment
+  // Evidence-based fields — requires DB migration: see lib/db.ts header comment
   showOpportunity?: boolean
   evidence?: EvidenceItem[]
   whatIsHappening?: string
   whatToDo?: string
   outreach?: string
+  // Agency fit fields — requires DB migration: see lib/db.ts header comment
+  fitScore?: number
+  fitReason?: string
 }
 
 export interface DB {

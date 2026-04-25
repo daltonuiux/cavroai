@@ -1,4 +1,4 @@
-import type { Analysis, Client, EvidenceItem, ExtractedSignals, SignalChange, Signals } from "./types"
+import type { AgencyProfile, Analysis, Client, EvidenceItem, ExtractedSignals, SignalChange, Signals } from "./types"
 
 // ---------------------------------------------------------------------------
 // Return type — the subset of Analysis fields that analyzeWebsite populates
@@ -16,6 +16,8 @@ type AnalysisResult = Pick<
   | "whatIsHappening"
   | "whatToDo"
   | "outreach"
+  | "fitScore"
+  | "fitReason"
 >
 
 // ---------------------------------------------------------------------------
@@ -24,7 +26,9 @@ type AnalysisResult = Pick<
 
 interface EvidenceAiResult {
   showOpportunity: boolean
+  fitScore: number
   confidence: "low" | "medium" | "high"
+  fitReason: string
   evidence: EvidenceItem[]
   signals: string[]
   whatIsHappening: string
@@ -35,7 +39,9 @@ interface EvidenceAiResult {
 
 const LOW_CONFIDENCE_RESULT: EvidenceAiResult = {
   showOpportunity: false,
+  fitScore: 0,
   confidence: "low",
+  fitReason: "",
   evidence: [],
   signals: [],
   whatIsHappening: "",
@@ -95,52 +101,75 @@ const MOCK: AnalysisResult = {
 // System prompt — strict evidence-based rules
 // ---------------------------------------------------------------------------
 
-const SYSTEM_PROMPT = `You are a strict evidence-based analysis engine for an agency deal sourcing tool.
+const SYSTEM_PROMPT = `You are a strict evidence-based analysis engine for a B2B agency deal sourcing tool.
 
-CRITICAL: Every claim you make MUST be directly supported by text present in the input.
+CRITICAL RULE: Every claim you make MUST be directly supported by text present in the input. No exceptions.
 
-ABSOLUTELY FORBIDDEN — never say these things unless the exact concept appears verbatim in the source text:
-- "raised funding", "Series A", "Series B", "Series C", "seed round" — unless the source text contains these exact words
-- "hiring enterprise salespeople" — unless job titles include both "enterprise" and "sales"
-- "scaling sales team" — unless source text explicitly says this
-- "expanding enterprise" — unless source explicitly says this
-- Any partnership, acquisition, market expansion, revenue growth claim — unless in source text
-- Company stage, traction, or growth trajectory — unless stated in source text
-- Any number (headcount, ARR, employees) — unless stated in source text
+ABSOLUTELY FORBIDDEN — never state these unless the exact concept appears verbatim in the source text:
+- "raised funding", "Series A/B/C", "seed round" — only if those exact words appear in the scraped text
+- "hiring enterprise salespeople" — only if job titles contain both "enterprise" and "sales"
+- "scaling sales team", "expanding enterprise" — only if source text says this explicitly
+- Any partnership, acquisition, market expansion, or revenue growth claim
+- Company stage, traction, growth trajectory, or headcount — unless stated in source text
 
-INPUT FORMAT:
-- Structured Signals: boolean flags and extracted headings/keywords
-- Website Text: raw scraped text from pages — use this to find exact quotes for evidence
+=== AGENCY FIT ASSESSMENT ===
+When AGENCY CONTEXT is provided, you must evaluate fit between this target company and this specific agency.
 
-OUTPUT FORMAT — return ONLY valid JSON, no markdown, no code fences:
+fitScore (0–100):
+- 80–100: Strong fit — target clearly matches the agency's ideal client type, industry, and service needs
+- 60–79: Good fit — target aligns on most criteria with some gaps
+- 40–59: Possible fit — some alignment but significant gaps or uncertainty
+- 0–39: Poor fit — target is outside this agency's scope or budget range
+
+fitReason: 1–2 sentences explaining specifically why this company is or is not a good fit for THIS agency. Reference the agency's services, ideal clients, or positioning by name.
+
+showOpportunity rules (both must be true):
+- fitScore >= 50
+- At least 2 specific, non-generic evidence items found
+
+If no AGENCY CONTEXT is provided:
+- Set fitScore to 0 and fitReason to ""
+- Apply evidence-only rules: showOpportunity true only if 2+ specific evidence items
+
+=== EVIDENCE RULES ===
+Specific evidence (counts toward showOpportunity):
+- Job titles with role area (e.g. "Senior Product Designer", "Head of Growth")
+- Pricing tier or plan names found on the pricing page
+- Blog post titles indicating a content focus area
+- Explicit product launch or feature announcement text
+
+Generic evidence (does NOT count):
+- "About us" or mission statement copy
+- Generic product descriptions
+- Navigation labels or footer text
+
+=== OUTPUT FORMAT ===
+Return ONLY valid JSON. No markdown, no code fences, no preamble:
 {
   "showOpportunity": true/false,
+  "fitScore": 0-100,
   "confidence": "low" | "medium" | "high",
+  "fitReason": "Why this target is or is not a fit for this specific agency",
   "evidence": [
     {
       "claim": "one plain-English sentence of what you found",
-      "sourceText": "exact short phrase copied from the website text that proves this claim"
+      "sourceText": "exact short phrase copied from the website text"
     }
   ],
   "signals": ["short factual signal — must have matching evidence entry"],
-  "whatIsHappening": "2-3 sentences. Only facts from evidence. No invented context.",
+  "whatIsHappening": "2-3 sentences. Only facts traceable to evidence.",
   "whatToDo": "1-2 sentences. Specific action based only on evidence.",
-  "outreach": "2-4 sentences. References only evidenced signals. No invented facts.",
-  "suggestedPitch": "2-3 sentences. Evidence-based only."
+  "outreach": "2-4 sentences. References only evidenced signals. Written for this specific agency.",
+  "suggestedPitch": "2-3 sentences. Evidence-based. Reflects this agency's positioning."
 }
 
-RULES FOR showOpportunity:
-- true only if there are 2 or more specific, non-generic evidence items
-- Generic evidence (about page, product description, mission statement) does NOT count
-- Specific evidence: job titles with role area, pricing tier names, blog topic focus, product launch text
-
-RULES FOR confidence:
-- high: 3+ specific evidence items with clear agency relevance
+confidence:
+- high: 3+ specific evidence items
 - medium: exactly 2 specific evidence items
-- low: 0-1 specific items, or all items are generic homepage copy
+- low: 0-1 specific items or all generic
 
-If evidence is weak or absent, return exactly:
-{"showOpportunity":false,"confidence":"low","evidence":[],"signals":[],"whatIsHappening":"","whatToDo":"","outreach":"","suggestedPitch":""}
+If evidence is weak, return exactly:
+{"showOpportunity":false,"fitScore":0,"confidence":"low","fitReason":"","evidence":[],"signals":[],"whatIsHappening":"","whatToDo":"","outreach":"","suggestedPitch":""}
 
 Return ONLY JSON.`
 
@@ -175,21 +204,46 @@ function formatClientContext(client: ClientContext): string {
 // can find exact phrases for evidence citations
 // ---------------------------------------------------------------------------
 
+function formatAgencyContext(profile: AgencyProfile): string {
+  const lines: string[] = [
+    `Agency name: ${profile.agencyName}`,
+  ]
+  if (profile.website)      lines.push(`Website: ${profile.website}`)
+  if (profile.positioning)  lines.push(`Positioning: ${profile.positioning}`)
+  if (profile.services.length)          lines.push(`Services: ${profile.services.join(", ")}`)
+  if (profile.idealClientTypes.length)  lines.push(`Ideal clients: ${profile.idealClientTypes.join(", ")}`)
+  if (profile.industries.length)        lines.push(`Industries: ${profile.industries.join(", ")}`)
+  if (profile.minBudget || profile.maxBudget) {
+    const min = profile.minBudget ? `£${profile.minBudget.toLocaleString()}` : "unspecified"
+    const max = profile.maxBudget ? `£${profile.maxBudget.toLocaleString()}` : "unspecified"
+    lines.push(`Budget range: ${min}–${max}`)
+  }
+  if (profile.geography)    lines.push(`Geography: ${profile.geography}`)
+  if (profile.proofPoints.length)   lines.push(`Proof points: ${profile.proofPoints.join("; ")}`)
+  if (profile.badFitClients.length) lines.push(`Bad-fit clients: ${profile.badFitClients.join(", ")}`)
+  return lines.join("\n")
+}
+
 function buildUserMessage(
   url: string,
   companyName: string,
   extracted: ExtractedSignals,
   signals: Signals,
   changes: SignalChange[],
-  clientCtx?: ClientContext
+  clientCtx?: ClientContext,
+  agencyProfile?: AgencyProfile
 ): string {
   const parts: string[] = [
     `Company Name: ${companyName}`,
     `Website: ${url}`,
   ]
 
+  if (agencyProfile) {
+    parts.push("", "=== AGENCY CONTEXT ===", formatAgencyContext(agencyProfile))
+  }
+
   if (clientCtx) {
-    parts.push("", "=== OUR RELATIONSHIP ===", formatClientContext(clientCtx))
+    parts.push("", "=== OUR RELATIONSHIP WITH THIS COMPANY ===", formatClientContext(clientCtx))
   }
 
   parts.push(
@@ -237,7 +291,8 @@ export async function analyzeWebsite(
   url: string,
   signals: Signals,
   changes: SignalChange[] = [],
-  clientCtx?: ClientContext
+  clientCtx?: ClientContext,
+  agencyProfile?: AgencyProfile
 ): Promise<AnalysisResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY
 
@@ -261,7 +316,7 @@ export async function analyzeWebsite(
 
   console.log("[analyze:extracted]", JSON.stringify(extracted))
 
-  const userMessage = buildUserMessage(url, companyName, extracted, signals, changes, clientCtx)
+  const userMessage = buildUserMessage(url, companyName, extracted, signals, changes, clientCtx, agencyProfile)
 
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
@@ -321,6 +376,8 @@ export async function analyzeWebsite(
 
   return {
     showOpportunity: result.showOpportunity,
+    fitScore: result.fitScore,
+    fitReason: result.fitReason,
     evidence: result.evidence,
     whatIsHappening: result.whatIsHappening,
     whatToDo: result.whatToDo,

@@ -1,17 +1,39 @@
 // ---------------------------------------------------------------------------
-// Supabase migration required for evidence-based analysis fields:
+// Supabase migrations required — run once in the SQL editor:
 //
+// Evidence fields on analyses:
 //   ALTER TABLE analyses ADD COLUMN IF NOT EXISTS show_opportunity boolean;
 //   ALTER TABLE analyses ADD COLUMN IF NOT EXISTS evidence jsonb;
 //   ALTER TABLE analyses ADD COLUMN IF NOT EXISTS what_is_happening text;
 //   ALTER TABLE analyses ADD COLUMN IF NOT EXISTS what_to_do text;
 //   ALTER TABLE analyses ADD COLUMN IF NOT EXISTS outreach text;
 //
-// Run once in the Supabase SQL editor before deploying this version.
+// Agency fit fields on analyses:
+//   ALTER TABLE analyses ADD COLUMN IF NOT EXISTS fit_score integer;
+//   ALTER TABLE analyses ADD COLUMN IF NOT EXISTS fit_reason text;
+//
+// Agency profile table:
+//   CREATE TABLE IF NOT EXISTS agency_profile (
+//     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+//     user_id text,
+//     agency_name text NOT NULL DEFAULT '',
+//     website text,
+//     positioning text,
+//     services text[] NOT NULL DEFAULT '{}',
+//     ideal_client_types text[] NOT NULL DEFAULT '{}',
+//     industries text[] NOT NULL DEFAULT '{}',
+//     min_budget integer,
+//     max_budget integer,
+//     geography text,
+//     proof_points text[] NOT NULL DEFAULT '{}',
+//     bad_fit_clients text[] NOT NULL DEFAULT '{}',
+//     created_at timestamptz NOT NULL DEFAULT now(),
+//     updated_at timestamptz NOT NULL DEFAULT now()
+//   );
 // ---------------------------------------------------------------------------
 
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
-import type { Client, Analysis } from "./types"
+import type { AgencyProfile, Client, Analysis } from "./types"
 
 // ---------------------------------------------------------------------------
 // Supabase client (service role — no auth layer yet, bypasses RLS)
@@ -68,6 +90,9 @@ function rowToAnalysis(row: any): Analysis {
     whatIsHappening: row.what_is_happening ?? undefined,
     whatToDo: row.what_to_do ?? undefined,
     outreach: row.outreach ?? undefined,
+    // Agency fit fields (undefined if columns not yet migrated)
+    fitScore: row.fit_score ?? undefined,
+    fitReason: row.fit_reason ?? undefined,
   }
 }
 
@@ -208,6 +233,8 @@ export async function createAnalysis(
       what_is_happening: input.whatIsHappening ?? null,
       what_to_do: input.whatToDo ?? null,
       outreach: input.outreach ?? null,
+      fit_score: input.fitScore ?? null,
+      fit_reason: input.fitReason ?? null,
     })
     .select()
     .single()
@@ -238,7 +265,100 @@ export async function updateAnalysis(
   if (patch.whatIsHappening !== undefined)    row.what_is_happening = patch.whatIsHappening
   if (patch.whatToDo !== undefined)           row.what_to_do = patch.whatToDo
   if (patch.outreach !== undefined)           row.outreach = patch.outreach
+  if (patch.fitScore !== undefined)           row.fit_score = patch.fitScore
+  if (patch.fitReason !== undefined)          row.fit_reason = patch.fitReason
 
   const { error } = await db().from("analyses").update(row).eq("id", id)
   if (error) throw new Error(`updateAnalysis: ${error.message}`)
+}
+
+// ---------------------------------------------------------------------------
+// Agency Profile CRUD
+// ---------------------------------------------------------------------------
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToAgencyProfile(row: any): AgencyProfile {
+  return {
+    id: row.id,
+    userId: row.user_id ?? undefined,
+    agencyName: row.agency_name ?? "",
+    website: row.website ?? undefined,
+    positioning: row.positioning ?? undefined,
+    services: row.services ?? [],
+    idealClientTypes: row.ideal_client_types ?? [],
+    industries: row.industries ?? [],
+    minBudget: row.min_budget ?? undefined,
+    maxBudget: row.max_budget ?? undefined,
+    geography: row.geography ?? undefined,
+    proofPoints: row.proof_points ?? [],
+    badFitClients: row.bad_fit_clients ?? [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+/** Returns the single agency profile (no auth yet — first row wins). */
+export async function getAgencyProfile(): Promise<AgencyProfile | null> {
+  const { data, error } = await db()
+    .from("agency_profile")
+    .select("*")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw new Error(`getAgencyProfile: ${error.message}`)
+  return data ? rowToAgencyProfile(data) : null
+}
+
+/** Creates or updates the single agency profile. */
+export async function upsertAgencyProfile(
+  input: Omit<AgencyProfile, "id" | "createdAt" | "updatedAt">
+): Promise<AgencyProfile> {
+  const existing = await getAgencyProfile()
+
+  if (existing) {
+    const { data, error } = await db()
+      .from("agency_profile")
+      .update({
+        agency_name: input.agencyName,
+        website: input.website ?? null,
+        positioning: input.positioning ?? null,
+        services: input.services,
+        ideal_client_types: input.idealClientTypes,
+        industries: input.industries,
+        min_budget: input.minBudget ?? null,
+        max_budget: input.maxBudget ?? null,
+        geography: input.geography ?? null,
+        proof_points: input.proofPoints,
+        bad_fit_clients: input.badFitClients,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existing.id)
+      .select()
+      .single()
+
+    if (error) throw new Error(`upsertAgencyProfile (update): ${error.message}`)
+    return rowToAgencyProfile(data)
+  }
+
+  const { data, error } = await db()
+    .from("agency_profile")
+    .insert({
+      agency_name: input.agencyName,
+      website: input.website ?? null,
+      positioning: input.positioning ?? null,
+      services: input.services,
+      ideal_client_types: input.idealClientTypes,
+      industries: input.industries,
+      min_budget: input.minBudget ?? null,
+      max_budget: input.maxBudget ?? null,
+      geography: input.geography ?? null,
+      proof_points: input.proofPoints,
+      bad_fit_clients: input.badFitClients,
+    })
+    .select()
+    .single()
+
+  if (error) throw new Error(`upsertAgencyProfile (insert): ${error.message}`)
+  return rowToAgencyProfile(data)
 }

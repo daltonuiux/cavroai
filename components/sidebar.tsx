@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Zap, Users, Settings2 } from "lucide-react"
+import { LayoutDashboard, Zap, Users, Building2, Settings2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const nav = [
@@ -12,6 +12,7 @@ const nav = [
 ]
 
 const bottomNav = [
+  { label: "Agency Profile", href: "/profile", icon: Building2 },
   { label: "Settings", href: "/settings", icon: Settings2 },
 ]
 

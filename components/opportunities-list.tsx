@@ -23,13 +23,15 @@ export interface OpportunityRow {
   suggestedPitch: string
   warmReason?: string
   evidence?: Array<{ claim: string; sourceText: string }>
+  fitScore?: number
+  fitReason?: string
 }
 
 // ---------------------------------------------------------------------------
 // List — splits rows into main opportunities and "Needs more evidence"
 // ---------------------------------------------------------------------------
 
-export function OpportunitiesList({ rows }: { rows: OpportunityRow[] }) {
+export function OpportunitiesList({ rows, hasAgencyProfile }: { rows: OpportunityRow[]; hasAgencyProfile: boolean }) {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
   const dismiss = (id: string) => setDismissed((prev) => new Set([...prev, id]))
 
@@ -145,6 +147,9 @@ function AnalysedCard({ row, onDone }: { row: OpportunityRow; onDone: () => void
               </span>
             )}
             {row.confidence && <ConfidenceBadge confidence={row.confidence} />}
+            {row.fitScore !== undefined && row.fitScore > 0 && (
+              <FitScoreBadge score={row.fitScore} />
+            )}
           </div>
           <p className="text-[12px] leading-snug text-foreground/60 line-clamp-2">
             {row.headline}
@@ -164,6 +169,16 @@ function AnalysedCard({ row, onDone }: { row: OpportunityRow; onDone: () => void
       {/* Expanded detail */}
       {expanded && (
         <div className="border-t border-border divide-y divide-border">
+
+          {/* Agency fit reason */}
+          {row.fitReason && (
+            <div className="px-4 py-3">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 mb-1">
+                Why this fits your agency
+              </p>
+              <p className="text-[12px] leading-relaxed text-foreground/75">{row.fitReason}</p>
+            </div>
+          )}
 
           {/* Evidence */}
           {row.evidence && row.evidence.length > 0 && (
@@ -342,6 +357,29 @@ function UnanalysedCard({ row }: { row: OpportunityRow }) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function FitScoreBadge({ score }: { score: number }) {
+  // high ≥ 80, good 60–79, possible 40–59, poor <40
+  if (score >= 80) {
+    return (
+      <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+        Fit {score}
+      </span>
+    )
+  }
+  if (score >= 60) {
+    return (
+      <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400">
+        Fit {score}
+      </span>
+    )
+  }
+  return (
+    <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-foreground/[0.04] text-foreground/35">
+      Fit {score}
+    </span>
+  )
+}
 
 function ConfidenceBadge({ confidence }: { confidence: "high" | "medium" | "low" }) {
   if (confidence === "high") {
