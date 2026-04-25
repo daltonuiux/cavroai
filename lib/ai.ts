@@ -13,6 +13,8 @@ interface CompactAiResult {
   confidence: "low" | "medium" | "high"
 }
 
+import type { ExtractedSignals } from "./types"
+
 const MOCK: AnalysisResult = {
   summary:
     "Hiring three product designers while the onboarding flow still requires manual setup steps. Recent Series A suggests headcount is growing faster than the product experience.",
@@ -53,34 +55,45 @@ Your job is to identify:
 2) Why this matters for an agency
 3) A concrete outreach angle
 
+INPUT FORMAT:
+
+Company Name: <name>
+Website: <url>
+
+Extracted Signals:
+{
+  "headings": ["string"],   // visible page headings from the homepage
+  "keywords": ["string"],   // key terms from blog titles, job titles, news headlines
+  "hasCareersPage": true/false,
+  "hasBlog": true/false,
+  "hasPricing": true/false
+}
+
 STRICT RULES:
-- No generic descriptions
-- No buzzwords
-- No fluff
-- No "innovative", "cutting-edge", etc.
-- Every output must be actionable
-- If no real signal exists, return empty arrays and low confidence
+- Use ONLY the extracted signals. Do NOT invent information.
+- Every signal in your output must map to something in the extracted input.
+- No generic descriptions, buzzwords, or fluff.
+- No "innovative", "cutting-edge", "solutions", etc.
+- If no strong signals exist, return low confidence.
 
-SIGNALS — only include if genuinely high signal:
-- Hiring (especially design, product, growth roles)
-- Recently raised funding
-- New product launch
-- Website redesign indicators
-- Poor UX or clear design issues visible from the site
-- Expansion into new markets or features
-- Outdated UI
-- Broken or friction-heavy flows
+SIGNALS TO PRIORITISE:
+- hasCareersPage: true → "Actively hiring — likely scaling product or team"
+- hasBlog: true → content motion exists, note topic direction from keywords
+- hasPricing: true → commercial intent is visible; note tier structure if in headings
+- Headings mentioning growth, launch, new, scale, raise, expand → product expansion signal
+- Keywords from job titles (design, product, growth, engineering) → hiring area signal
+- Keywords suggesting UX problems (onboarding, friction, setup, complex) → conversion opportunity
 
-RELEVANCE should answer: "Why should THIS agency care about THIS company?"
+RELEVANCE: "Why should THIS agency care about THIS company right now?"
 
-ANGLE should be a specific outreach hook, for example:
-- "Hiring designers at pace — likely scaling product UX after funding"
-- "Recent funding suggests upcoming product expansion"
-- "Onboarding flow has friction before the first value moment"
+ANGLE: A specific outreach hook derived from the signals. For example:
+- "Hiring 3 product designers — scaling UX after what looks like a funding round"
+- "Blog focused on developer education but no visible pricing → awareness without conversion"
+- "Careers page active but no design roles yet — product is pre-UX investment stage"
 
-NOT: "We can help improve your product"
+NOT: "We can help with your product"
 
-If you cannot find strong signals, return:
+If signals are weak, return:
 {"signals":[],"relevance":"","angle":"","confidence":"low"}
 
 OUTPUT FORMAT — return ONLY valid JSON, no markdown, no code fences, no preamble:
@@ -184,6 +197,17 @@ export async function analyzeWebsite(
 
   const companyName = clientCtx?.name ?? url
 
+  // Use HTML-extracted signals from gatherSignals; fall back to empty shape if missing
+  const extracted: ExtractedSignals = signals.extracted ?? {
+    headings: [],
+    keywords: [],
+    hasCareersPage: signals.jobs.length > 0,
+    hasBlog: signals.blog.length > 0,
+    hasPricing: Boolean(signals.website.pricing),
+  }
+
+  console.log("[analyze:extracted]", JSON.stringify(extracted))
+
   const message = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 800,
@@ -191,7 +215,8 @@ export async function analyzeWebsite(
     messages: [
       {
         role: "user",
-        content: `Company Name: ${companyName}\nWebsite: ${url}\n\n${formatSignals(url, signals, changes, clientCtx)}`,
+        content:
+          `Company Name: ${companyName}\nWebsite: ${url}\n\nExtracted Signals:\n${JSON.stringify(extracted, null, 2)}`,
       },
     ],
   })

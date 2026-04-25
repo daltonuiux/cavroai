@@ -91,9 +91,18 @@ export interface NewsItem {
   headline: string
 }
 
+export interface ExtractedSignals {
+  headings: string[]
+  keywords: string[]
+  hasCareersPage: boolean
+  hasBlog: boolean
+  hasPricing: boolean
+}
+
 export interface Signals {
   website: WebsiteSignals
   blog: BlogPost[]
   jobs: JobRole[]
   news: NewsItem[]
+  extracted?: ExtractedSignals
 }
