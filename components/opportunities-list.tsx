@@ -12,6 +12,7 @@ export interface OpportunityRow {
   company: string
   websiteUrl: string
   hasAnalysis: boolean
+  showOpportunity: boolean
   score: number
   confidence: "high" | "medium" | "low" | null
   headline: string
@@ -21,41 +22,108 @@ export interface OpportunityRow {
   outreach: string
   suggestedPitch: string
   warmReason?: string
+  evidence?: Array<{ claim: string; sourceText: string }>
 }
 
 // ---------------------------------------------------------------------------
-// List
+// List — splits rows into main opportunities and "Needs more evidence"
 // ---------------------------------------------------------------------------
 
 export function OpportunitiesList({ rows }: { rows: OpportunityRow[] }) {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
+  const dismiss = (id: string) => setDismissed((prev) => new Set([...prev, id]))
+
   const visible = rows.filter((r) => !dismissed.has(r.id))
 
-  if (visible.length === 0) {
+  // Main section: analysis complete, strong evidence, non-low confidence
+  const strong = visible.filter((r) => r.hasAnalysis && r.showOpportunity && r.confidence !== "low")
+
+  // Secondary section: analyzed but weak evidence, low confidence, or not yet analyzed
+  const weak = visible.filter((r) => !r.showOpportunity || !r.hasAnalysis || r.confidence === "low")
+
+  const allGone = strong.length === 0 && weak.length === 0
+
+  if (allGone) {
     return (
       <p className="text-[12px] text-muted-foreground">All opportunities actioned for this week.</p>
     )
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      {visible.map((row) =>
-        row.hasAnalysis ? (
-          <AnalysedCard
-            key={row.id}
-            row={row}
-            onDone={() => setDismissed((prev) => new Set([...prev, row.id]))}
-          />
-        ) : (
-          <UnanalysedCard key={row.id} row={row} />
-        )
+    <div className="flex flex-col gap-6">
+
+      {/* ── Main opportunities ───────────────────────────────────────────────── */}
+      {strong.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          {strong.map((row) => (
+            <AnalysedCard key={row.id} row={row} onDone={() => dismiss(row.id)} />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-md border border-dashed border-border px-6 py-10 text-center">
+          <p className="text-[13px] font-medium text-foreground">No strong opportunities yet</p>
+          <p className="mt-1 text-[12px] text-muted-foreground">
+            Run analysis on your clients to surface evidence-backed opportunities.
+          </p>
+        </div>
+      )}
+
+      {/* ── Needs more evidence ──────────────────────────────────────────────── */}
+      {weak.length > 0 && (
+        <WeakSection rows={weak} onDismiss={dismiss} />
+      )}
+
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// "Needs more evidence" collapsible section
+// ---------------------------------------------------------------------------
+
+function WeakSection({
+  rows,
+  onDismiss,
+}: {
+  rows: OpportunityRow[]
+  onDismiss: (id: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 mb-3 group"
+      >
+        <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">
+          Needs more evidence
+        </span>
+        <span className="text-[10px] font-medium tabular-nums rounded-full bg-foreground/[0.06] text-foreground/40 px-1.5 py-px">
+          {rows.length}
+        </span>
+        <span className="text-[11px] text-muted-foreground/30 group-hover:text-muted-foreground/50 transition-colors">
+          {open ? "Hide" : "Show"}
+        </span>
+      </button>
+
+      {open && (
+        <div className="flex flex-col gap-2">
+          {rows.map((row) =>
+            row.hasAnalysis ? (
+              <WeakCard key={row.id} row={row} onDismiss={() => onDismiss(row.id)} />
+            ) : (
+              <UnanalysedCard key={row.id} row={row} />
+            )
+          )}
+        </div>
       )}
     </div>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Card: client with completed analysis
+// Card: strong opportunity (evidence-backed, showOpportunity true)
 // ---------------------------------------------------------------------------
 
 function AnalysedCard({ row, onDone }: { row: OpportunityRow; onDone: () => void }) {
@@ -85,10 +153,7 @@ function AnalysedCard({ row, onDone }: { row: OpportunityRow; onDone: () => void
         <div className="flex items-center gap-2 shrink-0 mt-0.5">
           <span className="text-[11px] text-muted-foreground/35">{expanded ? "Less" : "More"}</span>
           <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onDone()
-            }}
+            onClick={(e) => { e.stopPropagation(); onDone() }}
             className="btn-cavro-secondary border rounded-md px-2.5 text-[11px] font-medium text-zinc-900 dark:text-zinc-100 transition-colors"
           >
             Done
@@ -99,6 +164,25 @@ function AnalysedCard({ row, onDone }: { row: OpportunityRow; onDone: () => void
       {/* Expanded detail */}
       {expanded && (
         <div className="border-t border-border divide-y divide-border">
+
+          {/* Evidence */}
+          {row.evidence && row.evidence.length > 0 && (
+            <div className="px-4 py-3">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 mb-2">
+                Evidence
+              </p>
+              <ul className="flex flex-col gap-2">
+                {row.evidence.map((e, i) => (
+                  <li key={i} className="flex flex-col gap-0.5">
+                    <span className="text-[12px] leading-snug text-foreground/75">{e.claim}</span>
+                    <span className="text-[11px] leading-snug text-muted-foreground/50 italic">
+                      &ldquo;{e.sourceText}&rdquo;
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Why it's warm */}
           {row.warmReason && (
@@ -164,7 +248,7 @@ function AnalysedCard({ row, onDone }: { row: OpportunityRow; onDone: () => void
             </div>
           )}
 
-          {/* Suggested pitch (if different from outreach) */}
+          {/* Suggested pitch */}
           {row.suggestedPitch && row.suggestedPitch !== row.outreach && (
             <div className="px-4 py-3">
               <div className="flex items-center justify-between mb-1.5">
@@ -186,12 +270,54 @@ function AnalysedCard({ row, onDone }: { row: OpportunityRow; onDone: () => void
 }
 
 // ---------------------------------------------------------------------------
-// Card: client with no analysis yet
+// Card: analyzed but weak evidence (in "Needs more evidence" section)
+// ---------------------------------------------------------------------------
+
+function WeakCard({ row, onDismiss }: { row: OpportunityRow; onDismiss: () => void }) {
+  return (
+    <div className="card-cavro rounded-md px-4 py-3 flex items-center gap-3 opacity-60">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 mb-0.5">
+          <p className="text-[13px] font-semibold text-foreground">{row.company}</p>
+          <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-foreground/[0.04] text-foreground/35">
+            {row.evidence && row.evidence.length > 0
+              ? `${row.evidence.length} signal${row.evidence.length === 1 ? "" : "s"} found`
+              : "No strong signals"}
+          </span>
+        </div>
+        {row.whatsHappening ? (
+          <p className="text-[11px] text-muted-foreground/60 line-clamp-1">{row.whatsHappening}</p>
+        ) : (
+          <p className="text-[11px] text-muted-foreground/40 italic">
+            Not enough evidence to surface as an opportunity
+          </p>
+        )}
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <Link
+          href={`/clients/${row.id}`}
+          className="text-[11px] font-medium text-muted-foreground/50 hover:text-foreground transition-colors"
+        >
+          View
+        </Link>
+        <button
+          onClick={onDismiss}
+          className="btn-cavro-secondary border rounded-md px-2.5 text-[11px] font-medium text-zinc-900 dark:text-zinc-100 transition-colors"
+        >
+          Done
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Card: no analysis yet (in "Needs more evidence" section)
 // ---------------------------------------------------------------------------
 
 function UnanalysedCard({ row }: { row: OpportunityRow }) {
   return (
-    <div className="card-cavro rounded-md px-4 py-3 flex items-center gap-3">
+    <div className="card-cavro rounded-md px-4 py-3 flex items-center gap-3 opacity-60">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 mb-0.5">
           <p className="text-[13px] font-semibold text-foreground">{row.company}</p>

@@ -1,3 +1,15 @@
+// ---------------------------------------------------------------------------
+// Supabase migration required for evidence-based analysis fields:
+//
+//   ALTER TABLE analyses ADD COLUMN IF NOT EXISTS show_opportunity boolean;
+//   ALTER TABLE analyses ADD COLUMN IF NOT EXISTS evidence jsonb;
+//   ALTER TABLE analyses ADD COLUMN IF NOT EXISTS what_is_happening text;
+//   ALTER TABLE analyses ADD COLUMN IF NOT EXISTS what_to_do text;
+//   ALTER TABLE analyses ADD COLUMN IF NOT EXISTS outreach text;
+//
+// Run once in the Supabase SQL editor before deploying this version.
+// ---------------------------------------------------------------------------
+
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import type { Client, Analysis } from "./types"
 
@@ -50,6 +62,12 @@ function rowToAnalysis(row: any): Analysis {
     lastAnalyzedAt: row.last_analyzed_at ?? undefined,
     errorMessage: row.error_message ?? undefined,
     createdAt: row.created_at,
+    // Evidence-based fields (undefined if columns not yet migrated)
+    showOpportunity: row.show_opportunity ?? undefined,
+    evidence: row.evidence ?? undefined,
+    whatIsHappening: row.what_is_happening ?? undefined,
+    whatToDo: row.what_to_do ?? undefined,
+    outreach: row.outreach ?? undefined,
   }
 }
 
@@ -185,6 +203,11 @@ export async function createAnalysis(
       last_signals: input.lastSignals ?? null,
       last_analyzed_at: input.lastAnalyzedAt ?? null,
       error_message: input.errorMessage ?? null,
+      show_opportunity: input.showOpportunity ?? null,
+      evidence: input.evidence ?? null,
+      what_is_happening: input.whatIsHappening ?? null,
+      what_to_do: input.whatToDo ?? null,
+      outreach: input.outreach ?? null,
     })
     .select()
     .single()
@@ -210,6 +233,11 @@ export async function updateAnalysis(
   if (patch.lastSignals !== undefined)        row.last_signals = patch.lastSignals
   if (patch.lastAnalyzedAt !== undefined)     row.last_analyzed_at = patch.lastAnalyzedAt
   if (patch.errorMessage !== undefined)       row.error_message = patch.errorMessage
+  if (patch.showOpportunity !== undefined)    row.show_opportunity = patch.showOpportunity
+  if (patch.evidence !== undefined)           row.evidence = patch.evidence
+  if (patch.whatIsHappening !== undefined)    row.what_is_happening = patch.whatIsHappening
+  if (patch.whatToDo !== undefined)           row.what_to_do = patch.whatToDo
+  if (patch.outreach !== undefined)           row.outreach = patch.outreach
 
   const { error } = await db().from("analyses").update(row).eq("id", id)
   if (error) throw new Error(`updateAnalysis: ${error.message}`)

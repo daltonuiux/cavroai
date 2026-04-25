@@ -1,103 +1,152 @@
-import type { Analysis, Client, SignalChange, Signals } from "./types"
+import type { Analysis, Client, EvidenceItem, ExtractedSignals, SignalChange, Signals } from "./types"
+
+// ---------------------------------------------------------------------------
+// Return type — the subset of Analysis fields that analyzeWebsite populates
+// ---------------------------------------------------------------------------
 
 type AnalysisResult = Pick<
   Analysis,
-  "summary" | "strategicDirection" | "opportunities" | "suggestedPitch" | "recommendedActions"
+  | "summary"
+  | "strategicDirection"
+  | "opportunities"
+  | "suggestedPitch"
+  | "recommendedActions"
+  | "showOpportunity"
+  | "evidence"
+  | "whatIsHappening"
+  | "whatToDo"
+  | "outreach"
 >
 
-// Compact format returned by the new AI prompt
-interface CompactAiResult {
-  signals: string[]
-  relevance: string
-  angle: string
+// ---------------------------------------------------------------------------
+// Shape returned by the evidence-based AI prompt
+// ---------------------------------------------------------------------------
+
+interface EvidenceAiResult {
+  showOpportunity: boolean
   confidence: "low" | "medium" | "high"
+  evidence: EvidenceItem[]
+  signals: string[]
+  whatIsHappening: string
+  whatToDo: string
+  outreach: string
+  suggestedPitch: string
 }
 
-import type { ExtractedSignals } from "./types"
+const LOW_CONFIDENCE_RESULT: EvidenceAiResult = {
+  showOpportunity: false,
+  confidence: "low",
+  evidence: [],
+  signals: [],
+  whatIsHappening: "",
+  whatToDo: "",
+  outreach: "",
+  suggestedPitch: "",
+}
+
+// ---------------------------------------------------------------------------
+// Mock (returned when ANTHROPIC_API_KEY is not set)
+// ---------------------------------------------------------------------------
 
 const MOCK: AnalysisResult = {
-  summary:
-    "Hiring three product designers while the onboarding flow still requires manual setup steps. Recent Series A suggests headcount is growing faster than the product experience.",
-  strategicDirection: [
-    "Hiring designers at pace — three open roles posted in the last 30 days",
-    "Recently raised Series A funding",
-    "Onboarding flow has visible friction points before the first value moment",
-  ],
-  opportunities: [
+  showOpportunity: true,
+  evidence: [
     {
-      title: "Product UX gap at growth stage",
-      impact: "high",
-      headline: "Scaling headcount into a product experience that isn't ready for it",
-      signals: [
-        "3 designer roles posted in 30 days",
-        "Series A closed recently",
-        "Onboarding requires manual steps before activation",
-      ],
-      whatsHappening:
-        "They are hiring fast and the product experience has not kept pace. Onboarding friction at this stage compounds churn risk across every new account they land.",
-      whatToDo:
-        "Reach out to the Head of Product. Reference the hiring pattern and ask whether the onboarding flow has been through a conversion audit recently.",
-      outreach:
-        "Three designer roles in 30 days after a Series A usually means someone internally has flagged the product experience as a growth constraint. Is the onboarding flow on that list?",
+      claim: "Company has open roles linked from the homepage",
+      sourceText: "careers",
+    },
+    {
+      claim: "Blog content section exists, suggesting active content production",
+      sourceText: "/blog",
     },
   ],
+  strategicDirection: [
+    "Active careers page with open roles",
+    "Blog content in production",
+  ],
+  whatIsHappening:
+    "The company has active hiring and blog production underway. Both signals together suggest a scaling team that has not yet invested heavily in design or conversion.",
+  whatToDo:
+    "Reach out to the Head of Marketing or Head of Product. Reference the careers page and ask whether the UX or content motion has a dedicated owner yet.",
+  outreach:
+    "Noticed your careers page has open roles and you have an active blog. That combination usually means content and UX are being stretched thin. Worth a conversation?",
   suggestedPitch:
-    "Noticed you're hiring designers at pace after the Series A. That pattern usually means someone has flagged a product experience gap internally. Your onboarding flow still requires manual steps before the first value moment, which compounds churn at the exact stage where retention matters most. Worth a conversation?",
+    "Your careers page shows active hiring alongside a content motion that's already live. That gap between output and UX investment is the window most agencies miss.",
+  summary:
+    "Active hiring and blog production detected. Team is scaling without a clear design investment yet.",
+  opportunities: [
+    {
+      title: "Scaling team, pre-UX investment",
+      impact: "medium",
+      headline: "Active hiring with blog output but no visible design investment yet",
+      signals: ["Active careers page", "Blog content in production"],
+      whatsHappening:
+        "The company is hiring and producing content but has not signalled a design or conversion investment.",
+      whatToDo:
+        "Reach out to the Head of Marketing. Ask whether the content and UX have a dedicated owner.",
+      outreach:
+        "Noticed the hiring and blog activity. That combination usually means UX is being stretched. Worth a conversation?",
+    },
+  ],
   recommendedActions: [],
 }
 
-const SYSTEM_PROMPT = `You are an AI-powered deal sourcing tool for agencies.
+// ---------------------------------------------------------------------------
+// System prompt — strict evidence-based rules
+// ---------------------------------------------------------------------------
 
-Your job is NOT to describe the company.
+const SYSTEM_PROMPT = `You are a strict evidence-based analysis engine for an agency deal sourcing tool.
 
-Your job is to identify:
-1) Opportunity signals
-2) Why this matters for an agency
-3) A concrete outreach angle
+CRITICAL: Every claim you make MUST be directly supported by text present in the input.
+
+ABSOLUTELY FORBIDDEN — never say these things unless the exact concept appears verbatim in the source text:
+- "raised funding", "Series A", "Series B", "Series C", "seed round" — unless the source text contains these exact words
+- "hiring enterprise salespeople" — unless job titles include both "enterprise" and "sales"
+- "scaling sales team" — unless source text explicitly says this
+- "expanding enterprise" — unless source explicitly says this
+- Any partnership, acquisition, market expansion, revenue growth claim — unless in source text
+- Company stage, traction, or growth trajectory — unless stated in source text
+- Any number (headcount, ARR, employees) — unless stated in source text
 
 INPUT FORMAT:
+- Structured Signals: boolean flags and extracted headings/keywords
+- Website Text: raw scraped text from pages — use this to find exact quotes for evidence
 
-Company Name: <name>
-Website: <url>
-
-Extracted Signals:
+OUTPUT FORMAT — return ONLY valid JSON, no markdown, no code fences:
 {
-  "headings": ["string"],   // visible page headings from the homepage
-  "keywords": ["string"],   // key terms from blog titles, job titles, news headlines
-  "hasCareersPage": true/false,
-  "hasBlog": true/false,
-  "hasPricing": true/false
+  "showOpportunity": true/false,
+  "confidence": "low" | "medium" | "high",
+  "evidence": [
+    {
+      "claim": "one plain-English sentence of what you found",
+      "sourceText": "exact short phrase copied from the website text that proves this claim"
+    }
+  ],
+  "signals": ["short factual signal — must have matching evidence entry"],
+  "whatIsHappening": "2-3 sentences. Only facts from evidence. No invented context.",
+  "whatToDo": "1-2 sentences. Specific action based only on evidence.",
+  "outreach": "2-4 sentences. References only evidenced signals. No invented facts.",
+  "suggestedPitch": "2-3 sentences. Evidence-based only."
 }
 
-STRICT RULES:
-- Use ONLY the extracted signals. Do NOT invent information.
-- Every signal in your output must map to something in the extracted input.
-- No generic descriptions, buzzwords, or fluff.
-- No "innovative", "cutting-edge", "solutions", etc.
-- If no strong signals exist, return low confidence.
+RULES FOR showOpportunity:
+- true only if there are 2 or more specific, non-generic evidence items
+- Generic evidence (about page, product description, mission statement) does NOT count
+- Specific evidence: job titles with role area, pricing tier names, blog topic focus, product launch text
 
-SIGNALS TO PRIORITISE:
-- hasCareersPage: true → "Actively hiring — likely scaling product or team"
-- hasBlog: true → content motion exists, note topic direction from keywords
-- hasPricing: true → commercial intent is visible; note tier structure if in headings
-- Headings mentioning growth, launch, new, scale, raise, expand → product expansion signal
-- Keywords from job titles (design, product, growth, engineering) → hiring area signal
-- Keywords suggesting UX problems (onboarding, friction, setup, complex) → conversion opportunity
+RULES FOR confidence:
+- high: 3+ specific evidence items with clear agency relevance
+- medium: exactly 2 specific evidence items
+- low: 0-1 specific items, or all items are generic homepage copy
 
-RELEVANCE: "Why should THIS agency care about THIS company right now?"
+If evidence is weak or absent, return exactly:
+{"showOpportunity":false,"confidence":"low","evidence":[],"signals":[],"whatIsHappening":"","whatToDo":"","outreach":"","suggestedPitch":""}
 
-ANGLE: A specific outreach hook derived from the signals. For example:
-- "Hiring 3 product designers — scaling UX after what looks like a funding round"
-- "Blog focused on developer education but no visible pricing → awareness without conversion"
-- "Careers page active but no design roles yet — product is pre-UX investment stage"
+Return ONLY JSON.`
 
-NOT: "We can help with your product"
-
-If signals are weak, return:
-{"signals":[],"relevance":"","angle":"","confidence":"low"}
-
-OUTPUT FORMAT — return ONLY valid JSON, no markdown, no code fences, no preamble:
-{"signals":["string"],"relevance":"string","angle":"string","confidence":"low"|"medium"|"high"}`
+// ---------------------------------------------------------------------------
+// Client context helpers
+// ---------------------------------------------------------------------------
 
 type ClientContext = Pick<Client, "name" | "relationshipType" | "services" | "focus" | "connections" | "contact">
 
@@ -113,71 +162,76 @@ function formatClientContext(client: ClientContext): string {
   if (client.relationshipType) lines.push(`Relationship: ${RELATIONSHIP_LABEL[client.relationshipType] ?? client.relationshipType}`)
   if (client.services?.length) lines.push(`Services we provide: ${client.services.join(", ")}`)
   if (client.focus) lines.push(`Current focus: ${client.focus}`)
-  if (client.connections?.length) lines.push(`Connected companies (shared relationships): ${client.connections.join(", ")}`)
+  if (client.connections?.length) lines.push(`Connected companies: ${client.connections.join(", ")}`)
   if (client.contact) {
     const c = client.contact
-    lines.push(`Key contact: ${c.name}${c.role ? `, ${c.role}` : ""}${c.linkedin ? ` (${c.linkedin})` : ""}`)
+    lines.push(`Key contact: ${c.name}${c.role ? `, ${c.role}` : ""}`)
   }
   return lines.join("\n")
 }
 
-function formatSignals(url: string, signals: Signals, changes: SignalChange[], client?: ClientContext): string {
-  const parts: string[] = [`Website: ${url}\n`]
+// ---------------------------------------------------------------------------
+// Build the user message — structured signals + raw website text so the model
+// can find exact phrases for evidence citations
+// ---------------------------------------------------------------------------
 
-  if (client) {
-    parts.push("=== OUR RELATIONSHIP WITH THIS COMPANY ===")
-    parts.push(formatClientContext(client))
-    parts.push(
-      "\nUse this context to:\n" +
-      "- Prioritise opportunities relevant to the services we offer\n" +
-      "- Reference any connected companies as warm paths or social proof\n" +
-      "- Align opportunities with their stated current focus\n" +
-      "- Weight the relationship type when assessing urgency and angle\n"
-    )
+function buildUserMessage(
+  url: string,
+  companyName: string,
+  extracted: ExtractedSignals,
+  signals: Signals,
+  changes: SignalChange[],
+  clientCtx?: ClientContext
+): string {
+  const parts: string[] = [
+    `Company Name: ${companyName}`,
+    `Website: ${url}`,
+  ]
+
+  if (clientCtx) {
+    parts.push("", "=== OUR RELATIONSHIP ===", formatClientContext(clientCtx))
   }
 
-  parts.push("=== HOMEPAGE ===")
-  parts.push(signals.website.homepage)
+  parts.push(
+    "",
+    "=== STRUCTURED SIGNALS ===",
+    JSON.stringify(extracted, null, 2),
+  )
+
+  parts.push("", "=== HOMEPAGE TEXT (find exact phrases here for evidence) ===")
+  parts.push(signals.website.homepage.slice(0, 2500))
 
   if (signals.website.pricing) {
-    parts.push("\n=== PRICING PAGE ===")
-    parts.push(signals.website.pricing)
+    parts.push("", "--- PRICING PAGE ---")
+    parts.push(signals.website.pricing.slice(0, 800))
   }
 
   if (signals.website.product) {
-    parts.push("\n=== PRODUCT PAGE ===")
-    parts.push(signals.website.product)
+    parts.push("", "--- PRODUCT PAGE ---")
+    parts.push(signals.website.product.slice(0, 800))
   }
 
   if (signals.blog.length > 0) {
-    parts.push("\n=== RECENT BLOG POSTS ===")
-    signals.blog.forEach((p) => {
-      parts.push(`- "${p.title}"${p.summary ? `: ${p.summary}` : ""}`)
-    })
+    parts.push("", "--- BLOG POST TITLES ---")
+    parts.push(signals.blog.map((p) => `"${p.title}"`).join("\n"))
   }
 
   if (signals.jobs.length > 0) {
-    parts.push("\n=== CURRENT JOB OPENINGS ===")
-    signals.jobs.forEach((j) => parts.push(`- ${j.title}`))
-  }
-
-  if (signals.news.length > 0) {
-    parts.push("\n=== RECENT NEWS ===")
-    signals.news.forEach((n) => parts.push(`- ${n.headline}`))
+    parts.push("", "--- JOB TITLES ---")
+    parts.push(signals.jobs.map((j) => j.title).join("\n"))
   }
 
   if (changes.length > 0) {
-    parts.push("\n=== CHANGES SINCE LAST ANALYSIS ===")
-    changes.forEach((c) => {
-      parts.push(`- [${c.type.toUpperCase()}] ${c.title}: ${c.description}`)
-    })
-    parts.push(
-      "\nUse these changes in the URGENCY sections of affected opportunities and in strategicDirection items where relevant."
-    )
+    parts.push("", "--- CHANGES SINCE LAST ANALYSIS ---")
+    parts.push(changes.map((c) => `[${c.type.toUpperCase()}] ${c.title}: ${c.description}`).join("\n"))
   }
 
   return parts.join("\n")
 }
+
+// ---------------------------------------------------------------------------
+// Main export
+// ---------------------------------------------------------------------------
 
 export async function analyzeWebsite(
   url: string,
@@ -193,11 +247,10 @@ export async function analyzeWebsite(
   }
 
   const Anthropic = (await import("@anthropic-ai/sdk")).default
-  const client = new Anthropic({ apiKey })
+  const anthropic = new Anthropic({ apiKey })
 
   const companyName = clientCtx?.name ?? url
 
-  // Use HTML-extracted signals from gatherSignals; fall back to empty shape if missing
   const extracted: ExtractedSignals = signals.extracted ?? {
     headings: [],
     keywords: [],
@@ -208,77 +261,74 @@ export async function analyzeWebsite(
 
   console.log("[analyze:extracted]", JSON.stringify(extracted))
 
-  const message = await client.messages.create({
+  const userMessage = buildUserMessage(url, companyName, extracted, signals, changes, clientCtx)
+
+  const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 800,
+    max_tokens: 1200,
     system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content:
-          `Company Name: ${companyName}\nWebsite: ${url}\n\nExtracted Signals:\n${JSON.stringify(extracted, null, 2)}`,
-      },
-    ],
+    messages: [{ role: "user", content: userMessage }],
   })
 
   const raw = message.content[0].type === "text" ? message.content[0].text : ""
 
-  // Strip markdown fences the model sometimes wraps around JSON
+  // Strip markdown fences
   const cleaned = raw
     .replace(/```json\s*/gi, "")
     .replace(/```\s*/g, "")
     .trim()
 
-  console.log("CLEANED AI RESPONSE:", cleaned.slice(0, 500))
+  console.log("CLEANED AI RESPONSE:", cleaned.slice(0, 600))
 
-  // Extract the outermost JSON object
   const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
   if (!jsonMatch) {
     console.error("RAW AI RESPONSE (no JSON found):", raw)
     throw new Error("No JSON object found in analysis response")
   }
 
-  // Safe parse with full raw output on failure
-  function safeJsonParse(text: string): CompactAiResult {
+  function safeJsonParse(text: string): EvidenceAiResult {
     try {
-      return JSON.parse(text) as CompactAiResult
+      return JSON.parse(text) as EvidenceAiResult
     } catch (err) {
       console.error("JSON PARSE ERROR:", err)
       console.error("RAW AI RESPONSE:", raw)
-      console.error("CLEANED RESPONSE:", text)
-      return { signals: [], relevance: "", angle: "", confidence: "low" }
+      return LOW_CONFIDENCE_RESULT
     }
   }
 
-  const compact = safeJsonParse(jsonMatch[0])
+  const result = safeJsonParse(jsonMatch[0])
 
-  // Map compact format → AnalysisResult so existing UI and DB schema stay intact
-  const impactMap: Record<CompactAiResult["confidence"], "low" | "medium" | "high"> = {
-    low: "low",
-    medium: "medium",
-    high: "high",
-  }
+  console.log("ANALYSIS EVIDENCE:", result.evidence)
+  console.log("SHOW OPPORTUNITY:", result.showOpportunity)
+
+  // Map to AnalysisResult — preserve existing DB shape so nothing else breaks
+  const impactMap = { low: "low", medium: "medium", high: "high" } as const
 
   const opportunities: AnalysisResult["opportunities"] =
-    compact.confidence !== "low" && compact.angle
+    result.showOpportunity && result.confidence !== "low" && result.signals.length > 0
       ? [
           {
-            title: compact.angle.slice(0, 60),
-            impact: impactMap[compact.confidence],
-            headline: compact.angle,
-            signals: compact.signals.slice(0, 4),
-            whatsHappening: compact.relevance || compact.angle,
-            whatToDo: compact.angle,
-            outreach: compact.angle,
+            title: result.signals[0]?.slice(0, 60) ?? "Opportunity",
+            impact: impactMap[result.confidence],
+            headline: result.signals[0] ?? "",
+            signals: result.signals.slice(0, 4),
+            whatsHappening: result.whatIsHappening,
+            whatToDo: result.whatToDo,
+            outreach: result.outreach,
           },
         ]
       : []
 
   return {
-    summary: compact.relevance || "No strong signals found for this company at this time.",
-    strategicDirection: compact.signals,
+    showOpportunity: result.showOpportunity,
+    evidence: result.evidence,
+    whatIsHappening: result.whatIsHappening,
+    whatToDo: result.whatToDo,
+    outreach: result.outreach,
+    summary: result.whatIsHappening || "No strong signals found for this company.",
+    strategicDirection: result.signals,
     opportunities,
-    suggestedPitch: compact.angle,
+    suggestedPitch: result.suggestedPitch,
     recommendedActions: [],
   }
 }

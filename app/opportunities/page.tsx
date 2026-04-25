@@ -4,14 +4,17 @@ import type { OpportunityRow } from "@/components/opportunities-list"
 import type { Analysis } from "@/lib/types"
 
 function deriveScore(analysis: Analysis): number {
+  // Base on evidence count first (most reliable signal of quality)
+  const evidenceCount = analysis.evidence?.length ?? 0
+  if (evidenceCount >= 3) return 85
+  if (evidenceCount === 2) return 60
+  // Fall back to opportunity impact for older analyses without evidence field
   const top = analysis.opportunities?.[0]
   if (top) return { high: 85, medium: 60, low: 30 }[top.impact]
-  // Analysis exists but no opportunities → low signal
-  return analysis.summary ? 25 : 0
+  return 0
 }
 
 export default async function OpportunitiesPage() {
-  // ── header ────────────────────────────────────────────────────────────────
   const header = (
     <div className="mb-6">
       <h1 className="text-[22px] font-semibold tracking-[-0.025em] text-foreground">
@@ -23,12 +26,11 @@ export default async function OpportunitiesPage() {
     </div>
   )
 
-  // ── fetch ──────────────────────────────────────────────────────────────────
   let rows: OpportunityRow[]
+
   try {
     const clients = await getClients()
 
-    // ── empty state ──────────────────────────────────────────────────────────
     if (clients.length === 0) {
       return (
         <div>
@@ -49,41 +51,57 @@ export default async function OpportunitiesPage() {
       .map((client): OpportunityRow => {
         const analysis = analysesMap.get(client.id)
 
-        // ── no analysis or not yet complete ──────────────────────────────────
+        // No analysis yet
         if (!analysis || analysis.status !== "complete") {
           return {
             id: client.id,
             company: client.name,
             websiteUrl: client.websiteUrl,
             hasAnalysis: false,
+            showOpportunity: false,
             score: 0,
             confidence: null,
-            headline: "Needs analysis",
+            headline: "",
             signals: [],
             whatsHappening: "",
             whatToDo: "",
             outreach: "",
             suggestedPitch: "",
-            warmReason: undefined,
+            evidence: undefined,
           }
         }
 
-        // ── analysis complete ─────────────────────────────────────────────────
         const top = analysis.opportunities?.[0] ?? null
+
+        // showOpportunity: use stored value if present (new analyses), otherwise
+        // fall back to deriving from opportunities array (older analyses)
+        const showOpportunity =
+          analysis.showOpportunity !== undefined
+            ? analysis.showOpportunity
+            : top !== null && top.impact !== "low"
+
+        // Prefer top-level fields written by new prompt; fall back to nested opportunity fields
+        const whatsHappening =
+          analysis.whatIsHappening || top?.whatsHappening || analysis.summary || ""
+        const whatToDo = analysis.whatToDo || top?.whatToDo || ""
+        const outreach = analysis.outreach || top?.outreach || analysis.suggestedPitch || ""
+
         return {
           id: client.id,
           company: client.name,
           websiteUrl: client.websiteUrl,
           hasAnalysis: true,
-          score: deriveScore(analysis),
+          showOpportunity,
+          score: showOpportunity ? deriveScore(analysis) : 0,
           confidence: (top?.impact ?? null) as "high" | "medium" | "low" | null,
-          headline: top?.headline || analysis.summary || "",
+          headline: top?.headline || whatsHappening.split(".")[0] || "",
           signals: analysis.strategicDirection ?? [],
-          whatsHappening: top?.whatsHappening || analysis.summary || "",
-          whatToDo: top?.whatToDo || "",
-          outreach: top?.outreach || analysis.suggestedPitch || "",
+          whatsHappening,
+          whatToDo,
+          outreach,
           suggestedPitch: analysis.suggestedPitch || "",
           warmReason: top?.warmReason,
+          evidence: analysis.evidence,
         }
       })
       .sort((a, b) => b.score - a.score)

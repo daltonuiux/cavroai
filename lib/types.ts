@@ -49,6 +49,13 @@ export interface SignalChange {
   impact: string
 }
 
+// Each evidence item pairs a plain-language claim with the exact source phrase
+// that supports it, so every analysis claim is traceable back to scraped text.
+export interface EvidenceItem {
+  claim: string
+  sourceText: string
+}
+
 export interface Analysis {
   id: string
   clientId: string
@@ -65,6 +72,13 @@ export interface Analysis {
   lastAnalyzedAt?: string
   errorMessage?: string
   createdAt: string
+  // Evidence-based fields added in evidence update
+  // Requires DB migration: see lib/db.ts header comment
+  showOpportunity?: boolean
+  evidence?: EvidenceItem[]
+  whatIsHappening?: string
+  whatToDo?: string
+  outreach?: string
 }
 
 export interface DB {
