@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
-import { upsertAgencyProfile } from "@/lib/db"
+import { upsertAgencyProfile, MVP_USER_ID } from "@/lib/db"
 
 function str(formData: FormData, key: string): string | undefined {
   const v = (formData.get(key) as string ?? "").trim()
@@ -26,21 +26,15 @@ export async function saveAgencyProfile(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // Resolve authenticated user first — user_id is required by the DB
+    // Prefer a real authenticated user; fall back to the MVP sentinel for single-user mode.
     const supabase = await createClient()
-    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser()
+    const userId = user?.id ?? MVP_USER_ID
 
-    if (userError || !user) {
-      return {
-        success: false,
-        error: "You must be logged in to save your agency profile.",
-      }
-    }
-
-    console.log("SAVING AGENCY PROFILE FOR USER:", user.id)
+    console.log("SAVING AGENCY PROFILE FOR USER:", userId)
 
     await upsertAgencyProfile({
-      userId: user.id,
+      userId,
       agencyName: str(formData, "agencyName") ?? "",
       website: str(formData, "website"),
       positioning: str(formData, "positioning"),

@@ -297,13 +297,19 @@ function rowToAgencyProfile(row: any): AgencyProfile {
   }
 }
 
-/** Returns the single agency profile (no auth yet — first row wins). */
+// Single-user MVP fallback — used when no Supabase auth session exists.
+// Replace with real user ID resolution once auth is wired end-to-end.
+export const MVP_USER_ID = "00000000-0000-0000-0000-000000000001"
+
+/**
+ * Returns the agency profile for the MVP sentinel user.
+ * When real auth is added, pass the authenticated user's ID instead.
+ */
 export async function getAgencyProfile(): Promise<AgencyProfile | null> {
   const { data, error } = await db()
     .from("agency_profile")
     .select("*")
-    .order("created_at", { ascending: true })
-    .limit(1)
+    .eq("user_id", MVP_USER_ID)
     .maybeSingle()
 
   if (error) throw new Error(`getAgencyProfile: ${error.message}`)
