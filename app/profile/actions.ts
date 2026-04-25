@@ -1,6 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { createClient } from "@/lib/supabase/server"
 import { upsertAgencyProfile } from "@/lib/db"
 
 function str(formData: FormData, key: string): string | undefined {
@@ -25,7 +26,21 @@ export async function saveAgencyProfile(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // Resolve authenticated user first — user_id is required by the DB
+    const supabase = await createClient()
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      return {
+        success: false,
+        error: "You must be logged in to save your agency profile.",
+      }
+    }
+
+    console.log("SAVING AGENCY PROFILE FOR USER:", user.id)
+
     await upsertAgencyProfile({
+      userId: user.id,
       agencyName: str(formData, "agencyName") ?? "",
       website: str(formData, "website"),
       positioning: str(formData, "positioning"),

@@ -310,55 +310,32 @@ export async function getAgencyProfile(): Promise<AgencyProfile | null> {
   return data ? rowToAgencyProfile(data) : null
 }
 
-/** Creates or updates the single agency profile. */
+/** Creates or updates the agency profile for the given user. */
 export async function upsertAgencyProfile(
-  input: Omit<AgencyProfile, "id" | "createdAt" | "updatedAt">
+  input: Omit<AgencyProfile, "id" | "createdAt" | "updatedAt"> & { userId: string }
 ): Promise<AgencyProfile> {
-  const existing = await getAgencyProfile()
-
-  if (existing) {
-    const { data, error } = await db()
-      .from("agency_profile")
-      .update({
-        agency_name: input.agencyName,
-        website: input.website ?? null,
-        positioning: input.positioning ?? null,
-        services: input.services,
-        ideal_client_types: input.idealClientTypes,
-        industries: input.industries,
-        min_budget: input.minBudget ?? null,
-        max_budget: input.maxBudget ?? null,
-        geography: input.geography ?? null,
-        proof_points: input.proofPoints,
-        bad_fit_clients: input.badFitClients,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", existing.id)
-      .select()
-      .single()
-
-    if (error) throw new Error(`upsertAgencyProfile (update): ${error.message}`)
-    return rowToAgencyProfile(data)
+  const payload = {
+    user_id: input.userId,
+    agency_name: input.agencyName,
+    website: input.website ?? null,
+    positioning: input.positioning ?? null,
+    services: Array.isArray(input.services) ? input.services : [],
+    ideal_client_types: Array.isArray(input.idealClientTypes) ? input.idealClientTypes : [],
+    industries: Array.isArray(input.industries) ? input.industries : [],
+    min_budget: input.minBudget ?? null,
+    max_budget: input.maxBudget ?? null,
+    geography: input.geography ?? null,
+    proof_points: Array.isArray(input.proofPoints) ? input.proofPoints : [],
+    bad_fit_clients: Array.isArray(input.badFitClients) ? input.badFitClients : [],
+    updated_at: new Date().toISOString(),
   }
 
   const { data, error } = await db()
     .from("agency_profile")
-    .insert({
-      agency_name: input.agencyName,
-      website: input.website ?? null,
-      positioning: input.positioning ?? null,
-      services: input.services,
-      ideal_client_types: input.idealClientTypes,
-      industries: input.industries,
-      min_budget: input.minBudget ?? null,
-      max_budget: input.maxBudget ?? null,
-      geography: input.geography ?? null,
-      proof_points: input.proofPoints,
-      bad_fit_clients: input.badFitClients,
-    })
+    .upsert(payload, { onConflict: "user_id" })
     .select()
     .single()
 
-  if (error) throw new Error(`upsertAgencyProfile (insert): ${error.message}`)
+  if (error) throw new Error(`upsertAgencyProfile: ${error.message}`)
   return rowToAgencyProfile(data)
 }
