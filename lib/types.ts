@@ -81,7 +81,7 @@ export interface AgencyProfile {
 export interface Analysis {
   id: string
   clientId: string
-  status: "pending" | "complete" | "error"
+  status: "pending" | "complete" | "error" | "insufficient_data"
   summary: string
   strategicDirection: string[]
   opportunities: Opportunity[]

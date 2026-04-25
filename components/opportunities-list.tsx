@@ -25,6 +25,7 @@ export interface OpportunityRow {
   evidence?: Array<{ claim: string; sourceText: string }>
   fitScore?: number
   fitReason?: string
+  insufficientData?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -40,10 +41,15 @@ export function OpportunitiesList({ rows, hasAgencyProfile }: { rows: Opportunit
   // Main section: analysis complete, strong evidence, non-low confidence
   const strong = visible.filter((r) => r.hasAnalysis && r.showOpportunity && r.confidence !== "low")
 
-  // Secondary section: analyzed but weak evidence, low confidence, or not yet analyzed
-  const weak = visible.filter((r) => !r.showOpportunity || !r.hasAnalysis || r.confidence === "low")
+  // "Needs more data": page scraped but signals were too weak to run AI
+  const noData = visible.filter((r) => r.insufficientData)
 
-  const allGone = strong.length === 0 && weak.length === 0
+  // "Needs more evidence": analyzed but weak result, low confidence, or pending
+  const weak = visible.filter(
+    (r) => !r.insufficientData && (!r.showOpportunity || !r.hasAnalysis || r.confidence === "low")
+  )
+
+  const allGone = strong.length === 0 && noData.length === 0 && weak.length === 0
 
   if (allGone) {
     return (
@@ -70,11 +76,75 @@ export function OpportunitiesList({ rows, hasAgencyProfile }: { rows: Opportunit
         </div>
       )}
 
+      {/* ── Needs more data ─────────────────────────────────────────────────── */}
+      {noData.length > 0 && (
+        <NoDataSection rows={noData} />
+      )}
+
       {/* ── Needs more evidence ──────────────────────────────────────────────── */}
       {weak.length > 0 && (
         <WeakSection rows={weak} onDismiss={dismiss} />
       )}
 
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// "Needs more data" collapsible section — page scraped but signals too weak
+// ---------------------------------------------------------------------------
+
+function NoDataSection({ rows }: { rows: OpportunityRow[] }) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 mb-3 group"
+      >
+        <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">
+          Needs more data
+        </span>
+        <span className="text-[10px] font-medium tabular-nums rounded-full bg-foreground/[0.06] text-foreground/40 px-1.5 py-px">
+          {rows.length}
+        </span>
+        <span className="text-[11px] text-muted-foreground/30 group-hover:text-muted-foreground/50 transition-colors">
+          {open ? "Hide" : "Show"}
+        </span>
+      </button>
+
+      {open && (
+        <div className="flex flex-col gap-2">
+          {rows.map((row) => (
+            <NoDataCard key={row.id} row={row} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function NoDataCard({ row }: { row: OpportunityRow }) {
+  return (
+    <div className="card-cavro rounded-md px-4 py-3 flex items-center gap-3 opacity-50">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 mb-0.5">
+          <p className="text-[13px] font-semibold text-foreground">{row.company}</p>
+          <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-foreground/[0.04] text-foreground/35">
+            Insufficient data
+          </span>
+        </div>
+        <p className="text-[11px] text-muted-foreground/40 italic">
+          Not enough signals on this site to run analysis.
+        </p>
+      </div>
+      <Link
+        href={`/clients/${row.id}`}
+        className="shrink-0 text-[11px] font-medium text-muted-foreground/50 hover:text-foreground transition-colors"
+      >
+        View
+      </Link>
     </div>
   )
 }

@@ -12,7 +12,7 @@ import {
   updateAnalysis,
   updateClient,
 } from "@/lib/db"
-import { gatherSignals } from "@/lib/signals"
+import { gatherSignals, hasStrongSignals } from "@/lib/signals"
 import { analyzeWebsite } from "@/lib/ai"
 import { detectChanges, summarizeChanges } from "@/lib/diff"
 import type { RelationshipType, ClientContact } from "@/lib/types"
@@ -41,6 +41,13 @@ export async function addClient(
         getAgencyProfile().catch(() => null),
         gatherSignals(websiteUrl),
       ])
+
+      if (!hasStrongSignals(signals)) {
+        console.log("SKIPPING ANALYSIS - INSUFFICIENT DATA", websiteUrl)
+        await updateAnalysis(analysis.id, { status: "insufficient_data" })
+        return
+      }
+
       const result = await analyzeWebsite(websiteUrl, signals, [], freshClient ?? client, agencyProfile ?? undefined)
       await updateAnalysis(analysis.id, {
         ...result,
@@ -96,6 +103,13 @@ export async function bulkAddClients(
             getAgencyProfile().catch(() => null),
             gatherSignals(url),
           ])
+
+          if (!hasStrongSignals(signals)) {
+            console.log("SKIPPING ANALYSIS - INSUFFICIENT DATA", url)
+            await updateAnalysis(analysis.id, { status: "insufficient_data" })
+            return
+          }
+
           const result = await analyzeWebsite(url, signals, [], freshClient ?? client, agencyProfile ?? undefined)
           await updateAnalysis(analysis.id, {
             ...result,
@@ -1139,6 +1153,13 @@ export async function reanalyzeClient(clientId: string) {
         getAgencyProfile().catch(() => null),
         gatherSignals(client.websiteUrl),
       ])
+
+      if (!hasStrongSignals(signals)) {
+        console.log("SKIPPING ANALYSIS - INSUFFICIENT DATA", client.websiteUrl)
+        await updateAnalysis(prevAnalysis.id, { status: "insufficient_data" })
+        return
+      }
+
       const changes = prevSignals ? detectChanges(prevSignals, signals) : []
       const changeSummary = summarizeChanges(changes)
       const result = await analyzeWebsite(client.websiteUrl, signals, changes, client, agencyProfile ?? undefined)

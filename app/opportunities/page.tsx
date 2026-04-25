@@ -48,12 +48,35 @@ export default async function OpportunitiesPage() {
         .map((client): OpportunityRow => {
           const analysis = analysesMap.get(client.id)
 
-          if (!analysis || analysis.status !== "complete") {
+          if (!analysis || (analysis.status !== "complete" && analysis.status !== "insufficient_data")) {
             return {
               id: client.id,
               company: client.name,
               websiteUrl: client.websiteUrl,
               hasAnalysis: false,
+              insufficientData: false,
+              showOpportunity: false,
+              score: 0,
+              confidence: null,
+              headline: "",
+              signals: [],
+              whatsHappening: "",
+              whatToDo: "",
+              outreach: "",
+              suggestedPitch: "",
+              fitScore: undefined,
+              fitReason: undefined,
+              evidence: undefined,
+            }
+          }
+
+          if (analysis.status === "insufficient_data") {
+            return {
+              id: client.id,
+              company: client.name,
+              websiteUrl: client.websiteUrl,
+              hasAnalysis: false,
+              insufficientData: true,
               showOpportunity: false,
               score: 0,
               confidence: null,
@@ -85,6 +108,7 @@ export default async function OpportunitiesPage() {
             company: client.name,
             websiteUrl: client.websiteUrl,
             hasAnalysis: true,
+            insufficientData: false,
             showOpportunity,
             score: showOpportunity ? deriveScore(analysis) : 0,
             confidence: (top?.impact ?? null) as "high" | "medium" | "low" | null,

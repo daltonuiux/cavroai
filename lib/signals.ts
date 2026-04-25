@@ -96,6 +96,42 @@ export function extractPageSignals(html: string): ExtractedSignals {
   }
 }
 
+/**
+ * Returns true only when there are at least 2 strong, distinct signals from
+ * the scraped page — enough evidence for AI analysis to be meaningful.
+ *
+ * Strong signal checklist (need ≥ 2 out of 4):
+ *   1. Substantive headings — page has real content to read
+ *   2. Hiring indicators   — careers page link or hiring keyword
+ *   3. Product/pricing     — pricing page link or product-related keyword
+ *   4. Business keywords   — ≥ 2 keywords detected overall
+ */
+export function hasStrongSignals(signals: Signals): boolean {
+  const { extracted } = signals
+  if (!extracted) return false
+
+  let count = 0
+
+  // 1. Substantive headings — at least 2 headings with real content (>15 chars)
+  const meaningfulHeadings = extracted.headings.filter((h) => h.length > 15)
+  if (meaningfulHeadings.length >= 2) count++
+
+  // 2. Hiring indicators
+  if (extracted.hasCareersPage || extracted.keywords.includes("hiring")) count++
+
+  // 3. Product or pricing signals
+  if (
+    extracted.hasPricing ||
+    extracted.keywords.includes("pricing") ||
+    extracted.keywords.includes("product launch")
+  ) count++
+
+  // 4. Multiple meaningful keywords detected
+  if (extracted.keywords.length >= 2) count++
+
+  return count >= 2
+}
+
 function extractHeadings(html: string): string[] {
   const clean = html
     .replace(/<script[\s\S]*?<\/script>/gi, "")

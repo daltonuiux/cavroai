@@ -11,7 +11,7 @@ export interface ClientScore {
   mediumCount: number
   changesCount: number
   lastAnalyzedAt?: string
-  status: "complete" | "pending" | "error" | "none"
+  status: "complete" | "pending" | "error" | "insufficient_data" | "none"
 }
 
 export interface OverviewOpportunity {
