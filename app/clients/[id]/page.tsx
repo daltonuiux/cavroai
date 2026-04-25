@@ -46,7 +46,7 @@ export default async function ClientPage({
             {client.websiteUrl}
           </a>
         </div>
-        {analysis?.status === "complete" && (
+        {(analysis?.status === "complete" || analysis?.status === "insufficient_data") && (
           <form action={reanalyzeClient.bind(null, client.id)}>
             <button
               type="submit"
@@ -63,9 +63,26 @@ export default async function ClientPage({
         <AnalysisPending />
       ) : analysis.status === "error" ? (
         <AnalysisError message={analysis.errorMessage} />
+      ) : analysis.status === "insufficient_data" ? (
+        <AnalysisInsufficient />
       ) : (
         <AnalysisResults analysis={analysis} />
       )}
+    </div>
+  )
+}
+
+function AnalysisInsufficient() {
+  return (
+    <div className="flex items-start gap-3 rounded-md border border-border bg-foreground/[0.02] p-4">
+      <AlertCircle className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+      <div>
+        <p className="text-[13px] font-medium text-foreground">Not enough data to analyse</p>
+        <p className="mt-0.5 text-[12px] text-muted-foreground">
+          The website didn&apos;t return enough signals (hiring, pricing, product, or meaningful content)
+          to generate a reliable analysis. Try re-analyzing once the site has more public content.
+        </p>
+      </div>
     </div>
   )
 }

@@ -300,6 +300,9 @@ export async function analyzeWebsite(
   clientCtx?: ClientContext,
   agencyProfile?: AgencyProfile
 ): Promise<AnalysisResult> {
+  console.log("ANALYSIS START", url)
+
+  try {
   const apiKey = process.env.ANTHROPIC_API_KEY
 
   if (!apiKey) {
@@ -320,16 +323,25 @@ export async function analyzeWebsite(
     hasPricing: Boolean(signals.website.pricing),
   }
 
+  const signalScore = extracted.keywords.length
+  console.log("SIGNAL SCORE:", signalScore, "keywords:", extracted.keywords)
   console.log("[analyze:extracted]", JSON.stringify(extracted))
 
   const userMessage = buildUserMessage(url, companyName, extracted, signals, changes, clientCtx, agencyProfile)
 
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 1200,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: userMessage }],
-  })
+  const AI_TIMEOUT_MS = 30_000
+
+  const message = await Promise.race([
+    anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1200,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: "user", content: userMessage }],
+    }),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("AI timeout after 30s")), AI_TIMEOUT_MS)
+    ),
+  ])
 
   const raw = message.content[0].type === "text" ? message.content[0].text : ""
 
@@ -380,7 +392,7 @@ export async function analyzeWebsite(
         ]
       : []
 
-  return {
+  const analysisResult: AnalysisResult = {
     showOpportunity: result.showOpportunity,
     fitScore: result.fitScore,
     fitReason: result.fitReason,
@@ -393,5 +405,13 @@ export async function analyzeWebsite(
     opportunities,
     suggestedPitch: result.suggestedPitch,
     recommendedActions: [],
+  }
+
+  console.log("ANALYSIS COMPLETE", url)
+  return analysisResult
+
+  } catch (error) {
+    console.error("ANALYSIS ERROR:", error)
+    throw error
   }
 }
