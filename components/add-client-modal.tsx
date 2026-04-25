@@ -798,7 +798,7 @@ export function AddClientModal() {
                         return (
                           <div
                             key={i}
-                            className={`flex items-center gap-3 px-5 py-2.5 transition-opacity ${
+                            className={`flex items-start gap-3 px-5 py-3 transition-opacity ${
                               !isSelected
                                 ? "opacity-35"
                                 : client.confidence === "low"
@@ -806,17 +806,19 @@ export function AddClientModal() {
                                 : ""
                             }`}
                           >
-                            <RowCheckbox
-                              checked={isSelected}
-                              onChange={() => toggleSelect(i)}
-                            />
-                            <div className="w-32 shrink-0 min-w-0">
-                              <p className="truncate text-[12px] font-medium text-foreground">
+                            <div className="mt-0.5 shrink-0">
+                              <RowCheckbox
+                                checked={isSelected}
+                                onChange={() => toggleSelect(i)}
+                              />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[13px] font-medium text-foreground leading-snug">
                                 {client.name}
                               </p>
-                              <div className="mt-0.5 flex items-center gap-1">
+                              <div className="mt-1 flex items-start gap-1.5">
                                 <ConfidenceBadge confidence={client.confidence} />
-                                <p className="truncate text-[10px] text-muted-foreground/45">
+                                <p className="text-[11px] text-muted-foreground/50 leading-snug line-clamp-2">
                                   {client.reason}
                                 </p>
                               </div>
@@ -828,7 +830,7 @@ export function AddClientModal() {
                                 if (!isSelected) toggleSelect(i)
                               }}
                               placeholder="website.com"
-                              className="min-w-0 flex-1 h-8 rounded border border-border bg-background px-2 text-[11px] text-foreground placeholder:text-muted-foreground/35 outline-none transition-colors focus:border-foreground/30"
+                              className="mt-0.5 w-36 shrink-0 h-8 rounded border border-border bg-background px-2 text-[11px] text-foreground placeholder:text-muted-foreground/35 outline-none transition-colors focus:border-foreground/30"
                             />
                           </div>
                         )
