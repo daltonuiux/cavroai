@@ -798,36 +798,61 @@ export function AddClientModal() {
                         return (
                           <div
                             key={i}
-                            className={`flex items-center gap-3 px-5 py-3 transition-opacity ${
+                            className={`grid transition-opacity ${
                               !isSelected
                                 ? "opacity-35"
                                 : client.confidence === "low"
                                 ? "opacity-60"
                                 : ""
                             }`}
+                            style={{
+                              gridTemplateColumns: "28px minmax(0, 1fr) 148px",
+                              columnGap: "16px",
+                              alignItems: "center",
+                              padding: "14px 20px",
+                            }}
                           >
-                            {/* Left: checkbox — fixed */}
-                            <div className="w-4 shrink-0 flex items-center justify-center">
+                            {/* Left: checkbox */}
+                            <div style={{ display: "flex", alignItems: "center" }}>
                               <RowCheckbox
                                 checked={isSelected}
                                 onChange={() => toggleSelect(i)}
                               />
                             </div>
 
-                            {/* Middle: client info — flexible */}
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-[13px] font-medium leading-none text-foreground">
+                            {/* Middle: client info */}
+                            <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: "5px" }}>
+                              <p
+                                className="text-foreground"
+                                style={{
+                                  fontSize: "13px",
+                                  fontWeight: 600,
+                                  lineHeight: "18px",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
                                 {client.name}
                               </p>
-                              <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
                                 <ConfidenceBadge confidence={client.confidence} />
-                                <span className="truncate text-[11px] text-muted-foreground/50">
+                                <span
+                                  className="text-muted-foreground/50"
+                                  style={{
+                                    fontSize: "11px",
+                                    lineHeight: "16px",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
                                   {client.reason}
                                 </span>
                               </div>
                             </div>
 
-                            {/* Right: website input — fixed */}
+                            {/* Right: website input */}
                             <input
                               value={client.websiteUrl}
                               onChange={(e) => updateDetectedWebsite(i, e.target.value)}
@@ -835,7 +860,8 @@ export function AddClientModal() {
                                 if (!isSelected) toggleSelect(i)
                               }}
                               placeholder="website.com"
-                              className="w-36 shrink-0 h-8 rounded border border-border bg-background px-2 text-[11px] text-foreground placeholder:text-muted-foreground/35 outline-none transition-colors focus:border-foreground/30"
+                              className="rounded border border-border bg-background text-foreground placeholder:text-muted-foreground/35 outline-none transition-colors focus:border-foreground/30"
+                              style={{ width: "148px", height: "34px", padding: "0 8px", fontSize: "11px" }}
                             />
                           </div>
                         )
