@@ -126,14 +126,15 @@ function InlineInput({
 }
 
 function ConfidenceBadge({ confidence }: { confidence: "high" | "medium" | "low" }) {
+  const label = { high: "Strong match", medium: "Likely", low: "Possible" }[confidence]
   const styles = {
     high:   "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
     medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
     low:    "bg-zinc-500/10 text-zinc-500",
   }
   return (
-    <span className={`shrink-0 rounded px-1 py-px text-[9px] font-semibold uppercase tracking-wide ${styles[confidence]}`}>
-      {confidence}
+    <span className={`shrink-0 rounded px-1 py-px text-[9px] font-semibold ${styles[confidence]}`}>
+      {label}
     </span>
   )
 }
@@ -283,9 +284,13 @@ export function AddClientModal() {
     startTransition(async () => {
       try {
         const { clients, debug } = await detectClientsFromWebsite(detectUrl.trim())
-        setDetected(clients)
+        const confOrder = { high: 0, medium: 1, low: 2 } as const
+        const sorted = [...clients].sort(
+          (a, b) => confOrder[a.confidence] - confOrder[b.confidence]
+        )
+        setDetected(sorted)
         setDetectDebug(debug)
-        setSelected(new Set(clients.map((_, i) => i)))
+        setSelected(new Set(sorted.flatMap((c, i) => c.confidence !== "low" ? [i] : [])))
         setScreen("detect-results")
       } catch {
         setDetectError("Could not reach that URL. Try again.")
@@ -733,6 +738,8 @@ export function AddClientModal() {
                                       <th className="pr-2 pb-1 font-medium">Candidate</th>
                                       <th className="pr-2 pb-1 font-medium">Source</th>
                                       <th className="pr-2 pb-1 font-medium">Score</th>
+                                      <th className="pr-2 pb-1 font-medium">Class</th>
+                                      <th className="pr-2 pb-1 font-medium">Ctx</th>
                                       <th className="pr-2 pb-1 font-medium">Result</th>
                                       <th className="pb-1 font-medium">Reason</th>
                                     </tr>
@@ -743,6 +750,16 @@ export function AddClientModal() {
                                         <td className="pr-2 py-0.5 max-w-[120px] truncate text-foreground/50">{c.cleaned || c.raw}</td>
                                         <td className="pr-2 py-0.5 text-muted-foreground/40">{c.source}</td>
                                         <td className="pr-2 py-0.5">{c.score}</td>
+                                        <td className={`pr-2 py-0.5 ${
+                                          c.classification === "company" ? "text-emerald-600/60" :
+                                          c.classification === "—"      ? "text-muted-foreground/30" :
+                                          "text-amber-500/70"
+                                        }`}>{c.classification}</td>
+                                        <td className={`pr-2 py-0.5 ${
+                                          c.contextRule === "—" ? "text-muted-foreground/30" :
+                                          c.accepted            ? "text-emerald-600/60" :
+                                          "text-red-400/60"
+                                        }`}>{c.contextRule}</td>
                                         <td className={`pr-2 py-0.5 font-medium ${c.accepted ? "text-emerald-600/70" : "text-red-500/60"}`}>
                                           {c.accepted ? "✓" : "✗"}
                                         </td>
@@ -782,7 +799,11 @@ export function AddClientModal() {
                           <div
                             key={i}
                             className={`flex items-center gap-3 px-5 py-2.5 transition-opacity ${
-                              isSelected ? "" : "opacity-40"
+                              !isSelected
+                                ? "opacity-35"
+                                : client.confidence === "low"
+                                ? "opacity-60"
+                                : ""
                             }`}
                           >
                             <RowCheckbox

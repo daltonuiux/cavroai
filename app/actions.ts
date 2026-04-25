@@ -130,6 +130,8 @@ export interface CandidateDebugEntry {
   cleaned: string
   source: string
   score: number
+  classification: string   // "company" | "feature" | "cta" | "internal" | "noise" | "—"
+  contextRule: string      // "A" | "B" | "C" | "D" | letter + "(implicit)" | "—" not reached
   accepted: boolean
   reason: string
 }
@@ -180,7 +182,7 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
         totalRaw: 0,
         totalFiltered: 0,
         firstFiltered: [],
-        candidateLog: [{ raw: rawUrl, cleaned: "", source: "n/a", score: 0, accepted: false, reason: "invalid URL — could not parse origin" }],
+        candidateLog: [{ raw: rawUrl, cleaned: "", source: "n/a", score: 0, classification: "—", contextRule: "—", accepted: false, reason: "invalid URL — could not parse origin" }],
         aiExtraction: { used: false, error: "invalid URL" },
         finalReturnedClients: [],
         finalRejected: [],
@@ -234,14 +236,14 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
 
   // Human-readable confidence labels for each heuristic source
   const SOURCE_LABEL: Record<Exclude<CandidateSource, "fallback_text">, { confidence: "high" | "medium" | "low"; reason: string }> = {
-    profile_field:    { confidence: "high",   reason: "Found in case study profile" },
-    profile_sentence: { confidence: "high",   reason: "Mentioned in company profile" },
+    profile_field:    { confidence: "high",   reason: "Found in case study" },
+    profile_sentence: { confidence: "high",   reason: "Extracted from profile text" },
     link_slug:        { confidence: "high",   reason: "Found in client page URL" },
-    img_alt:          { confidence: "medium", reason: "Found in client logo" },
-    aria_logo:        { confidence: "medium", reason: "Found in client logo" },
-    data_attr:        { confidence: "medium", reason: "Found in data attribute" },
-    subpage_heading:  { confidence: "medium", reason: "Found in client page heading" },
-    client_section:   { confidence: "low",    reason: "Found in client section" },
+    img_alt:          { confidence: "medium", reason: "Detected in logo image" },
+    aria_logo:        { confidence: "medium", reason: "Detected in logo label" },
+    data_attr:        { confidence: "medium", reason: "Detected in page data" },
+    subpage_heading:  { confidence: "medium", reason: "Found in page heading" },
+    client_section:   { confidence: "low",    reason: "Detected in client section" },
   }
 
   const MIN_SCORE = 2
@@ -282,6 +284,12 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
 
   const seen = new Set<string>()
   const results: DetectedClient[] = []
+  // name.toLowerCase() → external URL — built up across all pages scanned
+  const externalLinkMap = new Map<string, string>()
+  // Current page context — updated at the start of each extractCandidates call
+  let currentPageText = ""
+  let currentPageHtml  = ""
+  let currentPageUrl   = ""
 
   // Debug
   let totalRawCount = 0
@@ -289,11 +297,140 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
 
   function logCandidate(
     raw: string, cleaned: string, source: CandidateSource,
-    score: number, accepted: boolean, reason: string
+    score: number, classification: string, contextRule: string,
+    accepted: boolean, reason: string
   ) {
     if (candidateLog.length < 80) {
-      candidateLog.push({ raw, cleaned, source, score, accepted, reason })
+      candidateLog.push({ raw, cleaned, source, score, classification, contextRule, accepted, reason })
     }
+  }
+
+  // ── Semantic classifier ───────────────────────────────────────────────────
+  // Runs after structural filters pass. Decides whether the phrase looks like a
+  // real company name versus a product feature, CTA, internal status, or noise.
+  // Only "company" candidates are ever added to results.
+  type CandidateClass = "company" | "feature" | "cta" | "internal" | "noise"
+
+  function classifyCandidate(name: string): { cls: CandidateClass; clsReason: string } {
+    const words = name.trim().split(/\s+/)
+    const lower = name.toLowerCase()
+    const lastWord = words[words.length - 1].toLowerCase()
+
+    // ── CTA — contains action verbs or imperative phrases ───────────────────
+    if (
+      /\b(book|demo|call|sign[\s-]in|sign[\s-]up|log[\s-]in|get\s+started|learn\s+more|try|start\s+free|watch|download|request|schedule|contact\s+us|join\s+us|apply|hire\s+us|talk\s+to|speak\s+to|chat|let['']s|meet|discover|explore)\b/i
+        .test(name)
+    ) {
+      return { cls: "cta", clsReason: "contains CTA/action verb" }
+    }
+
+    // ── Internal — looks like a status, state, or workflow label ────────────
+    if (
+      /\b(pending|approved|rejected|declined|draft|archived|active|inactive|in\s+progress|in\s+review|under\s+review|coming\s+soon|beta|alpha|preview|published|unpublished|resolved|open|closed|cancelled|canceled|queued|processing|failed|completed|done|ready|live)\b/i
+        .test(name)
+    ) {
+      return { cls: "internal", clsReason: "looks like an internal status or label" }
+    }
+
+    // ── Feature — product/platform/service phrases ───────────────────────────
+    const FEATURE_SUFFIXES = new Set([
+      "platform", "solution", "solutions", "dashboard", "analytics", "integration",
+      "integrations", "automation", "workflow", "workflows", "setup", "process",
+      "pricing", "info", "steps", "review", "guide", "guides", "tool", "tools",
+      "suite", "hub", "engine", "service", "services", "system", "module",
+      "feature", "features", "product", "products", "software", "bot",
+      "assistant", "layer", "framework", "stack", "mode", "flow", "channel",
+    ])
+    if (FEATURE_SUFFIXES.has(lastWord)) {
+      return { cls: "feature", clsReason: `ends in product/feature word "${lastWord}"` }
+    }
+
+    if (
+      /\b(outbound|inbound|pipeline|sequence|sequences|deliverability|onboarding|playbook|crm|saas|paas|iaas|b2b|b2c|go[\s-]to[\s-]market|gtm|sdr|bdr|adr|mql|sql)\b/i
+        .test(name) &&
+      words.length > 1
+    ) {
+      return { cls: "feature", clsReason: "contains product/GTM keyword" }
+    }
+
+    // ── Noise — geographic/industry/adjective-only phrases ───────────────────
+    if (
+      /^(financial|banking|insurance|healthcare|retail|enterprise|startup|global|digital|cloud|remote|online|virtual|smart|modern|advanced|new|fast|easy|simple|best|top)\s/i
+        .test(name) &&
+      words.length <= 2
+    ) {
+      return { cls: "noise", clsReason: "generic adjective + industry/category phrase" }
+    }
+
+    return { cls: "company", clsReason: "ok" }
+  }
+
+  // ── Context validator ─────────────────────────────────────────────────────
+  // Checks that a candidate actually appears in a real client context on the page,
+  // not just as an isolated phrase. Uses currentPageText / currentPageHtml / currentPageUrl.
+  //
+  // Rules:
+  //   A — profile sentence: "[Name] is a/an...", "helps...", "provides...", "offers..."
+  //   B — client/customer/case-study keyword within ±400 chars, or URL is a client subpage
+  //   C — inside a dt/dd structured profile block with a client-related label
+  //   D — associated with an external link or has a legal company suffix
+  //
+  // High-reliability sources (profile_field, profile_sentence, link_slug) auto-pass
+  // their respective rule — they only fire when structural context is already present.
+
+  function validateCompanyContext(
+    name: string,
+    source: CandidateSource,
+  ): { passed: boolean; rule: string; scoreBoost: number; reason: string } {
+    // ── Implicit pass for structurally-strong sources ─────────────────────
+    if (source === "profile_field")    return { passed: true, rule: "C (implicit)", scoreBoost: 3, reason: "structured profile field" }
+    if (source === "profile_sentence") return { passed: true, rule: "A (implicit)", scoreBoost: 3, reason: "profile sentence pattern" }
+    if (source === "link_slug")        return { passed: true, rule: "B (implicit)", scoreBoost: 2, reason: "client page URL slug" }
+
+    const nameLower = name.toLowerCase()
+    const escaped   = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+    // Rule A — profile sentence pattern anywhere in page text
+    const ruleA = new RegExp(
+      `\\b${escaped}\\b[^.\\n]{0,80}\\b(is\\s+(?:a|an|the)|helps?\\b|provides?\\b|offers?\\b|delivers?\\b|powers?\\b|builds?\\b|enables?\\b)`,
+      "i"
+    )
+    if (ruleA.test(currentPageText)) {
+      return { passed: true, rule: "A", scoreBoost: 3, reason: "profile sentence match" }
+    }
+
+    // Rule B — client/customer keyword within ±400 chars, or page is a client subpage
+    if (/\/(customers?|clients?|case-studies?|work|portfolio|testimonials?)/.test(currentPageUrl)) {
+      return { passed: true, rule: "B", scoreBoost: 2, reason: "client/case-study page" }
+    }
+    const pos = currentPageText.toLowerCase().indexOf(nameLower)
+    if (pos !== -1) {
+      const window = currentPageText
+        .slice(Math.max(0, pos - 400), pos + nameLower.length + 400)
+        .toLowerCase()
+      if (/\b(client|customer|case[\s-]study|worked\s+with|trusted\s+by|brands?\s+we|partner|portfolio|testimonial)\b/.test(window)) {
+        return { passed: true, rule: "B", scoreBoost: 2, reason: "client context within 400 chars" }
+      }
+    }
+
+    // Rule C — name appears inside a dt/dd pair with a client-related label
+    const ruleC = new RegExp(
+      `<dt[^>]*>\\s*(?:about|company|client|customer|name|who[^<]{0,30})[^<]*<\\/dt>\\s*<dd[^>]*>[\\s\\S]{0,400}?${escaped}[\\s\\S]{0,300}?<\\/dd>`,
+      "i"
+    )
+    if (ruleC.test(currentPageHtml)) {
+      return { passed: true, rule: "C", scoreBoost: 3, reason: "structured dt/dd profile block" }
+    }
+
+    // Rule D — has an associated external link or carries a legal suffix
+    if (externalLinkMap.has(nameLower)) {
+      return { passed: true, rule: "D", scoreBoost: 1, reason: "associated external link" }
+    }
+    if (/\b(Inc|LLC|Ltd|Corp|Co|GmbH|AG|SA|BV|Plc)\b/.test(name)) {
+      return { passed: true, rule: "D", scoreBoost: 1, reason: "legal company suffix" }
+    }
+
+    return { passed: false, rule: "—", scoreBoost: 0, reason: "no client context (checked A, B, C, D)" }
   }
 
   function tryAdd(name: string, source: CandidateSource, website = "") {
@@ -309,7 +446,7 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
 
     // fallback_text candidates are logged for debug visibility only — never included in results
     if (source === "fallback_text") {
-      logCandidate(name, clean, source, SOURCE_SCORE["fallback_text"], false, "fallback text — debug only")
+      logCandidate(name, clean, source, SOURCE_SCORE["fallback_text"], "—", "—", false, "fallback text — debug only")
       return
     }
 
@@ -318,8 +455,8 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
     const lastWord = words[words.length - 1].toLowerCase()
     let score = SOURCE_SCORE[source]
 
-    const reject = (reason: string) => {
-      logCandidate(name, clean, source, score, false, reason)
+    const reject = (reason: string, cls = "—", ctx = "—") => {
+      logCandidate(name, clean, source, score, cls, ctx, false, reason)
     }
 
     // ── Hard rejects (before scoring) ──────────────────────────────────────
@@ -370,10 +507,27 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
       return
     }
 
+    // ── Semantic classification ────────────────────────────────────────────
+    const { cls, clsReason } = classifyCandidate(clean)
+    if (cls !== "company") {
+      reject(`classified as ${cls}: ${clsReason}`, cls, "—")
+      return
+    }
+
+    // ── Context validation ─────────────────────────────────────────────────
+    const ctx = validateCompanyContext(clean, source)
+    if (!ctx.passed) {
+      reject(`no client context: ${ctx.reason}`, "company", ctx.rule)
+      return
+    }
+    // Apply context score boost — can push borderline candidates higher
+    score += ctx.scoreBoost
+
     seen.add(lower)
-    logCandidate(name, clean, source, score, true, "ok")
+    logCandidate(name, clean, source, score, "company", ctx.rule, true, "ok")
     const label = SOURCE_LABEL[source as keyof typeof SOURCE_LABEL] ?? { confidence: "low" as const, reason: "Heuristic match" }
-    results.push({ name: clean, websiteUrl: website, ...label })
+    const resolvedWebsite = website || externalLinkMap.get(lower) || ""
+    results.push({ name: clean, websiteUrl: resolvedWebsite, ...label })
   }
 
   async function fetchPage(
@@ -590,7 +744,35 @@ ${compactText}`,
     const isSubPage =
       /\/(customers?|clients?|case-studies?|work|portfolio|testimonials?|about)/.test(pageUrl)
 
-    // 0. Profile content — highest priority, runs before all structured extraction
+    // Update page-context closure vars used by validateCompanyContext
+    currentPageHtml = html
+    currentPageText = stripTags(html)
+    currentPageUrl  = pageUrl
+
+    // 0a. Pre-scan: build name → external URL map from anchor tags
+    //     e.g. <a href="https://company.com">Company Name</a>
+    const originHostname = new URL(origin).hostname
+    for (const m of html.matchAll(
+      /<a[^>]+href=["'](https?:\/\/([^/"'?\s]+)[^"']*?)["'][^>]*>([^<]{2,60})<\/a>/gi
+    )) {
+      const href = m[1]
+      const hostname = m[2]
+      const text = m[3].trim()
+      if (
+        hostname &&
+        !hostname.includes(originHostname) &&
+        /^[A-Z]/.test(text) &&
+        text.length >= 2 &&
+        text.length <= 60 &&
+        !/\s{3,}/.test(text) // skip whitespace-heavy junk
+      ) {
+        // Normalise to bare origin (https://company.com)
+        const externalOrigin = `https://${hostname}`
+        externalLinkMap.set(text.toLowerCase(), externalOrigin)
+      }
+    }
+
+    // 0b. Profile content — highest priority, runs before all structured extraction
     extractProfileContent(html)
 
     // 1. Image alt text — logo carousels almost always use company names as alt
@@ -645,7 +827,7 @@ ${compactText}`,
           .replace(/[-_]/g, " ")
           .replace(/\b\w/g, (c) => c.toUpperCase())
           .trim()
-        tryAdd(name, "link_slug", origin)
+        tryAdd(name, "link_slug")
       }
     }
 
