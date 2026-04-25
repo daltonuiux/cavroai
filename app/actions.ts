@@ -167,6 +167,26 @@ export interface DetectResult {
   debug: DetectDebug
 }
 
+// Best-effort domain guess from a company name.
+// Used only when no external link or slug-derived URL is available,
+// and only for high/medium confidence candidates.
+function inferDomain(name: string): string | null {
+  const clean = name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .trim()
+
+  if (!clean) return null
+
+  const parts = clean.split(/\s+/).slice(0, 3)
+  if (parts.length === 0) return null
+
+  const base = parts.join("")
+
+  if (clean.includes("ai")) return `https://${base}.ai`
+  return `https://${base}.com`
+}
+
 export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectResult> {
   const base = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`
   let origin: string
@@ -526,7 +546,13 @@ export async function detectClientsFromWebsite(rawUrl: string): Promise<DetectRe
     seen.add(lower)
     logCandidate(name, clean, source, score, "company", ctx.rule, true, "ok")
     const label = SOURCE_LABEL[source as keyof typeof SOURCE_LABEL] ?? { confidence: "low" as const, reason: "Heuristic match" }
-    const resolvedWebsite = website || externalLinkMap.get(lower) || ""
+
+    // Priority: explicit website arg > external link map > inferred domain (high/medium only)
+    let resolvedWebsite = website || externalLinkMap.get(lower) || ""
+    if (!resolvedWebsite && label.confidence !== "low") {
+      resolvedWebsite = inferDomain(clean) ?? ""
+    }
+
     results.push({ name: clean, websiteUrl: resolvedWebsite, ...label })
   }
 
