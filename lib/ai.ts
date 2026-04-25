@@ -427,11 +427,41 @@ export async function analyzeWebsite(
     ],
   })
 
-  const text =
-    message.content[0].type === "text" ? message.content[0].text : ""
+  const raw = message.content[0].type === "text" ? message.content[0].text : ""
 
-  const jsonMatch = text.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) throw new Error("No JSON returned from analysis")
+  // Step 1: strip markdown fences the model sometimes wraps around JSON
+  const cleaned = raw
+    .replace(/```json\s*/gi, "")
+    .replace(/```\s*/g, "")
+    .trim()
 
-  return JSON.parse(jsonMatch[0]) as AnalysisResult
+  console.log("CLEANED AI RESPONSE:", cleaned.slice(0, 500))
+
+  // Step 2: extract the outermost JSON object
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) {
+    console.error("RAW AI RESPONSE (no JSON found):", raw)
+    throw new Error("No JSON object found in analysis response")
+  }
+
+  // Step 3: safe parse with full raw output on failure
+  function safeJsonParse(text: string): AnalysisResult {
+    try {
+      return JSON.parse(text) as AnalysisResult
+    } catch (err) {
+      console.error("JSON PARSE ERROR:", err)
+      console.error("RAW AI RESPONSE:", raw)
+      console.error("CLEANED RESPONSE:", text)
+      // Step 4: graceful fallback so the UI never crashes
+      return {
+        summary: "Analysis could not be parsed. The AI returned malformed JSON. Please retry.",
+        strategicDirection: [],
+        opportunities: [],
+        suggestedPitch: "",
+        recommendedActions: [],
+      }
+    }
+  }
+
+  return safeJsonParse(jsonMatch[0])
 }
