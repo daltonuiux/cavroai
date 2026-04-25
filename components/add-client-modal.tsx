@@ -792,77 +792,55 @@ export function AddClientModal() {
                         {selected.size === detected.length ? "Deselect all" : "Select all"}
                       </button>
                     </div>
-                    <div className="max-h-64 divide-y divide-border overflow-y-auto">
+                    <div className="max-h-64 overflow-y-auto">
                       {detected.map((client, i) => {
                         const isSelected = selected.has(i)
                         return (
                           <div
                             key={i}
-                            className={`grid transition-opacity ${
+                            className={`grid grid-cols-[40px_minmax(0,1fr)_280px] items-center gap-4 border-b border-border px-6 py-4 transition-opacity ${
                               !isSelected
                                 ? "opacity-35"
                                 : client.confidence === "low"
                                 ? "opacity-60"
                                 : ""
                             }`}
-                            style={{
-                              gridTemplateColumns: "28px minmax(0, 1fr) 148px",
-                              columnGap: "16px",
-                              alignItems: "center",
-                              padding: "14px 20px",
-                            }}
                           >
-                            {/* Left: checkbox */}
-                            <div style={{ display: "flex", alignItems: "center" }}>
+                            {/* Checkbox */}
+                            <div className="flex h-full items-center justify-start">
                               <RowCheckbox
                                 checked={isSelected}
                                 onChange={() => toggleSelect(i)}
                               />
                             </div>
 
-                            {/* Middle: client info */}
-                            <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: "5px" }}>
-                              <p
-                                className="text-foreground"
-                                style={{
-                                  fontSize: "13px",
-                                  fontWeight: 600,
-                                  lineHeight: "18px",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap",
-                                }}
-                              >
+                            {/* Client info */}
+                            <div className="min-w-0 text-left">
+                              <p className="truncate text-[16px] font-semibold leading-5 text-foreground">
                                 {client.name}
                               </p>
-                              <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
-                                <ConfidenceBadge confidence={client.confidence} />
-                                <span
-                                  className="text-muted-foreground/50"
-                                  style={{
-                                    fontSize: "11px",
-                                    lineHeight: "16px",
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                  }}
-                                >
+                              <div className="mt-1 flex min-w-0 items-center gap-2">
+                                <span className="shrink-0">
+                                  <ConfidenceBadge confidence={client.confidence} />
+                                </span>
+                                <span className="min-w-0 truncate text-[13px] leading-[18px] text-muted-foreground">
                                   {client.reason}
                                 </span>
                               </div>
                             </div>
 
-                            {/* Right: website input */}
-                            <input
-                              value={client.websiteUrl}
-                              onChange={(e) => updateDetectedWebsite(i, e.target.value)}
-                              onClick={() => {
-                                if (!isSelected) toggleSelect(i)
-                              }}
-                              placeholder="website.com"
-                              className="rounded border border-border bg-background text-foreground placeholder:text-muted-foreground/35 outline-none transition-colors focus:border-foreground/30"
-                              style={{ width: "148px", height: "34px", padding: "0 8px", fontSize: "11px" }}
-                            />
+                            {/* Website input */}
+                            <div className="flex justify-end">
+                              <input
+                                value={client.websiteUrl}
+                                onChange={(e) => updateDetectedWebsite(i, e.target.value)}
+                                onClick={() => {
+                                  if (!isSelected) toggleSelect(i)
+                                }}
+                                placeholder="website.com"
+                                className="h-10 w-[280px] rounded border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-muted-foreground/35 outline-none transition-colors focus:border-foreground/30"
+                              />
+                            </div>
                           </div>
                         )
                       })}
