@@ -1,6 +1,7 @@
 "use client"
 
 import { useRef, useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import { saveAgencyProfile } from "@/app/profile/actions"
 import type { AgencyProfile } from "@/lib/types"
 
@@ -98,16 +99,27 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export function AgencyProfileForm({ profile }: { profile: AgencyProfile | null }) {
   const formRef = useRef<HTMLFormElement>(null)
+  const router = useRouter()
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    setSaveError(null)
     const formData = new FormData(e.currentTarget)
     startTransition(async () => {
-      await saveAgencyProfile(formData)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 3000)
+      try {
+        const result = await saveAgencyProfile(formData)
+        if (result.success) {
+          setSaved(true)
+          router.push("/opportunities")
+        } else {
+          setSaveError(result.error ?? "Could not save agency profile. Please try again.")
+        }
+      } catch {
+        setSaveError("Could not save agency profile. Please try again.")
+      }
     })
   }
 
@@ -256,6 +268,11 @@ export function AgencyProfileForm({ profile }: { profile: AgencyProfile | null }
         {saved && (
           <span className="text-[12px] text-emerald-600 dark:text-emerald-400">
             Profile saved
+          </span>
+        )}
+        {saveError && (
+          <span className="text-[12px] text-destructive">
+            {saveError}
           </span>
         )}
       </div>

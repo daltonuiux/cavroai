@@ -21,21 +21,32 @@ function num(formData: FormData, key: string): number | undefined {
   return isNaN(n) || n <= 0 ? undefined : n
 }
 
-export async function saveAgencyProfile(formData: FormData) {
-  await upsertAgencyProfile({
-    agencyName: str(formData, "agencyName") ?? "",
-    website: str(formData, "website"),
-    positioning: str(formData, "positioning"),
-    services: arr(formData, "services"),
-    idealClientTypes: arr(formData, "idealClientTypes"),
-    industries: arr(formData, "industries"),
-    minBudget: num(formData, "minBudget"),
-    maxBudget: num(formData, "maxBudget"),
-    geography: str(formData, "geography"),
-    proofPoints: arr(formData, "proofPoints"),
-    badFitClients: arr(formData, "badFitClients"),
-  })
+export async function saveAgencyProfile(
+  formData: FormData
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await upsertAgencyProfile({
+      agencyName: str(formData, "agencyName") ?? "",
+      website: str(formData, "website"),
+      positioning: str(formData, "positioning"),
+      services: arr(formData, "services"),
+      idealClientTypes: arr(formData, "idealClientTypes"),
+      industries: arr(formData, "industries"),
+      minBudget: num(formData, "minBudget"),
+      maxBudget: num(formData, "maxBudget"),
+      geography: str(formData, "geography"),
+      proofPoints: arr(formData, "proofPoints"),
+      badFitClients: arr(formData, "badFitClients"),
+    })
 
-  revalidatePath("/profile")
-  revalidatePath("/opportunities")
+    revalidatePath("/profile")
+    revalidatePath("/opportunities")
+
+    return { success: true }
+  } catch (err) {
+    console.error("AGENCY PROFILE SAVE ERROR:", err)
+    const message =
+      err instanceof Error ? err.message : "Unknown error saving agency profile"
+    return { success: false, error: message }
+  }
 }

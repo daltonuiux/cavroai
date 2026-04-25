@@ -210,17 +210,23 @@ function formatAgencyContext(profile: AgencyProfile): string {
   ]
   if (profile.website)      lines.push(`Website: ${profile.website}`)
   if (profile.positioning)  lines.push(`Positioning: ${profile.positioning}`)
-  if (profile.services.length)          lines.push(`Services: ${profile.services.join(", ")}`)
-  if (profile.idealClientTypes.length)  lines.push(`Ideal clients: ${profile.idealClientTypes.join(", ")}`)
-  if (profile.industries.length)        lines.push(`Industries: ${profile.industries.join(", ")}`)
+  const services = Array.isArray(profile.services) ? profile.services : []
+  const idealClientTypes = Array.isArray(profile.idealClientTypes) ? profile.idealClientTypes : []
+  const industries = Array.isArray(profile.industries) ? profile.industries : []
+  const proofPoints = Array.isArray(profile.proofPoints) ? profile.proofPoints : []
+  const badFitClients = Array.isArray(profile.badFitClients) ? profile.badFitClients : []
+
+  if (services.length)          lines.push(`Services: ${services.join(", ")}`)
+  if (idealClientTypes.length)  lines.push(`Ideal clients: ${idealClientTypes.join(", ")}`)
+  if (industries.length)        lines.push(`Industries: ${industries.join(", ")}`)
   if (profile.minBudget || profile.maxBudget) {
     const min = profile.minBudget ? `£${profile.minBudget.toLocaleString()}` : "unspecified"
     const max = profile.maxBudget ? `£${profile.maxBudget.toLocaleString()}` : "unspecified"
     lines.push(`Budget range: ${min}–${max}`)
   }
   if (profile.geography)    lines.push(`Geography: ${profile.geography}`)
-  if (profile.proofPoints.length)   lines.push(`Proof points: ${profile.proofPoints.join("; ")}`)
-  if (profile.badFitClients.length) lines.push(`Bad-fit clients: ${profile.badFitClients.join(", ")}`)
+  if (proofPoints.length)   lines.push(`Proof points: ${proofPoints.join("; ")}`)
+  if (badFitClients.length) lines.push(`Bad-fit clients: ${badFitClients.join(", ")}`)
   return lines.join("\n")
 }
 
