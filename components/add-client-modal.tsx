@@ -792,13 +792,13 @@ export function AddClientModal() {
                         {selected.size === detected.length ? "Deselect all" : "Select all"}
                       </button>
                     </div>
-                    <div className="max-h-64 overflow-y-auto">
+                    <div className="max-h-80 overflow-y-auto">
                       {detected.map((client, i) => {
                         const isSelected = selected.has(i)
                         return (
                           <div
                             key={i}
-                            className={`grid grid-cols-[40px_minmax(0,1fr)_280px] items-center gap-4 border-b border-border px-6 py-4 transition-opacity ${
+                            className={`border-b border-border px-6 py-4 transition-opacity ${
                               !isSelected
                                 ? "opacity-35"
                                 : client.confidence === "low"
@@ -806,40 +806,31 @@ export function AddClientModal() {
                                 : ""
                             }`}
                           >
-                            {/* Checkbox */}
-                            <div className="flex h-full items-center justify-start">
+                            <div className="flex items-start gap-3">
                               <RowCheckbox
                                 checked={isSelected}
                                 onChange={() => toggleSelect(i)}
                               />
-                            </div>
-
-                            {/* Client info */}
-                            <div className="min-w-0 text-left">
-                              <p className="truncate text-[16px] font-semibold leading-5 text-foreground">
-                                {client.name}
-                              </p>
-                              <div className="mt-1 flex min-w-0 items-center gap-2">
-                                <span className="shrink-0">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-[16px] font-semibold leading-5 text-foreground">
+                                    {client.name}
+                                  </p>
                                   <ConfidenceBadge confidence={client.confidence} />
-                                </span>
-                                <span className="min-w-0 truncate text-[13px] leading-[18px] text-muted-foreground">
+                                </div>
+                                <p className="mt-1 line-clamp-2 text-[13px] leading-[18px] text-muted-foreground">
                                   {client.reason}
-                                </span>
+                                </p>
+                                <input
+                                  value={client.websiteUrl}
+                                  onChange={(e) => updateDetectedWebsite(i, e.target.value)}
+                                  onClick={() => {
+                                    if (!isSelected) toggleSelect(i)
+                                  }}
+                                  placeholder="website.com"
+                                  className="mt-3 h-10 w-full rounded border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-muted-foreground/35 outline-none transition-colors focus:border-foreground/30"
+                                />
                               </div>
-                            </div>
-
-                            {/* Website input */}
-                            <div className="flex justify-end">
-                              <input
-                                value={client.websiteUrl}
-                                onChange={(e) => updateDetectedWebsite(i, e.target.value)}
-                                onClick={() => {
-                                  if (!isSelected) toggleSelect(i)
-                                }}
-                                placeholder="website.com"
-                                className="h-10 w-[280px] rounded border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-muted-foreground/35 outline-none transition-colors focus:border-foreground/30"
-                              />
                             </div>
                           </div>
                         )
