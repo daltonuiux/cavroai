@@ -113,11 +113,25 @@ HARD RULES — violating any of these = return null result
 
 1. NO TRIGGER → NO OPPORTUNITY.
    Valid triggers (must be factual, from signals):
-   - A specific job role open (name the title)
-   - A news article confirming a funding round, launch, or expansion
+   - A specific job role open (name the title) — use ENRICHED SIGNALS › HIRING
+   - A news article confirming a funding round, launch, or expansion — use ENRICHED SIGNALS › ACTIVITY
+   - A launch / announcement sentence found on the homepage or product page — use ENRICHED SIGNALS › ACTIVITY
    - A new pricing tier or product page found
    - A blog post title announcing something concrete
    If none of these exist in the input, set show_opportunity=false and stop.
+
+   SIGNAL PRIORITY — evaluate in this order, stop at the first valid trigger:
+   1. HIRING signals (any named role = valid trigger; commercial role = strong trigger)
+   2. ACTIVITY signals (launch / announce / news = strong trigger)
+   3. PRODUCT signals (onboarding / integrations / automation = weaker trigger, needs 2+)
+   4. CONTENT signals (blog posts alone = not a trigger; use as supporting evidence only)
+
+   CONFIDENCE BOOST RULES:
+   - Any HIRING signal with confidence ≥ 0.7: add +15 to confidence score
+   - Commercial role (VP, Head of, AE): add +20 to confidence score
+   - ACTIVITY signal from news (confidence 0.95): add +20 to confidence score
+   - ACTIVITY signal from homepage/product: add +10 to confidence score
+   - 3+ PRODUCT signals: add +10 to confidence score
 
 2. ALL CLAIMS MUST TRACE TO SOURCE TEXT.
    Never state funding, partnerships, revenue, growth, or stage unless the exact words appear in the input.
@@ -293,7 +307,53 @@ function buildUserMessage(
   parts.push("", "=== STRUCTURED SIGNALS ===")
   parts.push(JSON.stringify(extracted, null, 2))
 
-  // Job signals — always included so model knows exactly what was found
+  // ── ENRICHED SIGNALS (prioritized: hiring → activity → product → content) ──────
+  // These are pre-extracted, confidence-scored signals. Use them as the PRIMARY
+  // evidence source. Hiring signals significantly increase opportunity confidence.
+  {
+    const es = signals.enrichedSignals
+
+    if (es && (es.hiring.length + es.activity.length + es.product.length + es.content.length) > 0) {
+      parts.push("", "=== ENRICHED SIGNALS ===")
+      parts.push("Priority order: HIRING > ACTIVITY > PRODUCT > CONTENT")
+      parts.push("Hiring signals increase confidence significantly. If any hiring signal exists, treat it as a primary trigger.")
+
+      if (es.hiring.length > 0) {
+        parts.push("", "HIRING (confidence boost: high):")
+        for (const s of es.hiring) {
+          parts.push(`  [${Math.round(s.confidence * 100)}%] [${s.source}] ${s.text}`)
+        }
+      } else {
+        parts.push("", "HIRING: none — do not mention hiring or open roles")
+      }
+
+      if (es.activity.length > 0) {
+        parts.push("", "ACTIVITY (launch / announce / news):")
+        for (const s of es.activity) {
+          parts.push(`  [${Math.round(s.confidence * 100)}%] [${s.source}] ${s.text}`)
+        }
+      }
+
+      if (es.product.length > 0) {
+        parts.push("", "PRODUCT (features / onboarding / integrations):")
+        for (const s of es.product) {
+          parts.push(`  [${Math.round(s.confidence * 100)}%] [${s.source}] ${s.text}`)
+        }
+      }
+
+      if (es.content.length > 0) {
+        parts.push("", "CONTENT (blog / articles):")
+        for (const s of es.content) {
+          parts.push(`  [${Math.round(s.confidence * 100)}%] [${s.source}] ${s.text}`)
+        }
+      }
+
+      // LinkedIn placeholder — not yet fetched
+      parts.push("", "LINKEDIN: not yet fetched (placeholder only)")
+    }
+  }
+
+  // ── Job signals — raw data, kept for backward compatibility ─────────────
   {
     const js = signals.jobSignals
     const lines: string[] = [
@@ -309,11 +369,11 @@ function buildUserMessage(
     if (js?.commercialRoles?.length) {
       lines.push(`commercialRoles (GTM/revenue titles): ${js.commercialRoles.join(", ")}`)
     }
-    parts.push("", "=== JOB SIGNALS ===")
+    parts.push("", "=== JOB SIGNALS (raw) ===")
     parts.push(lines.join("\n"))
   }
 
-  // News signals — always included
+  // ── News signals — always included ──────────────────────────────────────
   {
     const ns = signals.newsSignals
     parts.push("", "=== NEWS SIGNALS ===")

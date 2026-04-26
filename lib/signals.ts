@@ -1,4 +1,4 @@
-import type { Signals, ExtractedSignals, JobSignals, NewsSignals, BlogPost, JobRole, NewsItem } from "./types"
+import type { Signals, ExtractedSignals, JobSignals, NewsSignals, BlogPost, JobRole, NewsItem, EnrichedSignal, EnrichedSignals } from "./types"
 
 const FETCH_TIMEOUT_MS = 8000
 
@@ -392,6 +392,155 @@ async function fetchNewsSignals(companyName: string): Promise<NewsSignals> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Enriched signal extraction — structured, confidence-scored
+// ---------------------------------------------------------------------------
+
+/**
+ * Splits plain text into individual sentences / clauses and returns those that
+ * contain at least one of the provided keywords.
+ * Filters to 30–280 chars to avoid fragments and run-on blocks.
+ */
+function extractMatchingSentences(text: string, keywords: string[], maxResults = 4): string[] {
+  const keywordRe = new RegExp(`\\b(${keywords.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "i")
+
+  // Split on sentence-ending punctuation + whitespace, or on newlines
+  const segments = text
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 30 && s.length <= 280)
+
+  const seen = new Set<string>()
+  const results: string[] = []
+
+  for (const seg of segments) {
+    if (!keywordRe.test(seg)) continue
+    const key = seg.toLowerCase().slice(0, 60)
+    if (seen.has(key)) continue
+    seen.add(key)
+    results.push(seg)
+    if (results.length >= maxResults) break
+  }
+
+  return results
+}
+
+/**
+ * Deduplicates signals by lowercased text prefix (first 60 chars).
+ */
+function deduplicateSignals(signals: EnrichedSignal[]): EnrichedSignal[] {
+  const seen = new Set<string>()
+  return signals.filter((s) => {
+    const key = s.text.toLowerCase().slice(0, 60)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+// Keyword sets for each signal type
+const ACTIVITY_KEYWORDS = [
+  "launch", "launched", "launching", "launches",
+  "introducing", "introduce", "just released", "now available",
+  "announcing", "announced", "announce",
+  "new product", "new feature", "new version",
+]
+
+const PRODUCT_KEYWORDS = [
+  "onboarding", "dashboard", "automation", "automations",
+  "integration", "integrations", "workflow", "workflows",
+  "analytics", "reporting", "api", "platform",
+]
+
+const HIRING_PAGE_KEYWORDS = [
+  "hiring", "join our team", "we're growing", "we are growing",
+  "open position", "open role", "join us",
+]
+
+/**
+ * Extracts structured enriched signals from scraped page text and job signals.
+ * Returns a prioritized { hiring, activity, product, content } bundle.
+ */
+function extractEnrichedSignals(
+  homepageText: string,
+  productText: string | null,
+  blogPosts: BlogPost[],
+  jobSignals: JobSignals,
+  newsSignals: NewsSignals,
+): EnrichedSignals {
+  const hiring:   EnrichedSignal[] = []
+  const activity: EnrichedSignal[] = []
+  const product:  EnrichedSignal[] = []
+  const content:  EnrichedSignal[] = []
+
+  // ── HIRING ──────────────────────────────────────────────────────────────
+
+  // Commercial roles from careers page — highest confidence
+  for (const role of jobSignals.commercialRoles) {
+    hiring.push({ type: "hiring", text: role, source: "careers page", confidence: 0.9 })
+  }
+  // Non-commercial named roles — still useful context
+  for (const role of jobSignals.roles.filter((r) => !jobSignals.commercialRoles.includes(r))) {
+    hiring.push({ type: "hiring", text: role, source: "careers page", confidence: 0.7 })
+  }
+  // Hiring language from homepage (e.g. "We're hiring" banner)
+  for (const sentence of extractMatchingSentences(homepageText, HIRING_PAGE_KEYWORDS, 2)) {
+    hiring.push({ type: "hiring", text: sentence, source: "homepage", confidence: 0.5 })
+  }
+
+  // ── ACTIVITY ────────────────────────────────────────────────────────────
+
+  // Homepage launch/announce sentences
+  for (const sentence of extractMatchingSentences(homepageText, ACTIVITY_KEYWORDS, 4)) {
+    activity.push({ type: "activity", text: sentence, source: "homepage", confidence: 0.8 })
+  }
+  // Product page launch/announce sentences
+  if (productText) {
+    for (const sentence of extractMatchingSentences(productText, ACTIVITY_KEYWORDS, 3)) {
+      activity.push({ type: "activity", text: sentence, source: "product page", confidence: 0.75 })
+    }
+  }
+  // News articles are strong activity signals
+  for (const article of newsSignals.articles.slice(0, 3)) {
+    activity.push({ type: "activity", text: article.title, source: "news", confidence: 0.95 })
+  }
+
+  // ── PRODUCT ─────────────────────────────────────────────────────────────
+
+  // Product page is the primary source for product signals
+  if (productText) {
+    for (const sentence of extractMatchingSentences(productText, PRODUCT_KEYWORDS, 5)) {
+      product.push({ type: "product", text: sentence, source: "product page", confidence: 0.85 })
+    }
+  }
+  // Homepage product sentences (secondary)
+  for (const sentence of extractMatchingSentences(homepageText, PRODUCT_KEYWORDS, 3)) {
+    product.push({ type: "product", text: sentence, source: "homepage", confidence: 0.65 })
+  }
+
+  // ── CONTENT ─────────────────────────────────────────────────────────────
+
+  for (const post of blogPosts.slice(0, 6)) {
+    if (post.title && post.title.length > 10) {
+      content.push({ type: "content", text: post.title, source: "blog", confidence: 0.6 })
+    }
+  }
+
+  const result: EnrichedSignals = {
+    hiring:   deduplicateSignals(hiring).slice(0, 8),
+    activity: deduplicateSignals(activity).slice(0, 5),
+    product:  deduplicateSignals(product).slice(0, 6),
+    content:  deduplicateSignals(content).slice(0, 6),
+  }
+
+  console.log(
+    `ENRICHED SIGNALS: hiring=${result.hiring.length} activity=${result.activity.length}` +
+    ` product=${result.product.length} content=${result.content.length}`
+  )
+
+  return result
+}
+
 export async function gatherSignals(websiteUrl: string, companyName = ""): Promise<Signals> {
   const base = new URL(websiteUrl).origin
 
@@ -407,7 +556,11 @@ export async function gatherSignals(websiteUrl: string, companyName = ""): Promi
       fetchNewsSignals(companyName),
     ])
 
-  const extracted = extractPageSignals(homepageHtml ?? "")
+  const homepageText = extractText(homepageHtml ?? "")
+  const productText  = productHtml ? extractText(productHtml) : null
+  const blogPosts    = extractBlogPosts(blogHtml)
+
+  const extracted  = extractPageSignals(homepageHtml ?? "")
   const jobSignals = extractJobSignals(homepageHtml, careersHtml, jobsHtml)
 
   console.log("EXTRACTED SIGNALS:", extracted)
@@ -416,17 +569,28 @@ export async function gatherSignals(websiteUrl: string, companyName = ""): Promi
   // Populate legacy jobs field with real extracted roles only — never mock data
   const jobs: JobRole[] = jobSignals.roles.map((title) => ({ title }))
 
+  const enrichedSignals = extractEnrichedSignals(
+    homepageText,
+    productText,
+    blogPosts,
+    jobSignals,
+    newsSignals,
+  )
+
   return {
     website: {
-      homepage: extractText(homepageHtml ?? "").slice(0, 3000),
+      homepage: homepageText.slice(0, 3000),
       ...(pricingHtml ? { pricing: extractText(pricingHtml).slice(0, 1500) } : {}),
-      ...(productHtml ? { product: extractText(productHtml).slice(0, 1500) } : {}),
+      ...(productText ? { product: productText.slice(0, 1500) } : {}),
     },
-    blog: extractBlogPosts(blogHtml),
+    blog: blogPosts,
     jobs,
     news: MOCK_NEWS,
     extracted,
     jobSignals,
     newsSignals,
+    enrichedSignals,
+    // LinkedIn placeholder — structure reserved, not yet scraped
+    linkedin: { fetched: false },
   }
 }

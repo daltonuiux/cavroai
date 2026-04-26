@@ -245,6 +245,45 @@ export interface NewsSignals {
   keywordRejected: number
 }
 
+// ---------------------------------------------------------------------------
+// Enriched signals — structured, typed, confidence-scored
+// ---------------------------------------------------------------------------
+
+export type EnrichedSignalType = "hiring" | "activity" | "product" | "content"
+
+/**
+ * A single extracted signal with enough context to drive AI reasoning.
+ * confidence: 0.0–1.0 (1.0 = certain, e.g. named job role; 0.5 = inferred from keyword)
+ */
+export interface EnrichedSignal {
+  type: EnrichedSignalType
+  text: string       // the extracted sentence, title, or role name
+  source: string     // "careers page" | "homepage" | "product page" | "blog" | "news"
+  confidence: number // 0.0–1.0
+}
+
+export interface EnrichedSignals {
+  hiring:   EnrichedSignal[]  // roles + hiring language — highest priority
+  activity: EnrichedSignal[]  // launch / announce / new product sentences
+  product:  EnrichedSignal[]  // onboarding / dashboard / automation sentences
+  content:  EnrichedSignal[]  // blog post titles and content signals
+}
+
+// ---------------------------------------------------------------------------
+// LinkedIn — placeholder schema (scraping not yet implemented)
+// ---------------------------------------------------------------------------
+
+export interface LinkedInSignals {
+  /** Total employee count shown on the company LinkedIn page. */
+  employees?: number
+  /** Named roles or departments visible on the page. */
+  roles?: string[]
+  /** Shared connections between the agency and this company. */
+  connections?: string[]
+  /** Whether LinkedIn data has been fetched (false = placeholder only). */
+  fetched: boolean
+}
+
 export interface Signals {
   website: WebsiteSignals
   blog: BlogPost[]
@@ -253,4 +292,8 @@ export interface Signals {
   extracted?: ExtractedSignals
   jobSignals?: JobSignals
   newsSignals?: NewsSignals
+  /** Structured enriched signals — populated during gatherSignals(), always present. */
+  enrichedSignals?: EnrichedSignals
+  /** LinkedIn placeholder — structure reserved, not yet scraped. */
+  linkedin?: LinkedInSignals
 }
