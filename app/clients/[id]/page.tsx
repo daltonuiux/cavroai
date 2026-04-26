@@ -3,8 +3,8 @@ export const dynamic = "force-dynamic"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, AlertCircle, ChevronDown } from "lucide-react"
-import { getClientById, getAnalysisByClientId, getAgencyProfile, getProspectsByClientId, MVP_USER_ID } from "@/lib/db"
-import type { Analysis, SignalChange, Signals } from "@/lib/types"
+import { getClientById, getAnalysisByClientId, getAgencyProfile, getProspectsByClientId, getRelationshipSignalsByClientId, MVP_USER_ID } from "@/lib/db"
+import type { Analysis, RelationshipSignal, SignalChange, Signals } from "@/lib/types"
 import { scoreOpportunity, type ScoreBreakdown } from "@/lib/scoring"
 import { SimilarCompanies } from "@/components/similar-companies"
 import { createClient } from "@/lib/supabase/server"
@@ -23,11 +23,12 @@ export default async function ClientPage({
   const { data: { user } } = await supabase.auth.getUser()
   const userId = user?.id ?? MVP_USER_ID
 
-  const [client, analysis, agencyProfile, prospects] = await Promise.all([
+  const [client, analysis, agencyProfile, prospects, relSignals] = await Promise.all([
     getClientById(id),
     getAnalysisByClientId(id),
     getAgencyProfile().catch(() => null),
     getProspectsByClientId(id, userId).catch(() => null),
+    getRelationshipSignalsByClientId(id, userId).catch(() => []),
   ])
 
   if (!client) notFound()
@@ -77,6 +78,7 @@ export default async function ClientPage({
               ? scoreOpportunity(analysis.signals, agencyProfile, client.name).breakdown
               : null
           }
+          relSignals={relSignals}
         />
       )}
 
@@ -137,9 +139,11 @@ function firstSentence(text: string): string {
 function AnalysisResults({
   analysis,
   scoreBreakdown,
+  relSignals,
 }: {
   analysis: Analysis
   scoreBreakdown: ScoreBreakdown | null
+  relSignals: RelationshipSignal[]
 }) {
   const opp = topOpportunity(analysis)
   const signal = opp?.headline ?? ""
@@ -255,6 +259,9 @@ function AnalysisResults({
           </CollapsibleSection>
           {analysis.signals && (
             <SignalsDebug signals={analysis.signals} scoreBreakdown={scoreBreakdown} fitScore={analysis.fitScore} />
+          )}
+          {relSignals.length > 0 && (
+            <RelationshipSignalsDebug signals={relSignals} />
           )}
         </div>
       </details>
@@ -514,6 +521,72 @@ function SignalsDebug({
             </div>
           )
         })()}
+      </div>
+    </details>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Relationship signals debug panel
+// ---------------------------------------------------------------------------
+
+const ENTITY_TYPE_LABEL: Record<string, string> = {
+  partner:     "Partner",
+  integration: "Integration",
+  customer:    "Customer",
+  investor:    "Investor",
+  tool:        "Tool",
+  person:      "Person",
+}
+
+const ENTITY_TYPE_COLOR: Record<string, string> = {
+  investor:    "text-emerald-600 dark:text-emerald-400",
+  customer:    "text-emerald-600 dark:text-emerald-400",
+  partner:     "text-sky-600 dark:text-sky-400",
+  integration: "text-sky-600 dark:text-sky-400",
+  tool:        "text-muted-foreground/60",
+  person:      "text-muted-foreground/60",
+}
+
+function RelationshipSignalsDebug({ signals }: { signals: RelationshipSignal[] }) {
+  // Group by entity_type
+  const groups: Record<string, RelationshipSignal[]> = {}
+  for (const s of signals) {
+    if (!groups[s.entityType]) groups[s.entityType] = []
+    groups[s.entityType].push(s)
+  }
+
+  return (
+    <details className="group overflow-hidden rounded-md border border-dashed border-border bg-background">
+      <summary className="flex cursor-pointer select-none list-none items-center justify-between px-4 py-3 text-[11px] font-medium text-muted-foreground/40 transition-colors hover:text-muted-foreground/60">
+        <span>Debug: Relationship signals ({signals.length})</span>
+        <ChevronDown className="size-3 transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="border-t border-dashed border-border px-4 pt-3 pb-4 flex flex-col gap-3">
+        {Object.entries(groups).map(([type, items]) => (
+          <div key={type}>
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40">
+              {ENTITY_TYPE_LABEL[type] ?? type} ({items.length})
+            </p>
+            <ul className="flex flex-col gap-0.5">
+              {items.map((s) => (
+                <li key={s.id} className="flex items-start gap-2">
+                  <span className={`text-[11px] font-medium ${ENTITY_TYPE_COLOR[s.entityType] ?? "text-muted-foreground/60"}`}>
+                    {s.entityName}
+                  </span>
+                  {s.sourceContext && (
+                    <span className="text-[10px] text-muted-foreground/35 truncate italic">
+                      &ldquo;{s.sourceContext.slice(0, 60)}&rdquo;
+                    </span>
+                  )}
+                  <span className={`ml-auto shrink-0 text-[10px] ${s.confidence === "high" ? "text-emerald-600/60" : "text-muted-foreground/30"}`}>
+                    {s.confidence}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </div>
     </details>
   )

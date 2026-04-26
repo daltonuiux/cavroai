@@ -1,9 +1,12 @@
 import Link from "next/link"
-import { getAgencyProfile, getClients, getLatestAnalysesForClients } from "@/lib/db"
+import { getAgencyProfile, getClients, getLatestAnalysesForClients, getAllRelationshipSignalsForUser, MVP_USER_ID } from "@/lib/db"
 import { OpportunitiesList } from "@/components/opportunities-list"
 import type { OpportunityRow } from "@/components/opportunities-list"
 import type { Analysis } from "@/lib/types"
 import { confidenceFromScore } from "@/lib/scoring"
+import { computeWarmPaths } from "@/lib/warm-paths"
+import { WarmPaths } from "@/components/warm-paths"
+import { createClient } from "@/lib/supabase/server"
 
 function deriveScore(analysis: Analysis): number {
   // Prefer deterministic fitScore (set by scoring pipeline)
@@ -29,14 +32,21 @@ export default async function OpportunitiesPage() {
     </div>
   )
 
-  // Fetch agency profile + clients in parallel
+  // Resolve userId for RLS-gated queries
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  const userId = user?.id ?? MVP_USER_ID
+
+  // Fetch agency profile + clients + relationship signals in parallel
   let agencyProfile = null
   let rows: OpportunityRow[] = []
+  let warmPaths: ReturnType<typeof computeWarmPaths> = []
 
   try {
-    const [profile, clients] = await Promise.all([
+    const [profile, clients, allSignals] = await Promise.all([
       getAgencyProfile().catch(() => null),
       getClients(),
+      getAllRelationshipSignalsForUser(userId).catch(() => []),
     ])
 
     agencyProfile = profile
@@ -129,6 +139,12 @@ export default async function OpportunitiesPage() {
         })
         // Sort by fitScore descending — highest commercial value first
         .sort((a, b) => b.score - a.score)
+
+      // Compute warm paths from relationship signals across all clients
+      if (allSignals.length > 0) {
+        warmPaths = computeWarmPaths(allSignals, clients)
+        console.log(`WARM PATHS: ${warmPaths.length} paths from ${allSignals.length} signals`)
+      }
     }
   } catch (err) {
     console.error("OpportunitiesPage fetch error:", err)
@@ -180,6 +196,9 @@ export default async function OpportunitiesPage() {
       ) : (
         <OpportunitiesList rows={rows} hasAgencyProfile={!!agencyProfile} />
       )}
+
+      {/* Warm paths — shared entities across 2+ clients */}
+      <WarmPaths paths={warmPaths} />
     </div>
   )
 }

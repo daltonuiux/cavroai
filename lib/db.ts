@@ -1,6 +1,22 @@
 // ---------------------------------------------------------------------------
 // Supabase migrations required — run once in the SQL editor:
 //
+// Relationship signals table (warm path engine):
+//   CREATE TABLE IF NOT EXISTS relationship_signals (
+//     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+//     client_id uuid NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+//     user_id uuid NOT NULL,
+//     entity_name text NOT NULL,
+//     entity_type text NOT NULL,
+//     source_url text,
+//     source_context text,
+//     confidence text NOT NULL DEFAULT 'medium',
+//     created_at timestamptz NOT NULL DEFAULT now(),
+//     UNIQUE (client_id, entity_name, entity_type)
+//   );
+//   CREATE INDEX IF NOT EXISTS idx_relationship_signals_user ON relationship_signals(user_id);
+//   CREATE INDEX IF NOT EXISTS idx_relationship_signals_client ON relationship_signals(client_id);
+//
 // Prospects table (deal sourcing):
 //   CREATE TABLE IF NOT EXISTS prospects (
 //     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -44,7 +60,7 @@
 // ---------------------------------------------------------------------------
 
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
-import type { AgencyProfile, Client, Analysis, Prospect } from "./types"
+import type { AgencyProfile, Client, Analysis, Prospect, RelationshipSignal } from "./types"
 
 // ---------------------------------------------------------------------------
 // Supabase client (service role — no auth layer yet, bypasses RLS)
@@ -445,4 +461,91 @@ export async function markProspectAdded(
     .eq("user_id", userId)
 
   if (error) throw new Error(`markProspectAdded: ${error.message}`)
+}
+
+// ---------------------------------------------------------------------------
+// Relationship Signals CRUD
+// ---------------------------------------------------------------------------
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToRelationshipSignal(row: any): RelationshipSignal {
+  return {
+    id: row.id,
+    clientId: row.client_id,
+    userId: row.user_id,
+    entityName: row.entity_name,
+    entityType: row.entity_type,
+    sourceUrl: row.source_url ?? undefined,
+    sourceContext: row.source_context ?? undefined,
+    confidence: (row.confidence ?? "medium") as RelationshipSignal["confidence"],
+    createdAt: row.created_at,
+  }
+}
+
+/**
+ * Upserts relationship signals for a client.
+ * Deduplicates on (client_id, entity_name, entity_type) — existing rows are left unchanged.
+ */
+export async function saveRelationshipSignals(
+  clientId: string,
+  userId: string,
+  signals: Array<{
+    entityName: string
+    entityType: string
+    sourceUrl?: string
+    sourceContext?: string
+    confidence?: string
+  }>,
+): Promise<void> {
+  if (signals.length === 0) return
+
+  const rows = signals.map((s) => ({
+    client_id: clientId,
+    user_id: userId,
+    entity_name: s.entityName,
+    entity_type: s.entityType,
+    source_url: s.sourceUrl ?? null,
+    source_context: s.sourceContext ?? null,
+    confidence: s.confidence ?? "medium",
+  }))
+
+  const { error } = await db()
+    .from("relationship_signals")
+    .upsert(rows, { onConflict: "client_id,entity_name,entity_type", ignoreDuplicates: true })
+
+  if (error) throw new Error(`saveRelationshipSignals: ${error.message}`)
+}
+
+/**
+ * Returns all relationship signals for a given client (for the debug panel).
+ */
+export async function getRelationshipSignalsByClientId(
+  clientId: string,
+  userId: string,
+): Promise<RelationshipSignal[]> {
+  const { data, error } = await db()
+    .from("relationship_signals")
+    .select("*")
+    .eq("client_id", clientId)
+    .eq("user_id", userId)
+    .order("entity_type", { ascending: true })
+
+  if (error) throw new Error(`getRelationshipSignalsByClientId: ${error.message}`)
+  return (data ?? []).map(rowToRelationshipSignal)
+}
+
+/**
+ * Returns all relationship signals for a user, used to compute warm paths
+ * across the entire client portfolio.
+ */
+export async function getAllRelationshipSignalsForUser(
+  userId: string,
+): Promise<RelationshipSignal[]> {
+  const { data, error } = await db()
+    .from("relationship_signals")
+    .select("*")
+    .eq("user_id", userId)
+
+  if (error) throw new Error(`getAllRelationshipSignalsForUser: ${error.message}`)
+  return (data ?? []).map(rowToRelationshipSignal)
 }

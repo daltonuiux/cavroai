@@ -5,11 +5,15 @@ import {
   createAnalysis,
   updateAnalysis,
   getAgencyProfile,
+  saveRelationshipSignals,
+  MVP_USER_ID,
 } from "@/lib/db"
 import { gatherSignals } from "@/lib/signals"
 import { analyzeWebsite } from "@/lib/ai"
 import { detectChanges, summarizeChanges } from "@/lib/diff"
 import { scoreOpportunity } from "@/lib/scoring"
+import { fetchRelationshipPages, extractRelationshipSignals } from "@/lib/relationship-signals"
+import { createClient } from "@/lib/supabase/server"
 
 export async function POST(req: Request) {
   console.log("API /api/analyze-client HIT")
@@ -27,6 +31,11 @@ export async function POST(req: Request) {
   if (!clientId || typeof clientId !== "string") {
     return NextResponse.json({ status: "error", message: "clientId is required" }, { status: 400 })
   }
+
+  // Resolve user ID — used for RLS-gated tables (relationship_signals, prospects)
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  const userId = user?.id ?? MVP_USER_ID
 
   const [client, prevAnalysis] = await Promise.all([
     getClientById(clientId),
@@ -74,6 +83,8 @@ export async function POST(req: Request) {
   }
 
   try {
+    const base = new URL(client.websiteUrl).origin
+
     const [agencyProfile, signals] = await Promise.all([
       getAgencyProfile().catch(() => null),
       gatherSignals(client.websiteUrl, client.name),
@@ -95,25 +106,42 @@ export async function POST(req: Request) {
     const changes = prevSignals ? detectChanges(prevSignals, signals) : []
     const changeSummary = summarizeChanges(changes)
 
-    const result = await analyzeWebsite(
-      client.websiteUrl,
-      signals,
-      changes,
-      client,
-      agencyProfile ?? undefined
+    // Run AI analysis and relationship page fetches in parallel — page fetches
+    // are fast (~2s) and hide behind the slower AI call (~15s).
+    const [result, relPages] = await Promise.all([
+      analyzeWebsite(
+        client.websiteUrl,
+        signals,
+        changes,
+        client,
+        agencyProfile ?? undefined,
+      ),
+      fetchRelationshipPages(base),
+    ])
+
+    // Extract named entities from the fetched pages (haiku, ~3s)
+    const entities = await extractRelationshipSignals(
+      base,
+      relPages,
+      signals.website.homepage,
     )
 
-    await updateAnalysis(analysisId, {
-      ...result,
-      // Deterministic score overrides whatever the AI returned for fitScore
-      fitScore: score.total,
-      status: "complete",
-      signals,
-      lastSignals: prevSignals,
-      changes,
-      changeSummary,
-      lastAnalyzedAt: new Date().toISOString(),
-    })
+    // Persist analysis result and relationship signals in parallel
+    await Promise.all([
+      updateAnalysis(analysisId, {
+        ...result,
+        fitScore: score.total,
+        status: "complete",
+        signals,
+        lastSignals: prevSignals,
+        changes,
+        changeSummary,
+        lastAnalyzedAt: new Date().toISOString(),
+      }),
+      saveRelationshipSignals(client.id, userId, entities).catch((err) =>
+        console.error("Signal save error (non-fatal):", err)
+      ),
+    ])
 
     return NextResponse.json({ status: "complete" })
   } catch (err) {

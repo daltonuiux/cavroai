@@ -122,6 +122,40 @@ export interface CompanyProfile {
   keywords: string[]       // 3–6 descriptive tags
 }
 
+// ---------------------------------------------------------------------------
+// Warm Path Engine — relationship signal extraction and intro mapping
+// ---------------------------------------------------------------------------
+
+export type EntityType =
+  | "partner"
+  | "integration"
+  | "customer"
+  | "investor"
+  | "tool"
+  | "person"
+
+export interface RelationshipSignal {
+  id: string
+  clientId: string
+  userId: string
+  entityName: string
+  entityType: EntityType
+  sourceUrl?: string
+  sourceContext?: string
+  confidence: "high" | "medium" | "low"
+  createdAt: string
+}
+
+export interface WarmPath {
+  entityName: string
+  /** Strongest entity type found across all matching clients */
+  entityType: EntityType
+  strength: "strong" | "medium" | "weak"
+  clients: Array<{ id: string; name: string }>
+  reason: string
+  whyItMatters: string
+}
+
 /** A suggested company to pursue, generated from a source client's profile. */
 export interface Prospect {
   id: string
