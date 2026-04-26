@@ -2,12 +2,13 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Zap, Users, Building2, Settings2 } from "lucide-react"
+import { LayoutDashboard, Zap, Users, Building2, Settings2, GitBranch } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const nav = [
   { label: "Overview", href: "/overview", icon: LayoutDashboard },
   { label: "Opportunities", href: "/opportunities", icon: Zap },
+  { label: "Warm Paths", href: "/warm-paths", icon: GitBranch },
   { label: "Clients", href: "/clients", icon: Users },
 ]
 

@@ -417,6 +417,43 @@ export async function getProspectsByClientId(
 }
 
 /**
+ * Inserts a single prospect without touching existing rows.
+ * Use this for warm-path "Create prospect" actions.
+ */
+export async function createProspect(
+  input: { sourceClientId: string; userId: string; name: string; reason: string; estimatedFit: string },
+): Promise<Prospect> {
+  const { data, error } = await db()
+    .from("prospects")
+    .insert({
+      source_client_id: input.sourceClientId,
+      user_id: input.userId,
+      name: input.name,
+      reason: input.reason,
+      estimated_fit: input.estimatedFit,
+    })
+    .select()
+    .single()
+
+  if (error) throw new Error(`createProspect: ${error.message}`)
+  return rowToProspect(data)
+}
+
+/**
+ * Returns all prospects for a user (across all clients), for duplicate checking.
+ */
+export async function getAllProspectsForUser(userId: string): Promise<Prospect[]> {
+  const { data, error } = await db()
+    .from("prospects")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+
+  if (error) throw new Error(`getAllProspectsForUser: ${error.message}`)
+  return (data ?? []).map(rowToProspect)
+}
+
+/**
  * Replaces all prospects for a source client with a fresh batch.
  * Deletes existing rows first so the list stays clean after regeneration.
  * Includes userId on every row to satisfy the NOT NULL / RLS constraint.
