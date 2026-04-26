@@ -177,6 +177,38 @@ export async function createClient(
   return rowToClient(data)
 }
 
+/**
+ * Deletes a client and all related data.
+ * Deletion order:
+ *   1. prospects (no FK cascade — must delete manually)
+ *   2. analyses  (no FK cascade — must delete manually)
+ *   3. client    (relationship_signals cascade automatically via ON DELETE CASCADE)
+ */
+export async function deleteClient(id: string): Promise<void> {
+  const client = db()
+
+  // 1. prospects
+  const { error: prospectsErr } = await client
+    .from("prospects")
+    .delete()
+    .eq("source_client_id", id)
+  if (prospectsErr) throw new Error(`deleteClient/prospects: ${prospectsErr.message}`)
+
+  // 2. analyses
+  const { error: analysesErr } = await client
+    .from("analyses")
+    .delete()
+    .eq("client_id", id)
+  if (analysesErr) throw new Error(`deleteClient/analyses: ${analysesErr.message}`)
+
+  // 3. client (relationship_signals cascade from here)
+  const { error: clientErr } = await client
+    .from("clients")
+    .delete()
+    .eq("id", id)
+  if (clientErr) throw new Error(`deleteClient: ${clientErr.message}`)
+}
+
 export async function updateClient(
   id: string,
   patch: Partial<Client>

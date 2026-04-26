@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Loader2, RefreshCw, ExternalLink } from "lucide-react"
+import { Loader2, RefreshCw, ExternalLink, Trash2, X } from "lucide-react"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -47,13 +47,7 @@ const RELATIONSHIP_LABEL: Record<string, string> = {
 // Status badge
 // ---------------------------------------------------------------------------
 
-function StatusBadge({
-  status,
-  scanning,
-}: {
-  status?: string
-  scanning: boolean
-}) {
+function StatusBadge({ status, scanning }: { status?: string; scanning: boolean }) {
   if (scanning) {
     return (
       <span className="inline-flex items-center gap-1 rounded px-1.5 py-px text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400">
@@ -62,43 +56,123 @@ function StatusBadge({
       </span>
     )
   }
-
   switch (status) {
     case "complete":
-      return (
-        <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-          Complete
-        </span>
-      )
+      return <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">Complete</span>
     case "profile_only":
-      return (
-        <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400">
-          Profile only
-        </span>
-      )
+      return <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400">Profile only</span>
     case "insufficient_data":
-      return (
-        <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-foreground/[0.04] text-foreground/35">
-          Low data
-        </span>
-      )
+      return <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-foreground/[0.04] text-foreground/35">Low data</span>
     case "error":
-      return (
-        <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-destructive/10 text-destructive">
-          Error
-        </span>
-      )
+      return <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-destructive/10 text-destructive">Error</span>
     case "pending":
-      return (
-        <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400">
-          Pending
-        </span>
-      )
+      return <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400">Pending</span>
     default:
-      return (
-        <span className="text-[12px] text-muted-foreground/35">—</span>
-      )
+      return <span className="text-[12px] text-muted-foreground/35">—</span>
   }
+}
+
+// ---------------------------------------------------------------------------
+// Delete confirmation modal
+// ---------------------------------------------------------------------------
+
+function DeleteModal({
+  client,
+  onClose,
+  onDeleted,
+}: {
+  client: ClientTableRow
+  onClose: () => void
+  onDeleted: (id: string) => void
+}) {
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState("")
+
+  async function handleDelete() {
+    setDeleting(true)
+    setError("")
+
+    try {
+      const res = await fetch("/api/delete-client", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId: client.id }),
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        throw new Error(data.error ?? `Server error ${res.status}`)
+      }
+
+      onDeleted(client.id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed — please try again.")
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+        onClick={() => { if (!deleting) onClose() }}
+      />
+
+      {/* Modal */}
+      <div
+        className="relative z-10 w-full max-w-sm rounded-xl border border-border bg-background"
+        style={{ boxShadow: "0 1px 2px 0 rgba(0,0,0,0.06), 0 -1px 1px 0 rgba(24,24,27,0.12) inset" }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-border px-4 py-3.5">
+          <p className="text-[14px] font-semibold text-foreground">Delete client?</p>
+          <button
+            onClick={onClose}
+            disabled={deleting}
+            className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-4 py-4">
+          <p className="text-[13px] leading-relaxed text-muted-foreground">
+            This will remove{" "}
+            <span className="font-semibold text-foreground">{client.name}</span>
+            {" "}and any related analysis and prospect data. This action cannot be undone.
+          </p>
+
+          {error && (
+            <p className="mt-3 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-[12px] text-destructive">
+              {error}
+            </p>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
+          <button
+            onClick={onClose}
+            disabled={deleting}
+            className="btn-cavro-secondary border rounded-md px-3 py-1.5 text-[12px] font-medium text-zinc-900 dark:text-zinc-100 transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className="flex items-center gap-1.5 rounded-md bg-destructive px-3 py-1.5 text-[12px] font-semibold text-white transition-opacity hover:opacity-85 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {deleting && <Loader2 className="size-3 animate-spin" />}
+            {deleting ? "Deleting…" : "Delete client"}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -120,7 +194,6 @@ function ScanAllButton({ rows }: { rows: ClientTableRow[] }) {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]
       setProgress({ current: i + 1, total: rows.length })
-
       try {
         await fetch("/api/analyze-client", {
           method: "POST",
@@ -129,7 +202,6 @@ function ScanAllButton({ rows }: { rows: ClientTableRow[] }) {
         })
       } catch (err) {
         console.error(`Scan failed for ${row.name}:`, err)
-        // continue to next client — don't abort the whole run
       }
     }
 
@@ -163,8 +235,10 @@ function ScanAllButton({ rows }: { rows: ClientTableRow[] }) {
 // Table
 // ---------------------------------------------------------------------------
 
-export function ClientsTable({ rows }: { rows: ClientTableRow[] }) {
+export function ClientsTable({ rows: initialRows }: { rows: ClientTableRow[] }) {
+  const [rows, setRows] = useState(initialRows)
   const [scanningId, setScanningId] = useState<string | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<ClientTableRow | null>(null)
   const router = useRouter()
 
   async function handleRowScan(clientId: string, e: React.MouseEvent) {
@@ -182,6 +256,11 @@ export function ClientsTable({ rows }: { rows: ClientTableRow[] }) {
     }
   }
 
+  function handleDeleted(deletedId: string) {
+    setRows((prev) => prev.filter((r) => r.id !== deletedId))
+    setPendingDelete(null)
+  }
+
   if (rows.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-border py-20 text-center">
@@ -194,127 +273,150 @@ export function ClientsTable({ rows }: { rows: ClientTableRow[] }) {
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Header row — scan all lives here */}
-      <div className="flex items-center justify-end">
-        <ScanAllButton rows={rows} />
-      </div>
+    <>
+      <div className="flex flex-col gap-3">
+        {/* Scan all */}
+        <div className="flex items-center justify-end">
+          <ScanAllButton rows={rows} />
+        </div>
 
-      {/* Table */}
-      <div className="overflow-hidden rounded-md border border-border">
-        <table className="w-full min-w-[640px] border-collapse text-left">
-          <thead>
-            <tr className="border-b border-border bg-foreground/[0.02]">
-              <Th>Client</Th>
-              <Th>Website</Th>
-              <Th>Relationship</Th>
-              <Th>Services</Th>
-              <Th>Last scanned</Th>
-              <Th>Status</Th>
-              <Th sr>Actions</Th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {rows.map((row) => {
-              const isScanning = scanningId === row.id
-              const dateLabel = row.lastAnalyzedAt
-                ? formatDate(row.lastAnalyzedAt)
-                : formatDate(row.createdAt)
-              const dateSuffix = row.lastAnalyzedAt ? "" : " *"
+        {/* Table */}
+        <div className="overflow-hidden rounded-md border border-border">
+          <table className="w-full min-w-[640px] border-collapse text-left">
+            <thead>
+              <tr className="border-b border-border bg-foreground/[0.02]">
+                <Th>Client</Th>
+                <Th>Website</Th>
+                <Th>Relationship</Th>
+                <Th>Services</Th>
+                <Th>Last scanned</Th>
+                <Th>Status</Th>
+                <Th sr>Actions</Th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {rows.map((row) => {
+                const isScanning = scanningId === row.id
+                const dateLabel = row.lastAnalyzedAt
+                  ? formatDate(row.lastAnalyzedAt)
+                  : formatDate(row.createdAt)
+                const dateSuffix = row.lastAnalyzedAt ? "" : " *"
 
-              return (
-                <tr
-                  key={row.id}
-                  className={`group transition-colors hover:bg-muted/30 ${isScanning ? "opacity-60" : ""}`}
-                >
-                  {/* Client name */}
-                  <Td>
-                    <Link
-                      href={`/clients/${row.id}`}
-                      className="font-semibold text-foreground hover:underline underline-offset-2"
-                    >
-                      {row.name}
-                    </Link>
-                  </Td>
-
-                  {/* Website */}
-                  <Td>
-                    <a
-                      href={row.websiteUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors group/url"
-                    >
-                      <span className="truncate max-w-[160px]">{cleanUrl(row.websiteUrl)}</span>
-                      <ExternalLink className="size-3 shrink-0 opacity-0 group-hover/url:opacity-60 transition-opacity" />
-                    </a>
-                  </Td>
-
-                  {/* Relationship */}
-                  <Td>
-                    {row.relationshipType
-                      ? RELATIONSHIP_LABEL[row.relationshipType] ?? row.relationshipType
-                      : <span className="text-muted-foreground/35">—</span>
-                    }
-                  </Td>
-
-                  {/* Services */}
-                  <Td>
-                    {row.services && row.services.length > 0
-                      ? <span className="truncate max-w-[140px] block">{row.services.join(", ")}</span>
-                      : <span className="text-muted-foreground/35">—</span>
-                    }
-                  </Td>
-
-                  {/* Last scanned */}
-                  <Td>
-                    <span className="text-muted-foreground">
-                      {dateLabel}
-                      {dateSuffix && (
-                        <span className="text-muted-foreground/35" title="Created date (not yet scanned)">
-                          {dateSuffix}
-                        </span>
-                      )}
-                    </span>
-                  </Td>
-
-                  {/* Status */}
-                  <Td>
-                    <StatusBadge status={row.analysisStatus} scanning={isScanning} />
-                  </Td>
-
-                  {/* Actions */}
-                  <Td>
-                    <div className="flex items-center gap-2 justify-end">
-                      <button
-                        onClick={(e) => handleRowScan(row.id, e)}
-                        disabled={isScanning}
-                        title="Re-scan"
-                        className="opacity-0 group-hover:opacity-100 rounded p-1 text-muted-foreground/50 hover:text-foreground transition-all disabled:opacity-30"
-                      >
-                        <RefreshCw className="size-3.5" strokeWidth={2} />
-                      </button>
+                return (
+                  <tr
+                    key={row.id}
+                    className={`group transition-colors hover:bg-muted/30 ${isScanning ? "opacity-60" : ""}`}
+                  >
+                    {/* Client name */}
+                    <Td>
                       <Link
                         href={`/clients/${row.id}`}
-                        className="opacity-0 group-hover:opacity-100 text-[11px] font-medium text-muted-foreground/60 hover:text-foreground transition-all"
+                        className="font-semibold text-foreground hover:underline underline-offset-2"
                       >
-                        View →
+                        {row.name}
                       </Link>
-                    </div>
-                  </Td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+                    </Td>
+
+                    {/* Website */}
+                    <Td>
+                      <a
+                        href={row.websiteUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors group/url"
+                      >
+                        <span className="truncate max-w-[160px]">{cleanUrl(row.websiteUrl)}</span>
+                        <ExternalLink className="size-3 shrink-0 opacity-0 group-hover/url:opacity-60 transition-opacity" />
+                      </a>
+                    </Td>
+
+                    {/* Relationship */}
+                    <Td>
+                      {row.relationshipType
+                        ? RELATIONSHIP_LABEL[row.relationshipType] ?? row.relationshipType
+                        : <span className="text-muted-foreground/35">—</span>
+                      }
+                    </Td>
+
+                    {/* Services */}
+                    <Td>
+                      {row.services && row.services.length > 0
+                        ? <span className="truncate max-w-[140px] block">{row.services.join(", ")}</span>
+                        : <span className="text-muted-foreground/35">—</span>
+                      }
+                    </Td>
+
+                    {/* Last scanned */}
+                    <Td>
+                      <span className="text-muted-foreground">
+                        {dateLabel}
+                        {dateSuffix && (
+                          <span className="text-muted-foreground/35" title="Created date (not yet scanned)">
+                            {dateSuffix}
+                          </span>
+                        )}
+                      </span>
+                    </Td>
+
+                    {/* Status */}
+                    <Td>
+                      <StatusBadge status={row.analysisStatus} scanning={isScanning} />
+                    </Td>
+
+                    {/* Actions */}
+                    <Td>
+                      <div className="flex items-center justify-end gap-1">
+                        {/* Re-scan */}
+                        <button
+                          onClick={(e) => handleRowScan(row.id, e)}
+                          disabled={isScanning}
+                          title="Re-scan"
+                          className="opacity-0 group-hover:opacity-100 rounded p-1 text-muted-foreground/50 hover:text-foreground transition-all disabled:opacity-30"
+                        >
+                          <RefreshCw className="size-3.5" strokeWidth={2} />
+                        </button>
+
+                        {/* View */}
+                        <Link
+                          href={`/clients/${row.id}`}
+                          className="opacity-0 group-hover:opacity-100 rounded p-1 text-[11px] font-medium text-muted-foreground/60 hover:text-foreground transition-all"
+                        >
+                          View →
+                        </Link>
+
+                        {/* Delete */}
+                        <button
+                          onClick={() => setPendingDelete(row)}
+                          title="Delete client"
+                          className="opacity-0 group-hover:opacity-100 rounded p-1 text-muted-foreground/40 hover:text-destructive transition-all"
+                        >
+                          <Trash2 className="size-3.5" strokeWidth={1.75} />
+                        </button>
+                      </div>
+                    </Td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Legend */}
+        <p className="text-[11px] text-muted-foreground/35 px-0.5">
+          * Date shown is added date — client has not been scanned yet.
+        </p>
       </div>
 
-      {/* Legend */}
-      <p className="text-[11px] text-muted-foreground/35 px-0.5">
-        * Date shown is added date — client has not been scanned yet.
-      </p>
-    </div>
+      {/* Delete confirmation modal */}
+      {pendingDelete && (
+        <DeleteModal
+          client={pendingDelete}
+          onClose={() => setPendingDelete(null)}
+          onDeleted={handleDeleted}
+        />
+      )}
+    </>
   )
 }
 
