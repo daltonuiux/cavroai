@@ -1182,3 +1182,84 @@ export async function reanalyzeClient(clientId: string) {
 
   redirect(`/clients/${client.id}`)
 }
+
+// ---------------------------------------------------------------------------
+// Synchronous analysis — no after(), called directly from client components.
+// Returns the final status so the caller can react immediately.
+// ---------------------------------------------------------------------------
+
+export async function runClientAnalysis(
+  clientId: string
+): Promise<{ status: "complete" | "insufficient_data" | "error"; errorMessage?: string }> {
+  const [client, prevAnalysis] = await Promise.all([
+    getClientById(clientId),
+    getAnalysisByClientId(clientId),
+  ])
+
+  if (!client) throw new Error("Client not found")
+
+  // Ensure an analysis record exists to write into
+  let analysisId: string
+  const prevSignals = prevAnalysis?.signals ?? undefined
+
+  if (prevAnalysis) {
+    analysisId = prevAnalysis.id
+    await updateAnalysis(analysisId, {
+      status: "pending",
+      summary: "",
+      strategicDirection: [],
+      opportunities: [],
+      suggestedPitch: "",
+    })
+  } else {
+    const created = await createAnalysis({
+      clientId: client.id,
+      status: "pending",
+      summary: "",
+      strategicDirection: [],
+      opportunities: [],
+      suggestedPitch: "",
+    })
+    analysisId = created.id
+  }
+
+  try {
+    const [agencyProfile, signals] = await Promise.all([
+      getAgencyProfile().catch(() => null),
+      gatherSignals(client.websiteUrl),
+    ])
+
+    if (!hasStrongSignals(signals)) {
+      console.log("SKIPPING ANALYSIS - INSUFFICIENT DATA", client.websiteUrl)
+      await updateAnalysis(analysisId, { status: "insufficient_data" })
+      return { status: "insufficient_data" }
+    }
+
+    const changes = prevSignals ? detectChanges(prevSignals, signals) : []
+    const changeSummary = summarizeChanges(changes)
+    const result = await analyzeWebsite(
+      client.websiteUrl,
+      signals,
+      changes,
+      client,
+      agencyProfile ?? undefined
+    )
+
+    await updateAnalysis(analysisId, {
+      ...result,
+      status: "complete",
+      signals,
+      lastSignals: prevSignals,
+      changes,
+      changeSummary,
+      lastAnalyzedAt: new Date().toISOString(),
+    })
+
+    return { status: "complete" }
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : "Analysis failed"
+    console.error("CLIENT ANALYSIS ERROR:", err)
+    await updateAnalysis(analysisId, { status: "error", errorMessage })
+    return { status: "error", errorMessage }
+  }
+}

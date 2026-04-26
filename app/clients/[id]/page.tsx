@@ -2,12 +2,11 @@ export const dynamic = "force-dynamic"
 
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, AlertCircle, ChevronDown, RefreshCw } from "lucide-react"
+import { ArrowLeft, AlertCircle, ChevronDown } from "lucide-react"
 import { getClientById, getAnalysisByClientId } from "@/lib/db"
 import type { Analysis, SignalChange, Signals } from "@/lib/types"
-import { AnalysisPending } from "@/components/analysis-pending"
+import { RunAnalysisButton } from "@/components/run-analysis-button"
 import { OpportunitySplitView } from "@/components/opportunity-split-view"
-import { reanalyzeClient } from "@/app/actions"
 
 export default async function ClientPage({
   params,
@@ -47,20 +46,14 @@ export default async function ClientPage({
           </a>
         </div>
         {analysis && analysis.status !== "pending" && (
-          <form action={reanalyzeClient.bind(null, client.id)}>
-            <button
-              type="submit"
-              className="btn-cavro-secondary border flex items-center gap-1.5 rounded-md px-3 text-[12px] font-medium text-zinc-900 dark:text-zinc-100 transition-colors"
-            >
-              <RefreshCw className="size-3" strokeWidth={2} />
-              Re-analyze
-            </button>
-          </form>
+          <RunAnalysisButton clientId={client.id} isReanalyze />
         )}
       </div>
 
       {!analysis || analysis.status === "pending" ? (
-        <AnalysisPending createdAt={analysis?.createdAt ?? new Date().toISOString()} />
+        // No analysis yet (or a stuck pending from a previous after() attempt).
+        // Show empty state — spinner is only shown when the user actively requests analysis.
+        <RunAnalysisButton clientId={client.id} />
       ) : analysis.status === "error" ? (
         <AnalysisError message={analysis.errorMessage} />
       ) : analysis.status === "insufficient_data" ? (
