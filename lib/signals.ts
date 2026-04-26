@@ -252,7 +252,38 @@ const REJECT_PATTERNS = [
   /\b(actor|actress|singer|rapper|celebrity|album|tour|concert|movie|film|tv show|reality)\b/,
   // Food / lifestyle
   /\b(recipe|restaurant|chef|fashion|makeup|beauty|skincare)\b/,
+  // Advice columns — common name-in-title false positives ("Dear Annie", "Ask Annie:")
+  /^dear\b/i,
+  /\bask\s+\w+\s*:/i,
 ]
+
+/**
+ * Checks whether the company name appears as a complete word (not a substring of
+ * another word) inside the article title.
+ *
+ * "Annie" → matches "Annie raises $5M" ✓
+ * "Ann"   → does NOT match "announcement" ✓
+ * "Annie" → still matches "Dear Annie" (word present), but REJECT_PATTERNS catches that ✓
+ *
+ * Multi-word names (e.g. "Open AI") are matched as a consecutive word sequence.
+ */
+function containsCompanyName(titleLower: string, companyNameLower: string): boolean {
+  if (!companyNameLower) return false
+  const companyWords = companyNameLower.split(/\s+/).filter(Boolean)
+  if (companyWords.length === 0) return false
+
+  if (companyWords.length === 1) {
+    // Tokenise title on whitespace + punctuation; require an exact token match.
+    const tokens = titleLower.split(/[\s,.!?;:()\[\]{}"'—–\-\/\\|@#~`]+/).filter(Boolean)
+    return tokens.some((t) => t === companyWords[0])
+  }
+
+  // Multi-word: require the full phrase with word boundaries around it.
+  const escaped = companyWords
+    .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("[\\s]+")
+  return new RegExp(`(?:^|[^a-z0-9])${escaped}(?:[^a-z0-9]|$)`).test(titleLower)
+}
 
 /**
  * Parses RSS XML from Google News and returns up to maxItems recent articles.
@@ -286,28 +317,20 @@ function parseRssItems(
 }
 
 /**
- * Returns true if an article title is clearly about the target company as a business:
- *   1. Company name present in title (case-insensitive)
- *   2. At least one business keyword present
- *   3. No reject patterns matched
- */
-function isBusinessRelevant(title: string, companyNameLower: string): boolean {
-  const lower = title.toLowerCase()
-
-  if (!lower.includes(companyNameLower)) return false
-  if (!BUSINESS_KEYWORDS.some((kw) => lower.includes(kw))) return false
-  if (REJECT_PATTERNS.some((re) => re.test(lower))) return false
-
-  return true
-}
-
-/**
  * Fetches recent Google News articles for a company name, filters to only
  * business-relevant articles about that company, and returns up to 3.
+ *
+ * Rejection accounting:
+ *   entityRejected  — company name not found as a whole word, OR a reject pattern fired
+ *   keywordRejected — entity matched but no business keyword present
+ *
  * Never throws — returns an empty NewsSignals on any failure.
  */
 async function fetchNewsSignals(companyName: string): Promise<NewsSignals> {
-  const empty: NewsSignals = { hasNews: false, articles: [], keywords: [], rawCount: 0 }
+  const empty: NewsSignals = {
+    hasNews: false, articles: [], keywords: [], rawCount: 0,
+    entityRejected: 0, keywordRejected: 0,
+  }
   if (!companyName.trim()) return empty
 
   try {
@@ -319,24 +342,50 @@ async function fetchNewsSignals(companyName: string): Promise<NewsSignals> {
     const raw = parseRssItems(xml)
     const rawCount = raw.length
 
-    const companyNameLower = companyName.toLowerCase()
-    const filtered = raw
-      .filter((a) => isBusinessRelevant(a.title, companyNameLower))
-      .slice(0, 3)
+    const companyNameLower = companyName.toLowerCase().trim()
+
+    let entityRejected = 0
+    let keywordRejected = 0
+
+    const qualified = raw.filter((a) => {
+      const lower = a.title.toLowerCase()
+
+      // Gate 1: company name must appear as a complete word
+      if (!containsCompanyName(lower, companyNameLower)) {
+        entityRejected++
+        return false
+      }
+      // Gate 2: at least one business keyword must appear
+      if (!BUSINESS_KEYWORDS.some((kw) => lower.includes(kw))) {
+        keywordRejected++
+        return false
+      }
+      // Gate 3: reject-pattern context check (sports, advice columns, etc.)
+      if (REJECT_PATTERNS.some((re) => re.test(lower))) {
+        entityRejected++ // context mismatch — treat as entity-level rejection
+        return false
+      }
+      return true
+    })
+
+    const filtered = qualified.slice(0, 3)
 
     console.log(
-      `NEWS SIGNALS [${companyName}]: raw=${rawCount} filtered=${filtered.length}` +
+      `NEWS SIGNALS [${companyName}]: raw=${rawCount} entity_rej=${entityRejected} ` +
+      `kw_rej=${keywordRejected} kept=${filtered.length}` +
       (filtered.length > 0 ? ` — "${filtered[0].title}"` : "")
     )
 
-    if (filtered.length === 0) return { ...empty, rawCount }
+    if (filtered.length === 0) {
+      return { ...empty, rawCount, entityRejected, keywordRejected }
+    }
 
     const allTitles = filtered.map((a) => a.title.toLowerCase()).join(" ")
     const keywords = BUSINESS_KEYWORDS.filter((kw) => allTitles.includes(kw))
       // Deduplicate root forms (e.g. "launch" covers "launches"/"launched")
       .filter((kw, i, arr) => !arr.slice(0, i).some((prev) => kw.startsWith(prev)))
 
-    return { hasNews: true, articles: filtered, keywords, rawCount }
+    return { hasNews: true, articles: filtered, keywords, rawCount, entityRejected, keywordRejected }
   } catch (err) {
     console.error("fetchNewsSignals error:", err)
     return empty

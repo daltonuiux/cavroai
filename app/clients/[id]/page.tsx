@@ -399,9 +399,20 @@ function SignalsDebug({ signals }: { signals: Signals }) {
                 Recent News
               </p>
               {ns && (
-                <p className="mb-1 text-[10px] text-muted-foreground/40">
-                  Raw: {ns.rawCount} fetched → {ns.articles.length} after filtering
-                </p>
+                <div className="mb-1 flex flex-col gap-px">
+                  <p className="text-[10px] text-muted-foreground/40">
+                    Raw: {ns.rawCount} fetched
+                  </p>
+                  <p className="text-[10px] text-muted-foreground/40">
+                    Rejected (entity mismatch): {ns.entityRejected}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground/40">
+                    Rejected (keyword mismatch): {ns.keywordRejected}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground/40">
+                    Final kept: {ns.articles.length}
+                  </p>
+                </div>
               )}
               {ns?.hasNews && ns.articles.length > 0 ? (
                 <>

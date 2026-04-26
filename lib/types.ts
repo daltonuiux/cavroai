@@ -162,6 +162,10 @@ export interface NewsSignals {
   keywords: string[]
   /** Total raw articles from RSS before business-relevance filtering. */
   rawCount: number
+  /** Articles dropped because company name was not a whole word in the title, or a reject pattern fired. */
+  entityRejected: number
+  /** Articles dropped because no business keyword was present (after entity check passed). */
+  keywordRejected: number
 }
 
 export interface Signals {
