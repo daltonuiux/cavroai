@@ -6,9 +6,10 @@ import {
   updateAnalysis,
   getAgencyProfile,
 } from "@/lib/db"
-import { gatherSignals, hasStrongSignals } from "@/lib/signals"
+import { gatherSignals } from "@/lib/signals"
 import { analyzeWebsite } from "@/lib/ai"
 import { detectChanges, summarizeChanges } from "@/lib/diff"
+import { scoreOpportunity } from "@/lib/scoring"
 
 export async function POST(req: Request) {
   console.log("API /api/analyze-client HIT")
@@ -78,9 +79,16 @@ export async function POST(req: Request) {
       gatherSignals(client.websiteUrl, client.name),
     ])
 
-    if (!hasStrongSignals(signals)) {
-      console.log("SKIPPING ANALYSIS - INSUFFICIENT DATA", client.websiteUrl)
-      await updateAnalysis(analysisId, { status: "insufficient_data" })
+    // Deterministic opportunity score — gates the AI call and sets fitScore
+    const score = scoreOpportunity(signals, agencyProfile, client.name)
+    console.log("OPPORTUNITY SCORE:", score.total, score.breakdown)
+
+    if (score.total < 50) {
+      console.log("SCORE TOO LOW - INSUFFICIENT DATA", score.total, client.websiteUrl)
+      await updateAnalysis(analysisId, {
+        status: "insufficient_data",
+        fitScore: score.total,
+      })
       return NextResponse.json({ status: "insufficient_data" })
     }
 
@@ -97,6 +105,8 @@ export async function POST(req: Request) {
 
     await updateAnalysis(analysisId, {
       ...result,
+      // Deterministic score overrides whatever the AI returned for fitScore
+      fitScore: score.total,
       status: "complete",
       signals,
       lastSignals: prevSignals,

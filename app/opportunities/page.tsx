@@ -3,15 +3,15 @@ import { getAgencyProfile, getClients, getLatestAnalysesForClients } from "@/lib
 import { OpportunitiesList } from "@/components/opportunities-list"
 import type { OpportunityRow } from "@/components/opportunities-list"
 import type { Analysis } from "@/lib/types"
+import { confidenceFromScore } from "@/lib/scoring"
 
 function deriveScore(analysis: Analysis): number {
-  // Prefer fitScore from agency-aware analysis
-  if (analysis.fitScore !== undefined && analysis.fitScore > 0) return analysis.fitScore
-  // Fall back to evidence count
+  // Prefer deterministic fitScore (set by scoring pipeline)
+  if (analysis.fitScore !== undefined) return analysis.fitScore
+  // Legacy fallback for analyses run before scoring was added
   const evidenceCount = analysis.evidence?.length ?? 0
   if (evidenceCount >= 3) return 85
   if (evidenceCount === 2) return 60
-  // Fall back to opportunity impact for older analyses
   const top = analysis.opportunities?.[0]
   if (top) return { high: 85, medium: 60, low: 30 }[top.impact]
   return 0
@@ -103,6 +103,8 @@ export default async function OpportunitiesPage() {
           const whatToDo = analysis.whatToDo || top?.whatToDo || ""
           const outreach = analysis.outreach || top?.outreach || analysis.suggestedPitch || ""
 
+          const fitScore = deriveScore(analysis)
+
           return {
             id: client.id,
             company: client.name,
@@ -110,8 +112,9 @@ export default async function OpportunitiesPage() {
             hasAnalysis: true,
             insufficientData: false,
             showOpportunity,
-            score: showOpportunity ? deriveScore(analysis) : 0,
-            confidence: (top?.impact ?? null) as "high" | "medium" | "low" | null,
+            score: fitScore,
+            // Derive confidence from the deterministic score, not AI impact label
+            confidence: confidenceFromScore(fitScore),
             headline: top?.headline || whatsHappening.split(".")[0] || "",
             signals: analysis.strategicDirection ?? [],
             whatsHappening,
@@ -119,11 +122,12 @@ export default async function OpportunitiesPage() {
             outreach,
             suggestedPitch: analysis.suggestedPitch || "",
             warmReason: top?.warmReason,
-            fitScore: analysis.fitScore,
+            fitScore,
             fitReason: analysis.fitReason,
             evidence: analysis.evidence,
           }
         })
+        // Sort by fitScore descending — highest commercial value first
         .sort((a, b) => b.score - a.score)
     }
   } catch (err) {

@@ -211,15 +211,11 @@ function AnalysedCard({ row, onDone }: { row: OpportunityRow; onDone: () => void
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-1">
             <p className="text-[13px] font-semibold text-foreground">{row.company}</p>
-            {row.score > 0 && (
-              <span className="text-[11px] font-bold tabular-nums text-foreground/25">
-                {row.score}
-              </span>
-            )}
-            {row.confidence && <ConfidenceBadge confidence={row.confidence} />}
+            {/* fitScore is the primary score — show it as the main badge */}
             {row.fitScore !== undefined && row.fitScore > 0 && (
               <FitScoreBadge score={row.fitScore} />
             )}
+            {row.confidence && <ConfidenceBadge confidence={row.confidence} />}
           </div>
           <p className="text-[12px] leading-snug text-foreground/60 line-clamp-2">
             {row.headline}

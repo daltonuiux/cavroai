@@ -3,8 +3,9 @@ export const dynamic = "force-dynamic"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, AlertCircle, ChevronDown } from "lucide-react"
-import { getClientById, getAnalysisByClientId } from "@/lib/db"
+import { getClientById, getAnalysisByClientId, getAgencyProfile } from "@/lib/db"
 import type { Analysis, SignalChange, Signals } from "@/lib/types"
+import { scoreOpportunity, type ScoreBreakdown } from "@/lib/scoring"
 import { RunAnalysisButton } from "@/components/run-analysis-button"
 import { OpportunitySplitView } from "@/components/opportunity-split-view"
 
@@ -14,9 +15,10 @@ export default async function ClientPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const [client, analysis] = await Promise.all([
+  const [client, analysis, agencyProfile] = await Promise.all([
     getClientById(id),
     getAnalysisByClientId(id),
+    getAgencyProfile().catch(() => null),
   ])
 
   if (!client) notFound()
@@ -59,7 +61,14 @@ export default async function ClientPage({
       ) : analysis.status === "insufficient_data" ? (
         <AnalysisInsufficient />
       ) : (
-        <AnalysisResults analysis={analysis} />
+        <AnalysisResults
+          analysis={analysis}
+          scoreBreakdown={
+            analysis.signals
+              ? scoreOpportunity(analysis.signals, agencyProfile, client.name).breakdown
+              : null
+          }
+        />
       )}
     </div>
   )
@@ -107,7 +116,13 @@ function firstSentence(text: string): string {
   return match ? match[0].trim() : text
 }
 
-function AnalysisResults({ analysis }: { analysis: Analysis }) {
+function AnalysisResults({
+  analysis,
+  scoreBreakdown,
+}: {
+  analysis: Analysis
+  scoreBreakdown: ScoreBreakdown | null
+}) {
   const opp = topOpportunity(analysis)
   const signal = opp?.headline ?? ""
   const primaryActions = (analysis.recommendedActions ?? []).slice(0, 2)
@@ -220,7 +235,9 @@ function AnalysisResults({ analysis }: { analysis: Analysis }) {
           <CollapsibleSection label="Summary">
             <p className="text-[12px] leading-relaxed text-foreground/75">{analysis.summary}</p>
           </CollapsibleSection>
-          {analysis.signals && <SignalsDebug signals={analysis.signals} />}
+          {analysis.signals && (
+            <SignalsDebug signals={analysis.signals} scoreBreakdown={scoreBreakdown} fitScore={analysis.fitScore} />
+          )}
         </div>
       </details>
     </div>
@@ -308,7 +325,15 @@ function CollapsibleSection({
   )
 }
 
-function SignalsDebug({ signals }: { signals: Signals }) {
+function SignalsDebug({
+  signals,
+  scoreBreakdown,
+  fitScore,
+}: {
+  signals: Signals
+  scoreBreakdown: ScoreBreakdown | null
+  fitScore?: number
+}) {
   const pages = [
     { label: "Homepage", value: signals.website.homepage, found: !!signals.website.homepage },
     { label: "/pricing", value: signals.website.pricing, found: !!signals.website.pricing },
@@ -322,6 +347,41 @@ function SignalsDebug({ signals }: { signals: Signals }) {
         <ChevronDown className="size-3 transition-transform group-open:rotate-180" />
       </summary>
       <div className="border-t border-dashed border-border px-4 pt-3 pb-4 flex flex-col gap-4">
+
+        {/* Score breakdown */}
+        {scoreBreakdown && (
+          <div>
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40">
+              Opportunity Score
+              {fitScore !== undefined && (
+                <span className="ml-2 font-bold text-foreground/60">{fitScore}</span>
+              )}
+            </p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+              {(
+                [
+                  ["News / funding",  scoreBreakdown.funding],
+                  ["Hiring",          scoreBreakdown.hiring],
+                  ["Website",         scoreBreakdown.website],
+                  ["Agency fit",      scoreBreakdown.agencyFit],
+                  ["Penalties",       -scoreBreakdown.penalties],
+                ] as [string, number][]
+              ).map(([label, pts]) => (
+                <div key={label} className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-muted-foreground/50">{label}</span>
+                  <span className={`text-[11px] font-semibold tabular-nums ${pts > 0 ? "text-emerald-600 dark:text-emerald-400" : pts < 0 ? "text-red-500/70" : "text-muted-foreground/30"}`}>
+                    {pts > 0 ? `+${pts}` : pts}
+                  </span>
+                </div>
+              ))}
+              <div className="col-span-2 mt-1 flex items-center justify-between border-t border-dashed border-border pt-1">
+                <span className="text-[11px] font-semibold text-muted-foreground/60">Total</span>
+                <span className="text-[11px] font-bold tabular-nums text-foreground/70">{scoreBreakdown.total}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div>
           <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40">
             Website pages
