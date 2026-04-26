@@ -1,6 +1,17 @@
 // ---------------------------------------------------------------------------
 // Supabase migrations required — run once in the SQL editor:
 //
+// Prospects table (deal sourcing):
+//   CREATE TABLE IF NOT EXISTS prospects (
+//     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+//     source_client_id uuid NOT NULL,
+//     name text NOT NULL,
+//     reason text NOT NULL DEFAULT '',
+//     estimated_fit text NOT NULL DEFAULT 'medium',
+//     added_as_client_id uuid,
+//     created_at timestamptz NOT NULL DEFAULT now()
+//   );
+//
 // Evidence fields on analyses:
 //   ALTER TABLE analyses ADD COLUMN IF NOT EXISTS show_opportunity boolean;
 //   ALTER TABLE analyses ADD COLUMN IF NOT EXISTS evidence jsonb;
@@ -33,7 +44,7 @@
 // ---------------------------------------------------------------------------
 
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
-import type { AgencyProfile, Client, Analysis } from "./types"
+import type { AgencyProfile, Client, Analysis, Prospect } from "./types"
 
 // ---------------------------------------------------------------------------
 // Supabase client (service role — no auth layer yet, bypasses RLS)
@@ -344,4 +355,94 @@ export async function upsertAgencyProfile(
 
   if (error) throw new Error(`upsertAgencyProfile: ${error.message}`)
   return rowToAgencyProfile(data)
+}
+
+// ---------------------------------------------------------------------------
+// Prospects CRUD
+// ---------------------------------------------------------------------------
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToProspect(row: any): Prospect {
+  return {
+    id: row.id,
+    sourceClientId: row.source_client_id,
+    name: row.name,
+    reason: row.reason ?? "",
+    estimatedFit: (row.estimated_fit ?? "medium") as Prospect["estimatedFit"],
+    addedAsClientId: row.added_as_client_id ?? undefined,
+    createdAt: row.created_at,
+  }
+}
+
+/**
+ * Returns all prospects generated for a given source client, newest first.
+ * Filters by userId to satisfy RLS policies on the prospects table.
+ */
+export async function getProspectsByClientId(
+  clientId: string,
+  userId: string,
+): Promise<Prospect[]> {
+  const { data, error } = await db()
+    .from("prospects")
+    .select("*")
+    .eq("source_client_id", clientId)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+
+  if (error) throw new Error(`getProspectsByClientId: ${error.message}`)
+  return (data ?? []).map(rowToProspect)
+}
+
+/**
+ * Replaces all prospects for a source client with a fresh batch.
+ * Deletes existing rows first so the list stays clean after regeneration.
+ * Includes userId on every row to satisfy the NOT NULL / RLS constraint.
+ */
+export async function replaceProspects(
+  sourceClientId: string,
+  userId: string,
+  items: Array<{ name: string; reason: string; estimatedFit: string }>,
+): Promise<Prospect[]> {
+  // Delete old batch scoped to this user
+  await db()
+    .from("prospects")
+    .delete()
+    .eq("source_client_id", sourceClientId)
+    .eq("user_id", userId)
+
+  if (items.length === 0) return []
+
+  const rows = items.map((item) => ({
+    source_client_id: sourceClientId,
+    user_id: userId,
+    name: item.name,
+    reason: item.reason,
+    estimated_fit: item.estimatedFit,
+  }))
+
+  const { data, error } = await db()
+    .from("prospects")
+    .insert(rows)
+    .select()
+
+  if (error) throw new Error(`replaceProspects: ${error.message}`)
+  return (data ?? []).map(rowToProspect)
+}
+
+/**
+ * Records that a prospect has been turned into a tracked client.
+ * Scopes the update to userId so RLS cannot block it.
+ */
+export async function markProspectAdded(
+  prospectId: string,
+  addedAsClientId: string,
+  userId: string,
+): Promise<void> {
+  const { error } = await db()
+    .from("prospects")
+    .update({ added_as_client_id: addedAsClientId })
+    .eq("id", prospectId)
+    .eq("user_id", userId)
+
+  if (error) throw new Error(`markProspectAdded: ${error.message}`)
 }

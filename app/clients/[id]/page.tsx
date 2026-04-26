@@ -3,9 +3,11 @@ export const dynamic = "force-dynamic"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, AlertCircle, ChevronDown } from "lucide-react"
-import { getClientById, getAnalysisByClientId, getAgencyProfile } from "@/lib/db"
+import { getClientById, getAnalysisByClientId, getAgencyProfile, getProspectsByClientId, MVP_USER_ID } from "@/lib/db"
 import type { Analysis, SignalChange, Signals } from "@/lib/types"
 import { scoreOpportunity, type ScoreBreakdown } from "@/lib/scoring"
+import { SimilarCompanies } from "@/components/similar-companies"
+import { createClient } from "@/lib/supabase/server"
 import { RunAnalysisButton } from "@/components/run-analysis-button"
 import { OpportunitySplitView } from "@/components/opportunity-split-view"
 
@@ -15,10 +17,17 @@ export default async function ClientPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const [client, analysis, agencyProfile] = await Promise.all([
+
+  // Resolve user id for RLS-gated prospect queries
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  const userId = user?.id ?? MVP_USER_ID
+
+  const [client, analysis, agencyProfile, prospects] = await Promise.all([
     getClientById(id),
     getAnalysisByClientId(id),
     getAgencyProfile().catch(() => null),
+    getProspectsByClientId(id, userId).catch(() => null),
   ])
 
   if (!client) notFound()
@@ -70,6 +79,15 @@ export default async function ClientPage({
           }
         />
       )}
+
+      {/* Deal sourcing — similar companies to target */}
+      <div className="mt-4">
+        <SimilarCompanies
+          clientId={client.id}
+          initialProspects={prospects}
+          hasAnalysis={analysis?.status === "complete"}
+        />
+      </div>
     </div>
   )
 }

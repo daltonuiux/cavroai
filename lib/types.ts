@@ -110,6 +110,30 @@ export interface DB {
   analyses: Analysis[]
 }
 
+// ---------------------------------------------------------------------------
+// Deal sourcing — company profiling and prospect generation
+// ---------------------------------------------------------------------------
+
+/** Derived profile of the target company, used to find similar prospects. */
+export interface CompanyProfile {
+  category: string         // e.g. "AI sales tool", "SaaS analytics platform"
+  targetCustomer: string   // e.g. "SaaS founders", "enterprise security teams"
+  productType: string      // e.g. "B2B SaaS", "marketplace", "developer tool"
+  keywords: string[]       // 3–6 descriptive tags
+}
+
+/** A suggested company to pursue, generated from a source client's profile. */
+export interface Prospect {
+  id: string
+  sourceClientId: string
+  name: string
+  reason: string
+  estimatedFit: "high" | "medium" | "low"
+  /** Set once the user adds this prospect as a tracked client. */
+  addedAsClientId?: string
+  createdAt: string
+}
+
 export interface WebsiteSignals {
   homepage: string
   pricing?: string
