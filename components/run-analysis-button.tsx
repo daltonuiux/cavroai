@@ -3,47 +3,66 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, RefreshCw } from "lucide-react"
-import { runClientAnalysis } from "@/app/actions"
 
 interface Props {
   clientId: string
-  /** When true, shows "Re-analyze" style (results already exist) vs "Run analysis" empty state. */
+  /** When true, renders a compact "Re-analyze" button instead of the empty state. */
   isReanalyze?: boolean
 }
 
 export function RunAnalysisButton({ clientId, isReanalyze = false }: Props) {
   const router = useRouter()
-  // Never default to true — only show spinner when a real request is in flight.
+  // Never default to true — spinner only shows while a real request is in-flight.
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function handleRunAnalysis() {
     console.log("RUN ANALYSIS CLICKED")
-    console.log("CLIENT ID:", clientId)
+    console.log("CLIENT:", clientId)
 
     setIsAnalyzing(true)
     setError(null)
 
+    const url = "/api/analyze-client"
+    console.log("ABOUT TO CALL ANALYSIS ENDPOINT")
+    console.log("ANALYSIS ENDPOINT URL:", url)
+
     try {
       console.log("STARTING CLIENT ANALYSIS REQUEST")
-      const result = await runClientAnalysis(clientId)
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId }),
+      })
+
+      const result = await res.json() as { status: string; message?: string }
       console.log("CLIENT ANALYSIS RESULT:", result)
 
-      if (result.status === "error") {
-        setError(result.errorMessage ?? "Analysis failed. Try again.")
-      } else {
-        // Reload the server component to reflect the new analysis
-        router.refresh()
+      if (!res.ok || result.status === "error") {
+        const msg = result.message ?? `Server error ${res.status}`
+        setError(`Analysis failed: ${msg}`)
+        return
       }
+
+      if (result.status === "insufficient_data") {
+        // Page will re-render with the insufficient_data UI
+        router.refresh()
+        return
+      }
+
+      // complete — reload server component to show results
+      router.refresh()
     } catch (e) {
-      console.error("CLIENT DETAIL ANALYSIS ERROR:", e)
-      setError("Analysis failed. Try again.")
+      console.error("RUN ANALYSIS FAILED:", e)
+      const msg = e instanceof Error ? e.message : String(e)
+      setError(`Analysis failed: ${msg}`)
     } finally {
       setIsAnalyzing(false)
     }
   }
 
-  // ── Spinner — shown only while request is active ──────────────────────────
+  // ── Spinner — only while a real request is active ─────────────────────────
   if (isAnalyzing) {
     return (
       <div className="card-cavro flex items-center gap-3 rounded-md px-4 py-5">
@@ -58,10 +77,10 @@ export function RunAnalysisButton({ clientId, isReanalyze = false }: Props) {
     )
   }
 
-  // ── Re-analyze button (compact, inline) ───────────────────────────────────
+  // ── Re-analyze — compact inline button ───────────────────────────────────
   if (isReanalyze) {
     return (
-      <div>
+      <div className="flex flex-col items-end gap-1.5">
         <button
           onClick={handleRunAnalysis}
           className="btn-cavro-secondary border flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium text-zinc-900 dark:text-zinc-100 transition-colors"
@@ -70,7 +89,7 @@ export function RunAnalysisButton({ clientId, isReanalyze = false }: Props) {
           Re-analyze
         </button>
         {error && (
-          <p className="mt-2 text-[12px] text-destructive">{error}</p>
+          <p className="text-[11px] text-destructive max-w-[260px] text-right">{error}</p>
         )}
       </div>
     )
@@ -84,7 +103,7 @@ export function RunAnalysisButton({ clientId, isReanalyze = false }: Props) {
         Run analysis to check this client for evidence-backed opportunities.
       </p>
       {error && (
-        <p className="mt-2 text-[12px] text-destructive">{error}</p>
+        <p className="mt-3 text-[12px] text-destructive">{error}</p>
       )}
       <button
         onClick={handleRunAnalysis}
