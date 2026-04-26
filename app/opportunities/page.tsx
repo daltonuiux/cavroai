@@ -58,13 +58,18 @@ export default async function OpportunitiesPage() {
         .map((client): OpportunityRow => {
           const analysis = analysesMap.get(client.id)
 
-          if (!analysis || (analysis.status !== "complete" && analysis.status !== "insufficient_data")) {
+          const isTerminal = analysis?.status === "complete"
+            || analysis?.status === "insufficient_data"
+            || analysis?.status === "profile_only"
+
+          if (!analysis || !isTerminal) {
             return {
               id: client.id,
               company: client.name,
               websiteUrl: client.websiteUrl,
               hasAnalysis: false,
               insufficientData: false,
+              profileOnly: false,
               showOpportunity: false,
               score: 0,
               confidence: null,
@@ -87,6 +92,7 @@ export default async function OpportunitiesPage() {
               websiteUrl: client.websiteUrl,
               hasAnalysis: false,
               insufficientData: true,
+              profileOnly: false,
               showOpportunity: false,
               score: 0,
               confidence: null,
@@ -97,6 +103,29 @@ export default async function OpportunitiesPage() {
               outreach: "",
               suggestedPitch: "",
               fitScore: undefined,
+              fitReason: undefined,
+              evidence: undefined,
+            }
+          }
+
+          if (analysis.status === "profile_only") {
+            return {
+              id: client.id,
+              company: client.name,
+              websiteUrl: client.websiteUrl,
+              hasAnalysis: false,
+              insufficientData: false,
+              profileOnly: true,
+              showOpportunity: false,
+              score: analysis.fitScore ?? 0,
+              confidence: null,
+              headline: analysis.clientProfile?.productDescription?.split(".")[0] ?? "",
+              signals: [],
+              whatsHappening: "",
+              whatToDo: "",
+              outreach: "",
+              suggestedPitch: "",
+              fitScore: analysis.fitScore,
               fitReason: undefined,
               evidence: undefined,
             }
@@ -121,6 +150,7 @@ export default async function OpportunitiesPage() {
             websiteUrl: client.websiteUrl,
             hasAnalysis: true,
             insufficientData: false,
+            profileOnly: false,
             showOpportunity,
             score: fitScore,
             // Derive confidence from the deterministic score, not AI impact label

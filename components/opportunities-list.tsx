@@ -26,6 +26,7 @@ export interface OpportunityRow {
   fitScore?: number
   fitReason?: string
   insufficientData?: boolean
+  profileOnly?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -41,15 +42,18 @@ export function OpportunitiesList({ rows, hasAgencyProfile }: { rows: Opportunit
   // Main section: analysis complete, strong evidence, non-low confidence
   const strong = visible.filter((r) => r.hasAnalysis && r.showOpportunity && r.confidence !== "low")
 
-  // "Needs more data": page scraped but signals were too weak to run AI
+  // "Needs more data": page scraped but signals were too weak to run AI (no profile)
   const noData = visible.filter((r) => r.insufficientData)
+
+  // "Profile only": website scraped, lightweight profile extracted, but no opportunity signals
+  const profileOnly = visible.filter((r) => r.profileOnly)
 
   // "Needs more evidence": analyzed but weak result, low confidence, or pending
   const weak = visible.filter(
-    (r) => !r.insufficientData && (!r.showOpportunity || !r.hasAnalysis || r.confidence === "low")
+    (r) => !r.insufficientData && !r.profileOnly && (!r.showOpportunity || !r.hasAnalysis || r.confidence === "low")
   )
 
-  const allGone = strong.length === 0 && noData.length === 0 && weak.length === 0
+  const allGone = strong.length === 0 && noData.length === 0 && profileOnly.length === 0 && weak.length === 0
 
   if (allGone) {
     return (
@@ -79,6 +83,11 @@ export function OpportunitiesList({ rows, hasAgencyProfile }: { rows: Opportunit
       {/* ── Needs more data ─────────────────────────────────────────────────── */}
       {noData.length > 0 && (
         <NoDataSection rows={noData} />
+      )}
+
+      {/* ── Profile only ────────────────────────────────────────────────────── */}
+      {profileOnly.length > 0 && (
+        <ProfileOnlySection rows={profileOnly} />
       )}
 
       {/* ── Needs more evidence ──────────────────────────────────────────────── */}
@@ -138,6 +147,69 @@ function NoDataCard({ row }: { row: OpportunityRow }) {
         <p className="text-[11px] text-muted-foreground/40 italic">
           Not enough signals on this site to run analysis.
         </p>
+      </div>
+      <Link
+        href={`/clients/${row.id}`}
+        className="shrink-0 text-[11px] font-medium text-muted-foreground/50 hover:text-foreground transition-colors"
+      >
+        View
+      </Link>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// "Profile only" collapsible section — profile extracted, no opportunity yet
+// ---------------------------------------------------------------------------
+
+function ProfileOnlySection({ rows }: { rows: OpportunityRow[] }) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 mb-3 group"
+      >
+        <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">
+          Profiled — no opportunity yet
+        </span>
+        <span className="text-[10px] font-medium tabular-nums rounded-full bg-foreground/[0.06] text-foreground/40 px-1.5 py-px">
+          {rows.length}
+        </span>
+        <span className="text-[11px] text-muted-foreground/30 group-hover:text-muted-foreground/50 transition-colors">
+          {open ? "Hide" : "Show"}
+        </span>
+      </button>
+
+      {open && (
+        <div className="flex flex-col gap-2">
+          {rows.map((row) => (
+            <ProfileOnlyCard key={row.id} row={row} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ProfileOnlyCard({ row }: { row: OpportunityRow }) {
+  return (
+    <div className="card-cavro rounded-md px-4 py-3 flex items-center gap-3 opacity-55">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 mb-0.5">
+          <p className="text-[13px] font-semibold text-foreground">{row.company}</p>
+          <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-foreground/[0.04] text-foreground/35">
+            Profile extracted
+          </span>
+        </div>
+        {row.headline ? (
+          <p className="text-[11px] text-muted-foreground/50 line-clamp-1 italic">{row.headline}</p>
+        ) : (
+          <p className="text-[11px] text-muted-foreground/40 italic">
+            Not enough opportunity signals yet — similar companies still available.
+          </p>
+        )}
       </div>
       <Link
         href={`/clients/${row.id}`}

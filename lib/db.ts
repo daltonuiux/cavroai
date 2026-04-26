@@ -39,6 +39,9 @@
 //   ALTER TABLE analyses ADD COLUMN IF NOT EXISTS fit_score integer;
 //   ALTER TABLE analyses ADD COLUMN IF NOT EXISTS fit_reason text;
 //
+// Client profile (always-on lightweight extraction):
+//   ALTER TABLE analyses ADD COLUMN IF NOT EXISTS client_profile jsonb;
+//
 // Agency profile table:
 //   CREATE TABLE IF NOT EXISTS agency_profile (
 //     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -60,7 +63,7 @@
 // ---------------------------------------------------------------------------
 
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
-import type { AgencyProfile, Client, Analysis, Prospect, RelationshipSignal } from "./types"
+import type { AgencyProfile, Client, Analysis, ClientProfile, Prospect, RelationshipSignal } from "./types"
 
 // ---------------------------------------------------------------------------
 // Supabase client (service role — no auth layer yet, bypasses RLS)
@@ -120,6 +123,8 @@ function rowToAnalysis(row: any): Analysis {
     // Agency fit fields (undefined if columns not yet migrated)
     fitScore: row.fit_score ?? undefined,
     fitReason: row.fit_reason ?? undefined,
+    // Lightweight client profile (undefined if column not yet migrated)
+    clientProfile: row.client_profile ?? undefined,
   }
 }
 
@@ -262,6 +267,7 @@ export async function createAnalysis(
       outreach: input.outreach ?? null,
       fit_score: input.fitScore ?? null,
       fit_reason: input.fitReason ?? null,
+      client_profile: (input.clientProfile as unknown as ClientProfile) ?? null,
     })
     .select()
     .single()
@@ -294,6 +300,7 @@ export async function updateAnalysis(
   if (patch.outreach !== undefined)           row.outreach = patch.outreach
   if (patch.fitScore !== undefined)           row.fit_score = patch.fitScore
   if (patch.fitReason !== undefined)          row.fit_reason = patch.fitReason
+  if (patch.clientProfile !== undefined)      row.client_profile = patch.clientProfile
 
   const { error } = await db().from("analyses").update(row).eq("id", id)
   if (error) throw new Error(`updateAnalysis: ${error.message}`)

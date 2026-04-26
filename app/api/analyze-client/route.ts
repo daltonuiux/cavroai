@@ -13,6 +13,7 @@ import { analyzeWebsite } from "@/lib/ai"
 import { detectChanges, summarizeChanges } from "@/lib/diff"
 import { scoreOpportunity } from "@/lib/scoring"
 import { fetchRelationshipPages, extractRelationshipSignals } from "@/lib/relationship-signals"
+import { extractClientProfile } from "@/lib/client-profile"
 import { createClient } from "@/lib/supabase/server"
 
 export async function POST(req: Request) {
@@ -85,39 +86,61 @@ export async function POST(req: Request) {
   try {
     const base = new URL(client.websiteUrl).origin
 
+    // Gather signals and agency profile in parallel
     const [agencyProfile, signals] = await Promise.all([
       getAgencyProfile().catch(() => null),
       gatherSignals(client.websiteUrl, client.name),
     ])
 
-    // Deterministic opportunity score — gates the AI call and sets fitScore
+    // Always extract a lightweight client profile — runs even when score is too low
+    // Also start fetching relationship pages in parallel (pure HTTP, fast)
+    const [clientProfile, relPages] = await Promise.all([
+      extractClientProfile(signals),
+      fetchRelationshipPages(base),
+    ])
+
+    // Deterministic opportunity score — gates the full AI analysis call
     const score = scoreOpportunity(signals, agencyProfile, client.name)
     console.log("OPPORTUNITY SCORE:", score.total, score.breakdown)
 
     if (score.total < 50) {
-      console.log("SCORE TOO LOW - INSUFFICIENT DATA", score.total, client.websiteUrl)
-      await updateAnalysis(analysisId, {
-        status: "insufficient_data",
-        fitScore: score.total,
-      })
-      return NextResponse.json({ status: "insufficient_data" })
+      console.log("SCORE TOO LOW - PROFILE ONLY", score.total, client.websiteUrl)
+
+      // Extract relationship signals even for profile-only — warm paths work with any status
+      const entities = await extractRelationshipSignals(
+        base,
+        relPages,
+        signals.website.homepage,
+      )
+
+      // Persist profile-only result and relationship signals in parallel
+      await Promise.all([
+        updateAnalysis(analysisId, {
+          status: "profile_only",
+          fitScore: score.total,
+          clientProfile,
+          signals,
+          lastAnalyzedAt: new Date().toISOString(),
+        }),
+        saveRelationshipSignals(client.id, userId, entities).catch((err) =>
+          console.error("Signal save error (non-fatal):", err)
+        ),
+      ])
+
+      return NextResponse.json({ status: "profile_only" })
     }
 
     const changes = prevSignals ? detectChanges(prevSignals, signals) : []
     const changeSummary = summarizeChanges(changes)
 
-    // Run AI analysis and relationship page fetches in parallel — page fetches
-    // are fast (~2s) and hide behind the slower AI call (~15s).
-    const [result, relPages] = await Promise.all([
-      analyzeWebsite(
-        client.websiteUrl,
-        signals,
-        changes,
-        client,
-        agencyProfile ?? undefined,
-      ),
-      fetchRelationshipPages(base),
-    ])
+    // Run AI analysis — relationship pages are already fetched above
+    const result = await analyzeWebsite(
+      client.websiteUrl,
+      signals,
+      changes,
+      client,
+      agencyProfile ?? undefined,
+    )
 
     // Extract named entities from the fetched pages (haiku, ~3s)
     const entities = await extractRelationshipSignals(
@@ -132,6 +155,7 @@ export async function POST(req: Request) {
         ...result,
         fitScore: score.total,
         status: "complete",
+        clientProfile,
         signals,
         lastSignals: prevSignals,
         changes,

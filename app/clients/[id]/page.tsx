@@ -4,7 +4,7 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, AlertCircle, ChevronDown } from "lucide-react"
 import { getClientById, getAnalysisByClientId, getAgencyProfile, getProspectsByClientId, getRelationshipSignalsByClientId, MVP_USER_ID } from "@/lib/db"
-import type { Analysis, RelationshipSignal, SignalChange, Signals } from "@/lib/types"
+import type { Analysis, ClientProfile, RelationshipSignal, SignalChange, Signals } from "@/lib/types"
 import { scoreOpportunity, type ScoreBreakdown } from "@/lib/scoring"
 import { SimilarCompanies } from "@/components/similar-companies"
 import { createClient } from "@/lib/supabase/server"
@@ -70,6 +70,8 @@ export default async function ClientPage({
         <AnalysisError message={analysis.errorMessage} />
       ) : analysis.status === "insufficient_data" ? (
         <AnalysisInsufficient />
+      ) : analysis.status === "profile_only" ? (
+        <AnalysisProfileOnly clientProfile={analysis.clientProfile} />
       ) : (
         <AnalysisResults
           analysis={analysis}
@@ -87,7 +89,7 @@ export default async function ClientPage({
         <SimilarCompanies
           clientId={client.id}
           initialProspects={prospects}
-          hasAnalysis={analysis?.status === "complete"}
+          hasAnalysis={analysis?.status === "complete" || analysis?.status === "profile_only"}
         />
       </div>
     </div>
@@ -105,6 +107,70 @@ function AnalysisInsufficient() {
           to generate a reliable analysis. Try re-analyzing once the site has more public content.
         </p>
       </div>
+    </div>
+  )
+}
+
+function AnalysisProfileOnly({ clientProfile }: { clientProfile?: ClientProfile }) {
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Explanation */}
+      <div className="flex items-start gap-3 rounded-md border border-border bg-foreground/[0.02] p-4">
+        <AlertCircle className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <div>
+          <p className="text-[13px] font-medium text-foreground">Limited signals — profile extracted</p>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
+            Not enough hiring, pricing, or product signals for a full opportunity analysis. A company profile
+            has been extracted below to power similar-company suggestions.
+          </p>
+        </div>
+      </div>
+
+      {/* Client profile card */}
+      {clientProfile && (clientProfile.category || clientProfile.productDescription) && (
+        <div className="card-cavro rounded-md px-4 py-3.5 flex flex-col gap-3">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+            Company Profile
+          </p>
+
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded border border-border bg-border">
+            {clientProfile.category && (
+              <div className="bg-background px-3 py-2">
+                <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">Category</p>
+                <p className="text-[12px] text-foreground/80">{clientProfile.category}</p>
+              </div>
+            )}
+            {clientProfile.industry && (
+              <div className="bg-background px-3 py-2">
+                <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">Industry</p>
+                <p className="text-[12px] text-foreground/80">{clientProfile.industry}</p>
+              </div>
+            )}
+            {clientProfile.targetCustomer && (
+              <div className="col-span-2 bg-background px-3 py-2">
+                <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">Target customer</p>
+                <p className="text-[12px] text-foreground/80">{clientProfile.targetCustomer}</p>
+              </div>
+            )}
+            {clientProfile.productDescription && (
+              <div className="col-span-2 bg-background px-3 py-2">
+                <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">Description</p>
+                <p className="text-[12px] leading-relaxed text-foreground/80">{clientProfile.productDescription}</p>
+              </div>
+            )}
+          </div>
+
+          {clientProfile.keywords.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {clientProfile.keywords.map((kw) => (
+                <span key={kw} className="rounded px-1.5 py-px text-[10px] font-medium bg-foreground/[0.05] text-foreground/50">
+                  {kw}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

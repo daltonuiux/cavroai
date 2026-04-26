@@ -81,7 +81,7 @@ export interface AgencyProfile {
 export interface Analysis {
   id: string
   clientId: string
-  status: "pending" | "complete" | "error" | "insufficient_data"
+  status: "pending" | "complete" | "error" | "insufficient_data" | "profile_only"
   summary: string
   strategicDirection: string[]
   opportunities: Opportunity[]
@@ -103,11 +103,30 @@ export interface Analysis {
   // Agency fit fields — requires DB migration: see lib/db.ts header comment
   fitScore?: number
   fitReason?: string
+  // Lightweight profile — always extracted, even when score is too low for full analysis
+  clientProfile?: ClientProfile
 }
 
 export interface DB {
   clients: Client[]
   analyses: Analysis[]
+}
+
+// ---------------------------------------------------------------------------
+// Client profile — lightweight, always-on extraction (runs before scoring)
+// ---------------------------------------------------------------------------
+
+/**
+ * Lightweight profile extracted from any website regardless of signal strength.
+ * Used to power similar-company generation even when opportunity signals are weak.
+ */
+export interface ClientProfile {
+  category: string            // e.g. "B2B SaaS", "developer tool"
+  productDescription: string  // 1-2 sentence description from homepage copy
+  targetCustomer: string      // who the product is for
+  industry: string            // primary industry
+  keywords: string[]          // 3-6 descriptive tags
+  evidence: string[]          // verbatim phrases from homepage that support the above
 }
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-import type { Client, CompanyProfile, Prospect, Signals } from "./types"
+import type { Client, ClientProfile, CompanyProfile, Prospect, Signals } from "./types"
 
 // ---------------------------------------------------------------------------
 // Return type
@@ -56,11 +56,22 @@ If there is insufficient context to confidently identify real similar companies,
 function buildMessage(
   client: Pick<Client, "name" | "websiteUrl">,
   signals: Signals,
+  clientProfile?: ClientProfile,
 ): string {
   const parts: string[] = [
     `Source company: ${client.name}`,
     `Website: ${client.websiteUrl}`,
   ]
+
+  // Prepend extracted profile when available — helps AI find better matches
+  if (clientProfile && (clientProfile.category || clientProfile.productDescription)) {
+    parts.push("", "=== COMPANY PROFILE (extracted) ===")
+    if (clientProfile.category) parts.push(`Category: ${clientProfile.category}`)
+    if (clientProfile.productDescription) parts.push(`Description: ${clientProfile.productDescription}`)
+    if (clientProfile.targetCustomer) parts.push(`Target customer: ${clientProfile.targetCustomer}`)
+    if (clientProfile.industry) parts.push(`Industry: ${clientProfile.industry}`)
+    if (clientProfile.keywords.length) parts.push(`Keywords: ${clientProfile.keywords.join(", ")}`)
+  }
 
   // Structured signals
   const ex = signals.extracted
@@ -113,6 +124,7 @@ function buildMessage(
 export async function generateProspects(
   client: Pick<Client, "name" | "websiteUrl">,
   signals: Signals,
+  clientProfile?: ClientProfile,
 ): Promise<ProspectsResult> {
   const empty: ProspectsResult = { companyProfile: null, similarCompanies: [] }
 
@@ -149,7 +161,7 @@ export async function generateProspects(
         model: "claude-haiku-4-5",  // fast + cheap for structured extraction
         max_tokens: 1000,
         system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: buildMessage(client, signals) }],
+        messages: [{ role: "user", content: buildMessage(client, signals, clientProfile) }],
       }),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("Prospects AI timeout")), 20_000)

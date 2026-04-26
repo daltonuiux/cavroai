@@ -30,17 +30,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Client not found" }, { status: 404 })
   }
 
-  // Require a completed analysis with saved signals — we need the scraped data
+  // Require a completed or profile-only analysis with saved signals
   const signals = analysis?.signals
-  if (!signals || analysis?.status !== "complete") {
+  const isReady = analysis?.status === "complete" || analysis?.status === "profile_only"
+  if (!signals || !isReady) {
     return NextResponse.json(
-      { error: "Run a full analysis first before generating prospects" },
+      { error: "Run analysis first before generating prospects" },
       { status: 422 },
     )
   }
 
   try {
-    const result = await generateProspects(client, signals)
+    const result = await generateProspects(client, signals, analysis.clientProfile ?? undefined)
 
     const prospects = await replaceProspects(
       clientId,
