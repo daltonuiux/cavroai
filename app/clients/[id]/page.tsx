@@ -398,6 +398,11 @@ function SignalsDebug({ signals }: { signals: Signals }) {
               <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40">
                 Recent News
               </p>
+              {ns && (
+                <p className="mb-1 text-[10px] text-muted-foreground/40">
+                  Raw: {ns.rawCount} fetched → {ns.articles.length} after filtering
+                </p>
+              )}
               {ns?.hasNews && ns.articles.length > 0 ? (
                 <>
                   {ns.keywords.length > 0 && (

@@ -158,8 +158,10 @@ export interface NewsArticle {
 export interface NewsSignals {
   hasNews: boolean
   articles: NewsArticle[]
-  /** Keywords matched in article titles, e.g. "launch", "raises". */
+  /** Keywords matched in filtered article titles, e.g. "launch", "raises". */
   keywords: string[]
+  /** Total raw articles from RSS before business-relevance filtering. */
+  rawCount: number
 }
 
 export interface Signals {

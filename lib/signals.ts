@@ -228,14 +228,30 @@ function extractJobSignals(
 // Google News RSS — real-world activity signals
 // ---------------------------------------------------------------------------
 
-const NEWS_SIGNAL_KEYWORDS = [
+// Business keywords that must appear in a title to keep it (whitelist).
+// Also used for signal scoring — each matched keyword = +2, capped at +6.
+const BUSINESS_KEYWORDS = [
   "launch", "launches", "launched",
-  "announces", "announced",
-  "raises", "raised", "funding",
-  "partners", "partnership",
-  "expands", "expansion",
-  "introduces", "introduced",
-  "release", "releases", "released",
+  "announce", "announces", "announced",
+  "raise", "raises", "raised", "funding",
+  "partner", "partnership",
+  "expand", "expansion",
+  "introduce", "introduces",
+  "product", "platform",
+  "growth",
+  "acquisition",
+]
+
+// Title fragments that indicate the article is NOT about the company as a business.
+// Any match → article is rejected regardless of other signals.
+const REJECT_PATTERNS = [
+  // Sports
+  /\b(lakers|celtics|knicks|bulls|heat|nba|nfl|nhl|mlb|mls|premier league|fifa|uefa)\b/,
+  /\b(game\s+\d|match|score|tournament|championship|playoff|standings)\b/,
+  // Entertainment / celebrity
+  /\b(actor|actress|singer|rapper|celebrity|album|tour|concert|movie|film|tv show|reality)\b/,
+  // Food / lifestyle
+  /\b(recipe|restaurant|chef|fashion|makeup|beauty|skincare)\b/,
 ]
 
 /**
@@ -244,7 +260,7 @@ const NEWS_SIGNAL_KEYWORDS = [
  */
 function parseRssItems(
   xml: string,
-  maxItems = 8,
+  maxItems = 15, // fetch more than needed so filtering has room to work
 ): Array<{ title: string; date: string }> {
   const results: Array<{ title: string; date: string }> = []
 
@@ -258,7 +274,8 @@ function parseRssItems(
 
     if (!titleMatch || !dateMatch) continue
 
-    const title = titleMatch[1].replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim()
+    const title = titleMatch[1]
+      .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim()
     const date = dateMatch[1].trim()
 
     if (title) results.push({ title, date })
@@ -269,11 +286,28 @@ function parseRssItems(
 }
 
 /**
- * Fetches recent Google News articles for a company name.
- * Returns an empty NewsSignals on any failure — never throws.
+ * Returns true if an article title is clearly about the target company as a business:
+ *   1. Company name present in title (case-insensitive)
+ *   2. At least one business keyword present
+ *   3. No reject patterns matched
+ */
+function isBusinessRelevant(title: string, companyNameLower: string): boolean {
+  const lower = title.toLowerCase()
+
+  if (!lower.includes(companyNameLower)) return false
+  if (!BUSINESS_KEYWORDS.some((kw) => lower.includes(kw))) return false
+  if (REJECT_PATTERNS.some((re) => re.test(lower))) return false
+
+  return true
+}
+
+/**
+ * Fetches recent Google News articles for a company name, filters to only
+ * business-relevant articles about that company, and returns up to 3.
+ * Never throws — returns an empty NewsSignals on any failure.
  */
 async function fetchNewsSignals(companyName: string): Promise<NewsSignals> {
-  const empty: NewsSignals = { hasNews: false, articles: [], keywords: [] }
+  const empty: NewsSignals = { hasNews: false, articles: [], keywords: [], rawCount: 0 }
   if (!companyName.trim()) return empty
 
   try {
@@ -282,15 +316,27 @@ async function fetchNewsSignals(companyName: string): Promise<NewsSignals> {
     const xml = await fetchPage(url)
     if (!xml) return empty
 
-    const articles = parseRssItems(xml)
-    if (articles.length === 0) return empty
+    const raw = parseRssItems(xml)
+    const rawCount = raw.length
 
-    const allTitles = articles.map((a) => a.title.toLowerCase()).join(" ")
-    const keywords = NEWS_SIGNAL_KEYWORDS.filter((kw) => allTitles.includes(kw))
+    const companyNameLower = companyName.toLowerCase()
+    const filtered = raw
+      .filter((a) => isBusinessRelevant(a.title, companyNameLower))
+      .slice(0, 3)
 
-    console.log(`NEWS SIGNALS [${companyName}]: ${articles.length} articles, keywords: ${keywords.join(", ") || "none"}`)
+    console.log(
+      `NEWS SIGNALS [${companyName}]: raw=${rawCount} filtered=${filtered.length}` +
+      (filtered.length > 0 ? ` — "${filtered[0].title}"` : "")
+    )
 
-    return { hasNews: true, articles, keywords }
+    if (filtered.length === 0) return { ...empty, rawCount }
+
+    const allTitles = filtered.map((a) => a.title.toLowerCase()).join(" ")
+    const keywords = BUSINESS_KEYWORDS.filter((kw) => allTitles.includes(kw))
+      // Deduplicate root forms (e.g. "launch" covers "launches"/"launched")
+      .filter((kw, i, arr) => !arr.slice(0, i).some((prev) => kw.startsWith(prev)))
+
+    return { hasNews: true, articles: filtered, keywords, rawCount }
   } catch (err) {
     console.error("fetchNewsSignals error:", err)
     return empty
