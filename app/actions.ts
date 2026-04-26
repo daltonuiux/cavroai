@@ -39,7 +39,7 @@ export async function addClient(
       const [freshClient, agencyProfile, signals] = await Promise.all([
         getClientById(client.id),
         getAgencyProfile().catch(() => null),
-        gatherSignals(websiteUrl),
+        gatherSignals(websiteUrl, client.name),
       ])
 
       if (!hasStrongSignals(signals)) {
@@ -101,7 +101,7 @@ export async function bulkAddClients(
           const [freshClient, agencyProfile, signals] = await Promise.all([
             getClientById(client.id),
             getAgencyProfile().catch(() => null),
-            gatherSignals(url),
+            gatherSignals(url, client.name),
           ])
 
           if (!hasStrongSignals(signals)) {
@@ -1151,7 +1151,7 @@ export async function reanalyzeClient(clientId: string) {
     try {
       const [agencyProfile, signals] = await Promise.all([
         getAgencyProfile().catch(() => null),
-        gatherSignals(client.websiteUrl),
+        gatherSignals(client.websiteUrl, client.name),
       ])
 
       if (!hasStrongSignals(signals)) {

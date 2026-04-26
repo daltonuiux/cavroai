@@ -75,7 +75,7 @@ export async function POST(req: Request) {
   try {
     const [agencyProfile, signals] = await Promise.all([
       getAgencyProfile().catch(() => null),
-      gatherSignals(client.websiteUrl),
+      gatherSignals(client.websiteUrl, client.name),
     ])
 
     if (!hasStrongSignals(signals)) {

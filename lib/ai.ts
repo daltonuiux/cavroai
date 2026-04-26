@@ -114,6 +114,8 @@ ABSOLUTELY FORBIDDEN — never state these unless the exact concept appears verb
 
 HIRING RULE: Only mention hiring signals if JOB SIGNALS shows hasJobsPage=true, a jobBoardProvider, or actual roles listed. If JOB SIGNALS shows hasJobsPage=false and roles=[], do not mention hiring at all.
 
+NEWS RULE: You may reference news signals ONLY if they appear in NEWS SIGNALS with real article titles. Quote or closely paraphrase the actual title. Never invent news events, announcements, or funding rounds that are not listed in NEWS SIGNALS.
+
 === AGENCY FIT ASSESSMENT ===
 When AGENCY CONTEXT is provided, you must evaluate fit between this target company and this specific agency.
 
@@ -297,6 +299,20 @@ function buildUserMessage(
     }
     parts.push("", "=== JOB SIGNALS ===")
     parts.push(jobSection.join("\n"))
+  }
+
+  // News signals — always emit so the model knows whether news was checked
+  {
+    const ns = signals.newsSignals
+    parts.push("", "=== NEWS SIGNALS ===")
+    if (ns?.hasNews && ns.articles.length > 0) {
+      parts.push(`hasNews: true`)
+      if (ns.keywords.length > 0) parts.push(`keywords: ${ns.keywords.join(", ")}`)
+      parts.push("articles:")
+      ns.articles.forEach((a) => parts.push(`  - "${a.title}" (${a.date})`))
+    } else {
+      parts.push("hasNews: false\narticles: none found — do not reference any news events")
+    }
   }
 
   if (changes.length > 0) {

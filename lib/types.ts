@@ -150,6 +150,18 @@ export interface JobSignals {
   commercialRoles: string[]
 }
 
+export interface NewsArticle {
+  title: string
+  date: string
+}
+
+export interface NewsSignals {
+  hasNews: boolean
+  articles: NewsArticle[]
+  /** Keywords matched in article titles, e.g. "launch", "raises". */
+  keywords: string[]
+}
+
 export interface Signals {
   website: WebsiteSignals
   blog: BlogPost[]
@@ -157,4 +169,5 @@ export interface Signals {
   news: NewsItem[]
   extracted?: ExtractedSignals
   jobSignals?: JobSignals
+  newsSignals?: NewsSignals
 }

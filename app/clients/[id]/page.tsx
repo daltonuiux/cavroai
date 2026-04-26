@@ -390,18 +390,36 @@ function SignalsDebug({ signals }: { signals: Signals }) {
           )
         })()}
 
-        {signals.news.length > 0 && (
-          <div>
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40">
-              News ({signals.news.length})
-            </p>
-            <ul className="flex flex-col gap-0.5">
-              {signals.news.map((n, i) => (
-                <li key={i} className="text-[11px] text-muted-foreground/60">— {n.headline}</li>
-              ))}
-            </ul>
-          </div>
-        )}
+        {/* Real news from Google News RSS */}
+        {(() => {
+          const ns = signals.newsSignals
+          return (
+            <div>
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40">
+                Recent News
+              </p>
+              {ns?.hasNews && ns.articles.length > 0 ? (
+                <>
+                  {ns.keywords.length > 0 && (
+                    <p className="mb-1 text-[10px] text-emerald-600 dark:text-emerald-400">
+                      Signal keywords: {ns.keywords.join(", ")}
+                    </p>
+                  )}
+                  <ul className="flex flex-col gap-0.5">
+                    {ns.articles.map((a, i) => (
+                      <li key={i} className="text-[11px] text-muted-foreground/60 leading-snug">
+                        — {a.title}
+                        <span className="ml-1.5 text-muted-foreground/35">{a.date.slice(0, 16)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <p className="text-[11px] text-muted-foreground/40 italic">No recent news found</p>
+              )}
+            </div>
+          )
+        })()}
       </div>
     </details>
   )

@@ -1,4 +1,4 @@
-import type { Signals, ExtractedSignals, JobSignals, BlogPost, JobRole, NewsItem } from "./types"
+import type { Signals, ExtractedSignals, JobSignals, NewsSignals, BlogPost, JobRole, NewsItem } from "./types"
 
 const FETCH_TIMEOUT_MS = 8000
 
@@ -131,7 +131,7 @@ export function extractPageSignals(html: string): ExtractedSignals {
  *     Any detected commercial roles → always true (prevents blocking real hiring signals)
  */
 export function hasStrongSignals(signals: Signals): boolean {
-  const { extracted, jobSignals } = signals
+  const { extracted, jobSignals, newsSignals } = signals
   if (!extracted) return false
 
   // Fast-pass: confirmed commercial hiring is enough on its own
@@ -139,7 +139,7 @@ export function hasStrongSignals(signals: Signals): boolean {
 
   let score = 0
 
-  // Base checks
+  // Base checks (1 pt each, max 4)
   const meaningfulHeadings = extracted.headings.filter((h) => h.length > 15)
   if (meaningfulHeadings.length >= 2) score++
   if (extracted.hasCareersPage || extracted.keywords.includes("hiring")) score++
@@ -155,6 +155,12 @@ export function hasStrongSignals(signals: Signals): boolean {
     if (jobSignals.hasJobsPage)      score += 2
     if (jobSignals.jobBoardProvider) score += 2
     score += Math.min(jobSignals.roles.length * 2, 6)
+  }
+
+  // News signal boosts
+  if (newsSignals?.hasNews) {
+    score += 2
+    score += Math.min(newsSignals.keywords.length * 2, 6)
   }
 
   return score >= 2
@@ -218,12 +224,84 @@ function extractJobSignals(
   return { hasJobsPage, jobBoardProvider, jobBoardUrl, roles, commercialRoles }
 }
 
-export async function gatherSignals(websiteUrl: string): Promise<Signals> {
+// ---------------------------------------------------------------------------
+// Google News RSS — real-world activity signals
+// ---------------------------------------------------------------------------
+
+const NEWS_SIGNAL_KEYWORDS = [
+  "launch", "launches", "launched",
+  "announces", "announced",
+  "raises", "raised", "funding",
+  "partners", "partnership",
+  "expands", "expansion",
+  "introduces", "introduced",
+  "release", "releases", "released",
+]
+
+/**
+ * Parses RSS XML from Google News and returns up to maxItems recent articles.
+ * Handles both plain and CDATA-wrapped title/pubDate fields.
+ */
+function parseRssItems(
+  xml: string,
+  maxItems = 8,
+): Array<{ title: string; date: string }> {
+  const results: Array<{ title: string; date: string }> = []
+
+  for (const itemMatch of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
+    const block = itemMatch[1]
+
+    const titleMatch = block.match(
+      /<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/
+    )
+    const dateMatch = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/)
+
+    if (!titleMatch || !dateMatch) continue
+
+    const title = titleMatch[1].replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim()
+    const date = dateMatch[1].trim()
+
+    if (title) results.push({ title, date })
+    if (results.length >= maxItems) break
+  }
+
+  return results
+}
+
+/**
+ * Fetches recent Google News articles for a company name.
+ * Returns an empty NewsSignals on any failure — never throws.
+ */
+async function fetchNewsSignals(companyName: string): Promise<NewsSignals> {
+  const empty: NewsSignals = { hasNews: false, articles: [], keywords: [] }
+  if (!companyName.trim()) return empty
+
+  try {
+    const q = encodeURIComponent(`"${companyName}"`)
+    const url = `https://news.google.com/rss/search?q=${q}&hl=en-US&gl=US&ceid=US:en`
+    const xml = await fetchPage(url)
+    if (!xml) return empty
+
+    const articles = parseRssItems(xml)
+    if (articles.length === 0) return empty
+
+    const allTitles = articles.map((a) => a.title.toLowerCase()).join(" ")
+    const keywords = NEWS_SIGNAL_KEYWORDS.filter((kw) => allTitles.includes(kw))
+
+    console.log(`NEWS SIGNALS [${companyName}]: ${articles.length} articles, keywords: ${keywords.join(", ") || "none"}`)
+
+    return { hasNews: true, articles, keywords }
+  } catch (err) {
+    console.error("fetchNewsSignals error:", err)
+    return empty
+  }
+}
+
+export async function gatherSignals(websiteUrl: string, companyName = ""): Promise<Signals> {
   const base = new URL(websiteUrl).origin
 
-  // Fetch all pages in parallel — careers and jobs fetched separately
-  // so extractJobSignals can inspect each independently
-  const [homepageHtml, pricingHtml, productHtml, blogHtml, careersHtml, jobsHtml] =
+  // Fetch website pages + news in parallel
+  const [homepageHtml, pricingHtml, productHtml, blogHtml, careersHtml, jobsHtml, newsSignals] =
     await Promise.all([
       fetchPage(websiteUrl),
       fetchPage(`${base}/pricing`),
@@ -231,6 +309,7 @@ export async function gatherSignals(websiteUrl: string): Promise<Signals> {
       fetchPage(`${base}/blog`).then((r) => r ?? fetchPage(`${base}/resources`)),
       fetchPage(`${base}/careers`),
       fetchPage(`${base}/jobs`),
+      fetchNewsSignals(companyName),
     ])
 
   const extracted = extractPageSignals(homepageHtml ?? "")
@@ -241,9 +320,6 @@ export async function gatherSignals(websiteUrl: string): Promise<Signals> {
 
   // Populate legacy jobs field with real extracted roles only — never mock data
   const jobs: JobRole[] = jobSignals.roles.map((title) => ({ title }))
-
-  // Use whichever careers-type page loaded for blog-style post extraction
-  const careersOrJobsHtml = careersHtml ?? jobsHtml
 
   return {
     website: {
@@ -256,5 +332,6 @@ export async function gatherSignals(websiteUrl: string): Promise<Signals> {
     news: MOCK_NEWS,
     extracted,
     jobSignals,
+    newsSignals,
   }
 }
