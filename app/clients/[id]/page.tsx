@@ -46,7 +46,7 @@ export default async function ClientPage({
             {client.websiteUrl}
           </a>
         </div>
-        {(analysis?.status === "complete" || analysis?.status === "insufficient_data") && (
+        {analysis && analysis.status !== "pending" && (
           <form action={reanalyzeClient.bind(null, client.id)}>
             <button
               type="submit"
@@ -60,7 +60,7 @@ export default async function ClientPage({
       </div>
 
       {!analysis || analysis.status === "pending" ? (
-        <AnalysisPending />
+        <AnalysisPending createdAt={analysis?.createdAt ?? new Date().toISOString()} />
       ) : analysis.status === "error" ? (
         <AnalysisError message={analysis.errorMessage} />
       ) : analysis.status === "insufficient_data" ? (
