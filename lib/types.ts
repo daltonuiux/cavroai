@@ -137,10 +137,24 @@ export interface ExtractedSignals {
   hasPricing: boolean
 }
 
+export interface JobSignals {
+  /** True if a /careers or /jobs page was reachable, or a job board link was found. */
+  hasJobsPage: boolean
+  /** Detected job board provider name, e.g. "greenhouse", "lever", "ashby". */
+  jobBoardProvider: string | null
+  /** Full URL of the detected job board link. */
+  jobBoardUrl: string | null
+  /** All job-like headings extracted from careers/jobs pages. */
+  roles: string[]
+  /** Subset of roles matching commercially-relevant patterns. */
+  commercialRoles: string[]
+}
+
 export interface Signals {
   website: WebsiteSignals
   blog: BlogPost[]
   jobs: JobRole[]
   news: NewsItem[]
   extracted?: ExtractedSignals
+  jobSignals?: JobSignals
 }

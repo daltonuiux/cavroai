@@ -112,6 +112,8 @@ ABSOLUTELY FORBIDDEN — never state these unless the exact concept appears verb
 - Any partnership, acquisition, market expansion, or revenue growth claim
 - Company stage, traction, growth trajectory, or headcount — unless stated in source text
 
+HIRING RULE: Only mention hiring signals if JOB SIGNALS shows hasJobsPage=true, a jobBoardProvider, or actual roles listed. If JOB SIGNALS shows hasJobsPage=false and roles=[], do not mention hiring at all.
+
 === AGENCY FIT ASSESSMENT ===
 When AGENCY CONTEXT is provided, you must evaluate fit between this target company and this specific agency.
 
@@ -276,9 +278,25 @@ function buildUserMessage(
     parts.push(signals.blog.map((p) => `"${p.title}"`).join("\n"))
   }
 
-  if (signals.jobs.length > 0) {
-    parts.push("", "--- JOB TITLES ---")
-    parts.push(signals.jobs.map((j) => j.title).join("\n"))
+  // Always include job signals so the model knows exactly what was found (or not found)
+  {
+    const js = signals.jobSignals
+    const jobSection: string[] = []
+    jobSection.push(`hasJobsPage: ${js?.hasJobsPage ?? false}`)
+    jobSection.push(`jobBoardProvider: ${js?.jobBoardProvider ?? "none"}`)
+    if (js?.jobBoardUrl) jobSection.push(`jobBoardUrl: ${js.jobBoardUrl}`)
+    if (js?.roles && js.roles.length > 0) {
+      jobSection.push(`roles: ${js.roles.join(", ")}`)
+    } else {
+      jobSection.push("roles: none found")
+    }
+    if (js?.commercialRoles && js.commercialRoles.length > 0) {
+      jobSection.push(`commercialRoles: ${js.commercialRoles.join(", ")}`)
+    } else {
+      jobSection.push("commercialRoles: none")
+    }
+    parts.push("", "=== JOB SIGNALS ===")
+    parts.push(jobSection.join("\n"))
   }
 
   if (changes.length > 0) {

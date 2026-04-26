@@ -352,18 +352,43 @@ function SignalsDebug({ signals }: { signals: Signals }) {
           </div>
         )}
 
-        {signals.jobs.length > 0 && (
-          <div>
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40">
-              Job openings ({signals.jobs.length})
-            </p>
-            <ul className="flex flex-col gap-0.5">
-              {signals.jobs.map((j, i) => (
-                <li key={i} className="text-[11px] text-muted-foreground/60">— {j.title}</li>
-              ))}
-            </ul>
-          </div>
-        )}
+        {/* Job signals — real hiring data, never mocked */}
+        {(() => {
+          const js = signals.jobSignals
+          if (!js) return null
+          return (
+            <div>
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40">
+                Job signals
+              </p>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[11px] text-muted-foreground/60">
+                  Jobs page: {js.hasJobsPage ? "✓ found" : "✗ not found"}
+                </span>
+                <span className="text-[11px] text-muted-foreground/60">
+                  Board: {js.jobBoardProvider ?? "none detected"}
+                  {js.jobBoardUrl && (
+                    <> — <a href={js.jobBoardUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">{js.jobBoardUrl.slice(0, 60)}</a></>
+                  )}
+                </span>
+                {js.roles.length > 0 ? (
+                  <div className="mt-1">
+                    <p className="text-[10px] text-muted-foreground/40 mb-0.5">Roles ({js.roles.length})</p>
+                    <ul className="flex flex-col gap-0.5">
+                      {js.roles.map((r, i) => (
+                        <li key={i} className={`text-[11px] ${js.commercialRoles.includes(r) ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-muted-foreground/60"}`}>
+                          — {r}{js.commercialRoles.includes(r) ? " ★" : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <span className="text-[11px] text-muted-foreground/40 italic">No roles extracted</span>
+                )}
+              </div>
+            </div>
+          )
+        })()}
 
         {signals.news.length > 0 && (
           <div>

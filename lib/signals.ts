@@ -1,4 +1,4 @@
-import type { Signals, ExtractedSignals, BlogPost, JobRole, NewsItem } from "./types"
+import type { Signals, ExtractedSignals, JobSignals, BlogPost, JobRole, NewsItem } from "./types"
 
 const FETCH_TIMEOUT_MS = 8000
 
@@ -8,11 +8,29 @@ const MOCK_NEWS: NewsItem[] = [
   { headline: "CEO interview: doubling headcount in enterprise sales this year" },
 ]
 
-const MOCK_JOBS: JobRole[] = [
-  { title: "Enterprise Account Executive" },
-  { title: "Head of Sales" },
-  { title: "Senior Customer Success Manager" },
+// ---------------------------------------------------------------------------
+// Job board detection config
+// ---------------------------------------------------------------------------
+
+const JOB_BOARDS: Array<{ name: string; pattern: RegExp }> = [
+  { name: "greenhouse", pattern: /greenhouse\.io/i },
+  { name: "lever",      pattern: /jobs\.lever\.co/i },
+  { name: "ashby",      pattern: /ashbyhq\.com/i },
+  { name: "workable",   pattern: /workable\.com/i },
+  { name: "wellfound",  pattern: /wellfound\.com/i },
 ]
+
+// Regex of href attribute values that contain a job board domain
+const JOB_BOARD_HREF_RE =
+  /href="([^"]*(?:greenhouse\.io|jobs\.lever\.co|ashbyhq\.com|workable\.com|wellfound\.com)[^"]*)"/gi
+
+// Commercially relevant role patterns (sales / growth / design / PM / CS / marketing)
+const COMMERCIAL_ROLE_RE =
+  /head of sales|account executive|growth|product designer|product manager|customer success|marketing/i
+
+// Broad "looks like a job title" pattern for title extraction
+const JOB_TITLE_RE =
+  /engineer|manager|director|executive|designer|analyst|lead|head|vp|sales|success|product|marketing|recruiter|operations|growth|devops|data|backend|frontend|fullstack|researcher/i
 
 async function fetchPage(url: string): Promise<string | null> {
   const controller = new AbortController()
@@ -97,39 +115,49 @@ export function extractPageSignals(html: string): ExtractedSignals {
 }
 
 /**
- * Returns true only when there are at least 2 strong, distinct signals from
- * the scraped page — enough evidence for AI analysis to be meaningful.
+ * Returns true when there are enough real signals to make AI analysis worthwhile.
  *
- * Strong signal checklist (need ≥ 2 out of 4):
- *   1. Substantive headings — page has real content to read
- *   2. Hiring indicators   — careers page link or hiring keyword
- *   3. Product/pricing     — pricing page link or product-related keyword
- *   4. Business keywords   — ≥ 2 keywords detected overall
+ * Scoring (threshold: ≥ 2):
+ *   Base checks (1 pt each, max 4):
+ *     1. Substantive headings (≥ 2 headings > 15 chars)
+ *     2. Hiring indicators (careers link or "hiring" keyword)
+ *     3. Product / pricing signals
+ *     4. Multiple keywords (≥ 2)
+ *   Job signal boosts:
+ *     hasJobsPage       +2
+ *     jobBoardProvider  +2
+ *     each commercial role +2, capped at +6
+ *   Fast-pass:
+ *     Any detected commercial roles → always true (prevents blocking real hiring signals)
  */
 export function hasStrongSignals(signals: Signals): boolean {
-  const { extracted } = signals
+  const { extracted, jobSignals } = signals
   if (!extracted) return false
 
-  let count = 0
+  // Fast-pass: confirmed commercial hiring is enough on its own
+  if (jobSignals?.commercialRoles && jobSignals.commercialRoles.length > 0) return true
 
-  // 1. Substantive headings — at least 2 headings with real content (>15 chars)
+  let score = 0
+
+  // Base checks
   const meaningfulHeadings = extracted.headings.filter((h) => h.length > 15)
-  if (meaningfulHeadings.length >= 2) count++
-
-  // 2. Hiring indicators
-  if (extracted.hasCareersPage || extracted.keywords.includes("hiring")) count++
-
-  // 3. Product or pricing signals
+  if (meaningfulHeadings.length >= 2) score++
+  if (extracted.hasCareersPage || extracted.keywords.includes("hiring")) score++
   if (
     extracted.hasPricing ||
     extracted.keywords.includes("pricing") ||
     extracted.keywords.includes("product launch")
-  ) count++
+  ) score++
+  if (extracted.keywords.length >= 2) score++
 
-  // 4. Multiple meaningful keywords detected
-  if (extracted.keywords.length >= 2) count++
+  // Job signal boosts
+  if (jobSignals) {
+    if (jobSignals.hasJobsPage)      score += 2
+    if (jobSignals.jobBoardProvider) score += 2
+    score += Math.min(jobSignals.roles.length * 2, 6)
+  }
 
-  return count >= 2
+  return score >= 2
 }
 
 function extractHeadings(html: string): string[] {
@@ -149,34 +177,73 @@ function extractBlogPosts(html: string | null): BlogPost[] {
   return headings.map((title) => ({ title, summary: "" }))
 }
 
-function extractJobRoles(html: string | null): JobRole[] {
-  if (!html) return MOCK_JOBS
-  const headings = extractHeadings(html)
-  const roles = headings.filter((h) =>
-    /engineer|manager|director|executive|designer|analyst|lead|head|vp|sales|success|product|marketing|recruiter|operations/i.test(
-      h
-    )
-  )
-  return roles.length > 0 ? roles.slice(0, 6).map((title) => ({ title })) : MOCK_JOBS
+/**
+ * Detects real job board links and extracts job titles from careers/jobs pages.
+ * Never invents data — all fields are empty/null when nothing is found.
+ */
+function extractJobSignals(
+  homepageHtml: string | null,
+  careersHtml: string | null,
+  jobsHtml: string | null,
+): JobSignals {
+  const combined = [homepageHtml, careersHtml, jobsHtml].filter(Boolean).join("\n")
+
+  // Detect job board provider from any href in the combined HTML
+  let jobBoardProvider: string | null = null
+  let jobBoardUrl: string | null = null
+  JOB_BOARD_HREF_RE.lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = JOB_BOARD_HREF_RE.exec(combined)) !== null) {
+    const href = m[1]
+    const board = JOB_BOARDS.find((b) => b.pattern.test(href))
+    if (board) {
+      jobBoardProvider = board.name
+      jobBoardUrl = href
+      break
+    }
+  }
+
+  // hasJobsPage: a careers/jobs page loaded successfully OR a job board link exists
+  const hasJobsPage =
+    !!(careersHtml || jobsHtml) ||
+    jobBoardProvider !== null ||
+    /href="[^"]*\/(careers|jobs)["/?]/i.test(combined)
+
+  // Extract role-like headings from careers/jobs pages only (not homepage — too noisy)
+  const careersText = [careersHtml, jobsHtml].filter(Boolean).join("\n")
+  const allHeadings = extractHeadings(careersText)
+  const roles = allHeadings.filter((h) => JOB_TITLE_RE.test(h)).slice(0, 12)
+  const commercialRoles = roles.filter((r) => COMMERCIAL_ROLE_RE.test(r))
+
+  return { hasJobsPage, jobBoardProvider, jobBoardUrl, roles, commercialRoles }
 }
 
 export async function gatherSignals(websiteUrl: string): Promise<Signals> {
   const base = new URL(websiteUrl).origin
 
-  const [homepageHtml, pricingHtml, productHtml] = await Promise.all([
-    fetchPage(websiteUrl),
-    fetchPage(`${base}/pricing`),
-    fetchPage(`${base}/product`),
-  ])
-
-  const blogHtml =
-    (await fetchPage(`${base}/blog`)) ?? (await fetchPage(`${base}/resources`))
-
-  const careersHtml =
-    (await fetchPage(`${base}/careers`)) ?? (await fetchPage(`${base}/jobs`))
+  // Fetch all pages in parallel — careers and jobs fetched separately
+  // so extractJobSignals can inspect each independently
+  const [homepageHtml, pricingHtml, productHtml, blogHtml, careersHtml, jobsHtml] =
+    await Promise.all([
+      fetchPage(websiteUrl),
+      fetchPage(`${base}/pricing`),
+      fetchPage(`${base}/product`),
+      fetchPage(`${base}/blog`).then((r) => r ?? fetchPage(`${base}/resources`)),
+      fetchPage(`${base}/careers`),
+      fetchPage(`${base}/jobs`),
+    ])
 
   const extracted = extractPageSignals(homepageHtml ?? "")
+  const jobSignals = extractJobSignals(homepageHtml, careersHtml, jobsHtml)
+
   console.log("EXTRACTED SIGNALS:", extracted)
+  console.log("JOB SIGNALS:", JSON.stringify(jobSignals))
+
+  // Populate legacy jobs field with real extracted roles only — never mock data
+  const jobs: JobRole[] = jobSignals.roles.map((title) => ({ title }))
+
+  // Use whichever careers-type page loaded for blog-style post extraction
+  const careersOrJobsHtml = careersHtml ?? jobsHtml
 
   return {
     website: {
@@ -185,8 +252,9 @@ export async function gatherSignals(websiteUrl: string): Promise<Signals> {
       ...(productHtml ? { product: extractText(productHtml).slice(0, 1500) } : {}),
     },
     blog: extractBlogPosts(blogHtml),
-    jobs: extractJobRoles(careersHtml),
+    jobs,
     news: MOCK_NEWS,
     extracted,
+    jobSignals,
   }
 }
