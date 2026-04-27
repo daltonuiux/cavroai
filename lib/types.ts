@@ -151,6 +151,55 @@ export type EntityType =
   | "investor"
   | "tool"
   | "person"
+  | "community"
+
+// ---------------------------------------------------------------------------
+// Network seeds — manually seeded relationships (agency's own network)
+// ---------------------------------------------------------------------------
+
+export type SeedEntityType =
+  | "person"
+  | "company"
+  | "investor"
+  | "partner"
+  | "tool"
+  | "community"
+
+export type SeedRelationshipType =
+  | "knows"
+  | "worked_with"
+  | "client"
+  | "partner"
+  | "investor"
+  | "ecosystem"
+  | "uses"
+  | "member_of"
+
+/**
+ * The source of a warm path:
+ *   "scraped" — both clients have scraped relationship signals for this entity
+ *   "seed"    — only a manual seed (no client match), shown in Network page only
+ *   "both"    — a manual seed + 1+ client relationship signals
+ */
+export type WarmPathSource = "scraped" | "seed" | "both"
+
+/**
+ * A manually seeded relationship — represents the agency's own known network.
+ * Seeds are combined with scraped relationship_signals to strengthen warm paths.
+ */
+export interface RelationshipSeed {
+  id: string
+  userId: string
+  entityName: string
+  entityType: SeedEntityType
+  relationshipType: SeedRelationshipType
+  /** Optional label describing how/where you know this entity, e.g. "Met at SaaStr 2024" */
+  sourceLabel?: string
+  /** Free-form notes about this relationship */
+  notes?: string
+  strength: "strong" | "medium" | "weak"
+  createdAt: string
+}
 
 export type RelationshipSignalType =
   | "uses"
@@ -181,6 +230,10 @@ export interface WarmPath {
   clients: Array<{ id: string; name: string }>
   reason: string
   whyItMatters: string
+  /** Whether this path comes from scraping, a manual seed, or both */
+  source: WarmPathSource
+  /** Notes from the matching seed, if any */
+  seedNotes?: string
 }
 
 /**

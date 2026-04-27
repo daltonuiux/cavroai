@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic"
 
-import { getClients, getAllRelationshipSignalsForUser, getAllProspectsForUser, MVP_USER_ID } from "@/lib/db"
+import { getClients, getAllRelationshipSignalsForUser, getAllProspectsForUser, getRelationshipSeedsForUser, MVP_USER_ID } from "@/lib/db"
 import { computeWarmPaths } from "@/lib/warm-paths"
 import { WarmPathsPage } from "@/components/warm-paths-page"
 import type { WarmPathRow } from "@/components/warm-paths-page"
@@ -65,10 +65,11 @@ export default async function WarmPathsRoute() {
   const { data: { user } } = await supabase.auth.getUser()
   const userId = user?.id ?? MVP_USER_ID
 
-  const [clients, signals, existingProspects] = await Promise.all([
+  const [clients, signals, existingProspects, seeds] = await Promise.all([
     getClients().catch(() => []),
     getAllRelationshipSignalsForUser(userId).catch(() => []),
     getAllProspectsForUser(userId).catch(() => []),
+    getRelationshipSeedsForUser(userId).catch(() => []),
   ])
 
   const addedNames = new Set(
@@ -77,7 +78,7 @@ export default async function WarmPathsRoute() {
 
   const clientMap = new Map<string, Client>(clients.map((c) => [c.id, c]))
 
-  const paths = computeWarmPaths(signals, clients)
+  const paths = computeWarmPaths(signals, clients, seeds)
 
   const rows: WarmPathRow[] = paths.map((path) => ({
     ...path,

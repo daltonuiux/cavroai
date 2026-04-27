@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import type { WarmPath } from "@/lib/types"
+import type { WarmPath, WarmPathSource } from "@/lib/types"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -58,6 +58,7 @@ const TYPE_META: Record<string, { label: string; color: string }> = {
   partner:     { label: "Partner",     color: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
   tool:        { label: "Tool",        color: "bg-foreground/[0.04] text-foreground/40" },
   person:      { label: "Contact",     color: "bg-foreground/[0.04] text-foreground/40" },
+  community:   { label: "Community",   color: "bg-purple-500/10 text-purple-600 dark:text-purple-400" },
   // Legacy values kept for rows stored before the schema migration
   customer:    { label: "Customer",    color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
   integration: { label: "Integration", color: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
@@ -232,6 +233,20 @@ function WarmPathCard({ row }: { row: WarmPathRow }) {
         {row.whyItMatters}
       </p>
 
+      {/* Source badge — only shown for seed-boosted paths */}
+      {row.source === "both" && (
+        <div className="flex flex-wrap items-start gap-2 border-t border-border pt-2">
+          <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 shrink-0">
+            Manual network seed
+          </span>
+          {row.seedNotes && (
+            <span className="text-[10px] leading-relaxed text-muted-foreground/50 italic">
+              {row.seedNotes}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Suggested intro asks */}
       {activeFacilitators.length > 0 && (
         <div className="border-t border-border pt-2.5">
@@ -303,7 +318,11 @@ export function WarmPathsPage({ rows }: { rows: WarmPathRow[] }) {
         <p className="text-[13px] font-medium text-foreground">No shared relationship signals yet</p>
         <p className="mt-1 text-[12px] text-muted-foreground">
           Scan more clients to discover shared partners, tools, customers, and investors.
-          Warm paths appear when at least two clients share an entity.
+          You can also seed your own network on the{" "}
+          <a href="/network" className="underline underline-offset-2 hover:text-foreground transition-colors">
+            Network
+          </a>{" "}
+          page — paths appear when a seeded entity matches even a single client.
         </p>
       </div>
     )
