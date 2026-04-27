@@ -2,16 +2,14 @@ import Link from "next/link"
 import { getAgencyProfile, getClients, getLatestAnalysesForClients, getAllRelationshipSignalsForUser, MVP_USER_ID } from "@/lib/db"
 import { OpportunitiesList } from "@/components/opportunities-list"
 import type { OpportunityRow } from "@/components/opportunities-list"
-import type { Analysis } from "@/lib/types"
+import type { Analysis, OpportunityWarmPath, WarmPath } from "@/lib/types"
 import { confidenceFromScore } from "@/lib/scoring"
 import { computeWarmPaths } from "@/lib/warm-paths"
 import { WarmPaths } from "@/components/warm-paths"
 import { createClient } from "@/lib/supabase/server"
 
 function deriveScore(analysis: Analysis): number {
-  // Prefer deterministic fitScore (set by scoring pipeline)
   if (analysis.fitScore !== undefined) return analysis.fitScore
-  // Legacy fallback for analyses run before scoring was added
   const evidenceCount = analysis.evidence?.length ?? 0
   if (evidenceCount >= 3) return 85
   if (evidenceCount === 2) return 60
@@ -19,6 +17,93 @@ function deriveScore(analysis: Analysis): number {
   if (top) return { high: 85, medium: 60, low: 30 }[top.impact]
   return 0
 }
+
+// ---------------------------------------------------------------------------
+// Warm path helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Generates a human-readable suggested approach for making a warm intro,
+ * given the entity type and the names of the other clients in the path.
+ */
+function buildSuggestedApproach(path: WarmPath, currentClientId: string): string {
+  const others = path.clients
+    .filter((c) => c.id !== currentClientId)
+    .map((c) => c.name)
+
+  if (others.length === 0) return ""
+
+  const otherList =
+    others.length === 1
+      ? others[0]
+      : `${others.slice(0, -1).join(", ")} and ${others[others.length - 1]}`
+
+  const via = path.entityName
+
+  switch (path.entityType) {
+    case "investor":
+      return `Ask ${via} — who has backed ${otherList} — for a direct introduction.`
+    case "partner":
+      return `Reach out through ${via} — a shared partner with ${otherList} — to request a warm intro.`
+    case "company":
+      return `Use your connection through ${via} with ${otherList} to request a warm introduction.`
+    case "tool":
+      return `Mention your work with ${otherList} — both teams use ${via} — as a natural conversation opener.`
+    case "person":
+      return `Ask ${via} — connected to both you and ${otherList} — for a personal introduction.`
+    default:
+      return `Use the shared ${via} connection with ${otherList} to request a warm intro.`
+  }
+}
+
+/**
+ * Score bonus from warm paths: strong +15, medium +10, weak +5, capped at +20 total.
+ */
+function warmBonus(paths: OpportunityWarmPath[]): number {
+  let bonus = 0
+  for (const p of paths) {
+    if (p.strength === "strong") bonus += 15
+    else if (p.strength === "medium") bonus += 10
+    else bonus += 5
+  }
+  return Math.min(bonus, 20)
+}
+
+/**
+ * Splits the global warm paths into a per-client index.
+ * For each client in a path, emits an OpportunityWarmPath pointing at the other clients.
+ */
+function buildClientWarmPathIndex(
+  warmPaths: WarmPath[],
+): Map<string, OpportunityWarmPath[]> {
+  const index = new Map<string, OpportunityWarmPath[]>()
+
+  for (const path of warmPaths) {
+    for (const pathClient of path.clients) {
+      const otherClients = path.clients.filter((c) => c.id !== pathClient.id)
+      if (otherClients.length === 0) continue
+
+      const entry: OpportunityWarmPath = {
+        viaEntity: path.entityName,
+        viaType: path.entityType,
+        sourceClients: otherClients.map((c) => c.name).join(", "),
+        strength: path.strength,
+        explanation: path.whyItMatters,
+        suggestedApproach: buildSuggestedApproach(path, pathClient.id),
+      }
+
+      const existing = index.get(pathClient.id) ?? []
+      existing.push(entry)
+      index.set(pathClient.id, existing)
+    }
+  }
+
+  return index
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
 export default async function OpportunitiesPage() {
   const header = (
@@ -32,12 +117,10 @@ export default async function OpportunitiesPage() {
     </div>
   )
 
-  // Resolve userId for RLS-gated queries
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   const userId = user?.id ?? MVP_USER_ID
 
-  // Fetch agency profile + clients + relationship signals in parallel
   let agencyProfile = null
   let rows: OpportunityRow[] = []
   let warmPaths: ReturnType<typeof computeWarmPaths> = []
@@ -54,9 +137,27 @@ export default async function OpportunitiesPage() {
     if (clients.length > 0) {
       const analysesMap = await getLatestAnalysesForClients(clients.map((c) => c.id))
 
+      // Compute warm paths from relationship signals across all clients
+      if (allSignals.length > 0) {
+        warmPaths = computeWarmPaths(allSignals, clients)
+        console.log(`WARM PATHS: ${warmPaths.length} paths from ${allSignals.length} signals`)
+      }
+
+      // Build per-client warm path index (O(n) split of global paths)
+      const clientWarmPathIndex = buildClientWarmPathIndex(warmPaths)
+
       rows = clients
         .map((client): OpportunityRow => {
           const analysis = analysesMap.get(client.id)
+
+          // Top 3 warm paths for this client, sorted strong → medium → weak
+          const rawWarmPaths = (clientWarmPathIndex.get(client.id) ?? [])
+            .sort((a, b) => {
+              const order = { strong: 3, medium: 2, weak: 1 }
+              return order[b.strength] - order[a.strength]
+            })
+            .slice(0, 3)
+          const hasWarmPath = rawWarmPaths.length > 0
 
           const isTerminal = analysis?.status === "complete"
             || analysis?.status === "insufficient_data"
@@ -82,6 +183,8 @@ export default async function OpportunitiesPage() {
               fitScore: undefined,
               fitReason: undefined,
               evidence: undefined,
+              warmPaths: rawWarmPaths,
+              hasWarmPath,
             }
           }
 
@@ -105,6 +208,8 @@ export default async function OpportunitiesPage() {
               fitScore: undefined,
               fitReason: undefined,
               evidence: undefined,
+              warmPaths: rawWarmPaths,
+              hasWarmPath,
             }
           }
 
@@ -128,6 +233,8 @@ export default async function OpportunitiesPage() {
               fitScore: analysis.fitScore,
               fitReason: undefined,
               evidence: undefined,
+              warmPaths: rawWarmPaths,
+              hasWarmPath,
             }
           }
 
@@ -142,7 +249,11 @@ export default async function OpportunitiesPage() {
           const whatToDo = analysis.whatToDo || top?.whatToDo || ""
           const outreach = analysis.outreach || top?.outreach || analysis.suggestedPitch || ""
 
-          const fitScore = deriveScore(analysis)
+          const baseScore = deriveScore(analysis)
+          // Boost score when warm paths exist — used for sorting and badge display
+          const boostedScore = hasWarmPath
+            ? Math.min(100, baseScore + warmBonus(rawWarmPaths))
+            : baseScore
 
           return {
             id: client.id,
@@ -152,9 +263,8 @@ export default async function OpportunitiesPage() {
             insufficientData: false,
             profileOnly: false,
             showOpportunity,
-            score: fitScore,
-            // Derive confidence from the deterministic score, not AI impact label
-            confidence: confidenceFromScore(fitScore),
+            score: boostedScore,
+            confidence: confidenceFromScore(boostedScore),
             headline: top?.headline || whatsHappening.split(".")[0] || "",
             signals: analysis.strategicDirection ?? [],
             whatsHappening,
@@ -162,19 +272,19 @@ export default async function OpportunitiesPage() {
             outreach,
             suggestedPitch: analysis.suggestedPitch || "",
             warmReason: top?.warmReason,
-            fitScore,
+            fitScore: baseScore,
             fitReason: analysis.fitReason,
             evidence: analysis.evidence,
+            warmPaths: rawWarmPaths,
+            hasWarmPath,
           }
         })
-        // Sort by fitScore descending — highest commercial value first
-        .sort((a, b) => b.score - a.score)
-
-      // Compute warm paths from relationship signals across all clients
-      if (allSignals.length > 0) {
-        warmPaths = computeWarmPaths(allSignals, clients)
-        console.log(`WARM PATHS: ${warmPaths.length} paths from ${allSignals.length} signals`)
-      }
+        // Sort: warm paths first, then by score descending
+        .sort((a, b) => {
+          if (a.hasWarmPath && !b.hasWarmPath) return -1
+          if (!a.hasWarmPath && b.hasWarmPath) return 1
+          return b.score - a.score
+        })
     }
   } catch (err) {
     console.error("OpportunitiesPage fetch error:", err)

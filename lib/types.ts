@@ -183,6 +183,20 @@ export interface WarmPath {
   whyItMatters: string
 }
 
+/**
+ * A single warm intro path attached to an opportunity row.
+ * Derived at read-time from the global warm paths index — not stored in DB.
+ */
+export interface OpportunityWarmPath {
+  viaEntity: string
+  viaType: string
+  /** Comma-joined names of the other clients that share this entity */
+  sourceClients: string
+  strength: "strong" | "medium" | "weak"
+  explanation: string
+  suggestedApproach: string
+}
+
 /** A suggested company to pursue, generated from a source client's profile. */
 export interface Prospect {
   id: string

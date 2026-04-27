@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import type { OpportunityWarmPath } from "@/lib/types"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -27,6 +28,8 @@ export interface OpportunityRow {
   fitReason?: string
   insufficientData?: boolean
   profileOnly?: boolean
+  warmPaths?: OpportunityWarmPath[]
+  hasWarmPath?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -267,6 +270,65 @@ function WeakSection({
 }
 
 // ---------------------------------------------------------------------------
+// Warm intro paths panel (shown in expanded card)
+// ---------------------------------------------------------------------------
+
+const STRENGTH_META: Record<string, { label: string; color: string }> = {
+  strong: { label: "Strong",  color: "bg-violet-500/10 text-violet-600 dark:text-violet-400" },
+  medium: { label: "Medium",  color: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
+  weak:   { label: "Weak",    color: "bg-foreground/[0.04] text-foreground/35" },
+}
+
+function WarmPathsPanel({ paths }: { paths: OpportunityWarmPath[] }) {
+  return (
+    <div className="px-4 py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-violet-500/70 dark:text-violet-400/70 mb-2.5">
+        Warm intro paths
+      </p>
+      <div className="flex flex-col gap-3">
+        {paths.map((path, i) => {
+          const meta = STRENGTH_META[path.strength] ?? STRENGTH_META.weak
+          return (
+            <div key={i} className="rounded-md border border-violet-500/10 bg-violet-500/[0.03] px-3 py-2.5">
+              {/* Header row */}
+              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                <span className="text-[12px] font-semibold text-foreground capitalize">
+                  {path.viaEntity}
+                </span>
+                <span className={`rounded px-1.5 py-px text-[10px] font-semibold ${meta.color}`}>
+                  {meta.label}
+                </span>
+                <span className="text-[10px] text-muted-foreground/40 capitalize">
+                  via {path.viaType}
+                </span>
+              </div>
+
+              {/* Source clients */}
+              <p className="text-[11px] text-muted-foreground/60 mb-1">
+                Also connected to <span className="font-medium text-foreground/70">{path.sourceClients}</span>
+              </p>
+
+              {/* Explanation */}
+              <p className="text-[11px] leading-relaxed text-muted-foreground/60 mb-1.5">
+                {path.explanation}
+              </p>
+
+              {/* Suggested approach */}
+              <div className="flex items-start gap-1.5">
+                <span className="mt-[3px] text-[9px] font-bold text-violet-500/60 dark:text-violet-400/60 shrink-0">→</span>
+                <p className="text-[11px] leading-relaxed text-foreground/75 font-medium">
+                  {path.suggestedApproach}
+                </p>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Card: strong opportunity (evidence-backed, showOpportunity true)
 // ---------------------------------------------------------------------------
 
@@ -281,13 +343,18 @@ function AnalysedCard({ row, onDone }: { row: OpportunityRow; onDone: () => void
         onClick={() => setExpanded((v) => !v)}
       >
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <p className="text-[13px] font-semibold text-foreground">{row.company}</p>
             {/* fitScore is the primary score — show it as the main badge */}
             {row.fitScore !== undefined && row.fitScore > 0 && (
               <FitScoreBadge score={row.fitScore} />
             )}
             {row.confidence && <ConfidenceBadge confidence={row.confidence} />}
+            {row.hasWarmPath && (
+              <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-violet-500/10 text-violet-600 dark:text-violet-400">
+                Warm intro available
+              </span>
+            )}
           </div>
           <p className="text-[12px] leading-snug text-foreground/60 line-clamp-2">
             {row.headline}
@@ -307,6 +374,11 @@ function AnalysedCard({ row, onDone }: { row: OpportunityRow; onDone: () => void
       {/* Expanded detail */}
       {expanded && (
         <div className="border-t border-border divide-y divide-border">
+
+          {/* Warm intro paths */}
+          {row.warmPaths && row.warmPaths.length > 0 && (
+            <WarmPathsPanel paths={row.warmPaths} />
+          )}
 
           {/* Agency fit reason */}
           {row.fitReason && (
