@@ -279,6 +279,53 @@ const STRENGTH_META: Record<string, { label: string; color: string }> = {
   weak:   { label: "Weak",    color: "bg-foreground/[0.04] text-foreground/35" },
 }
 
+const INTRO_CONFIDENCE_META: Record<string, { label: string; color: string }> = {
+  high:   { label: "Named contact",   color: "text-emerald-600 dark:text-emerald-400" },
+  medium: { label: "Possible path",   color: "text-sky-600 dark:text-sky-400" },
+  low:    { label: "Worth asking",    color: "text-muted-foreground/50" },
+}
+
+function IntroAskBlock({ intro }: { intro: OpportunityWarmPath["namedIntros"][number] }) {
+  const meta = INTRO_CONFIDENCE_META[intro.confidence] ?? INTRO_CONFIDENCE_META.low
+
+  return (
+    <div className="mt-2 rounded-md border border-foreground/[0.06] bg-foreground/[0.02] px-3 py-2.5">
+      {/* Confidence label + contact chip */}
+      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+        <span className={`text-[10px] font-semibold uppercase tracking-wider ${meta.color}`}>
+          {meta.label}
+        </span>
+        {intro.sourceContact && (
+          <span className="rounded bg-foreground/[0.06] px-1.5 py-px text-[10px] font-medium text-foreground/60">
+            {intro.sourceContact} · {intro.sourceClient}
+          </span>
+        )}
+        {!intro.sourceContact && (
+          <span className="text-[10px] text-muted-foreground/40">via {intro.sourceClient}</span>
+        )}
+      </div>
+
+      {/* Named people at target — if available */}
+      {intro.targetPeople && intro.targetPeople.length > 0 && (
+        <p className="text-[11px] text-muted-foreground/50 mb-1.5">
+          Possible contacts at target:{" "}
+          <span className="font-medium text-foreground/60">
+            {intro.targetPeople.join(", ")}
+          </span>
+        </p>
+      )}
+
+      {/* The ask — copyable */}
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[11px] leading-relaxed text-foreground/75">
+          {intro.suggestedAsk}
+        </p>
+        <CopyButton text={intro.suggestedAsk} />
+      </div>
+    </div>
+  )
+}
+
 function WarmPathsPanel({ paths }: { paths: OpportunityWarmPath[] }) {
   return (
     <div className="px-4 py-3">
@@ -305,21 +352,34 @@ function WarmPathsPanel({ paths }: { paths: OpportunityWarmPath[] }) {
 
               {/* Source clients */}
               <p className="text-[11px] text-muted-foreground/60 mb-1">
-                Also connected to <span className="font-medium text-foreground/70">{path.sourceClients}</span>
+                Also connected to{" "}
+                <span className="font-medium text-foreground/70">{path.sourceClients}</span>
               </p>
 
               {/* Explanation */}
-              <p className="text-[11px] leading-relaxed text-muted-foreground/60 mb-1.5">
+              <p className="text-[11px] leading-relaxed text-muted-foreground/50 mb-1.5">
                 {path.explanation}
               </p>
 
-              {/* Suggested approach */}
-              <div className="flex items-start gap-1.5">
+              {/* General suggested approach */}
+              <div className="flex items-start gap-1.5 mb-0.5">
                 <span className="mt-[3px] text-[9px] font-bold text-violet-500/60 dark:text-violet-400/60 shrink-0">→</span>
-                <p className="text-[11px] leading-relaxed text-foreground/75 font-medium">
+                <p className="text-[11px] leading-relaxed text-foreground/70 font-medium">
                   {path.suggestedApproach}
                 </p>
               </div>
+
+              {/* Named intro asks — only when data supports them */}
+              {path.namedIntros.length > 0 && (
+                <div className="mt-2.5 flex flex-col gap-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-foreground/30">
+                    Suggested intro ask
+                  </p>
+                  {path.namedIntros.map((intro, j) => (
+                    <IntroAskBlock key={j} intro={intro} />
+                  ))}
+                </div>
+              )}
             </div>
           )
         })}

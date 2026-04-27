@@ -184,6 +184,21 @@ export interface WarmPath {
 }
 
 /**
+ * A named, actionable intro suggestion derived from a warm path.
+ * Generated at read-time from client contacts + person relationship signals.
+ * Never invented — only produced when supporting data exists.
+ */
+export interface NamedIntro {
+  sourceClient: string           // name of the source client we're asking through
+  sourceContact: string | null   // named contact at source client (null = ask generically)
+  viaEntity: string              // title-cased shared entity name
+  suggestedAsk: string           // ready-to-use ask sentence
+  confidence: "low" | "medium" | "high"
+  /** Named people found at the target from relationship_signals (entity_type = "person") */
+  targetPeople?: string[]
+}
+
+/**
  * A single warm intro path attached to an opportunity row.
  * Derived at read-time from the global warm paths index — not stored in DB.
  */
@@ -195,6 +210,8 @@ export interface OpportunityWarmPath {
   strength: "strong" | "medium" | "weak"
   explanation: string
   suggestedApproach: string
+  /** Named intro suggestions for this path — empty when no supporting data */
+  namedIntros: NamedIntro[]
 }
 
 /** A suggested company to pursue, generated from a source client's profile. */

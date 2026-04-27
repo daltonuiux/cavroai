@@ -7,9 +7,19 @@ import type { WarmPath } from "@/lib/types"
 // Types
 // ---------------------------------------------------------------------------
 
+export interface WarmPathFacilitator {
+  clientId: string
+  clientName: string
+  contactName: string | null
+  contactRole?: string
+  suggestedAsk: string
+}
+
 export interface WarmPathRow extends WarmPath {
   /** Whether a prospect with this entity name already exists for the user. */
   alreadyAdded: boolean
+  /** Named contacts from clients in this path who could facilitate an intro. */
+  facilitators: WarmPathFacilitator[]
 }
 
 // ---------------------------------------------------------------------------
@@ -63,6 +73,65 @@ function EntityTypePill({ type }: { type: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Copy button
+// ---------------------------------------------------------------------------
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+
+  function handleCopy() {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="shrink-0 text-[10px] font-medium text-muted-foreground/40 transition-colors hover:text-foreground"
+    >
+      {copied ? "Copied" : "Copy"}
+    </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Suggested intro ask block — one per facilitator
+// ---------------------------------------------------------------------------
+
+function FacilitatorAskBlock({ facilitator }: { facilitator: WarmPathFacilitator }) {
+  return (
+    <div className="rounded-md border border-foreground/[0.06] bg-foreground/[0.02] px-3 py-2.5">
+      {/* Contact chip */}
+      <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+        {facilitator.contactName ? (
+          <>
+            <span className="rounded bg-foreground/[0.06] px-1.5 py-px text-[10px] font-medium text-foreground/60">
+              {facilitator.contactName}
+              {facilitator.contactRole ? ` · ${facilitator.contactRole}` : ""}
+            </span>
+            <span className="text-[10px] text-muted-foreground/35">at {facilitator.clientName}</span>
+          </>
+        ) : (
+          <span className="text-[10px] text-muted-foreground/40">
+            Your contact at {facilitator.clientName}
+          </span>
+        )}
+      </div>
+
+      {/* The ask — copyable */}
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[11px] leading-relaxed text-foreground/70">
+          {facilitator.suggestedAsk}
+        </p>
+        <CopyButton text={facilitator.suggestedAsk} />
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Single warm path card
 // ---------------------------------------------------------------------------
 
@@ -71,6 +140,10 @@ function WarmPathCard({ row }: { row: WarmPathRow }) {
     row.alreadyAdded ? "done" : "idle"
   )
   const [errorMsg, setErrorMsg] = useState("")
+  const [showIntros, setShowIntros] = useState(false)
+
+  // Only surface facilitators who have either a named contact or a useful ask
+  const activeFacilitators = row.facilitators.filter((f) => f.contactName || row.strength !== "weak")
 
   async function handleCreate() {
     setState("loading")
@@ -104,7 +177,7 @@ function WarmPathCard({ row }: { row: WarmPathRow }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5 mb-1">
-            <p className="text-[13px] font-semibold text-foreground">{row.entityName}</p>
+            <p className="text-[13px] font-semibold text-foreground capitalize">{row.entityName}</p>
             <StrengthBadge strength={row.strength} />
             <EntityTypePill type={row.entityType} />
           </div>
@@ -158,6 +231,34 @@ function WarmPathCard({ row }: { row: WarmPathRow }) {
       <p className="text-[11px] leading-relaxed text-muted-foreground/50 italic border-t border-border pt-2">
         {row.whyItMatters}
       </p>
+
+      {/* Suggested intro asks */}
+      {activeFacilitators.length > 0 && (
+        <div className="border-t border-border pt-2.5">
+          <button
+            onClick={() => setShowIntros((v) => !v)}
+            className="flex items-center gap-2 group mb-0"
+          >
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 group-hover:text-muted-foreground/70 transition-colors">
+              Suggested intro ask
+            </span>
+            <span className="text-[10px] font-medium tabular-nums rounded-full bg-foreground/[0.06] text-foreground/40 px-1.5 py-px">
+              {activeFacilitators.length}
+            </span>
+            <span className="text-[10px] text-muted-foreground/30 group-hover:text-muted-foreground/50 transition-colors">
+              {showIntros ? "Hide" : "Show"}
+            </span>
+          </button>
+
+          {showIntros && (
+            <div className="flex flex-col gap-2 mt-2.5">
+              {activeFacilitators.map((f, i) => (
+                <FacilitatorAskBlock key={i} facilitator={f} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Error message */}
       {state === "error" && errorMsg && (

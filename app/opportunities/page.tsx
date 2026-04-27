@@ -2,7 +2,7 @@ import Link from "next/link"
 import { getAgencyProfile, getClients, getLatestAnalysesForClients, getAllRelationshipSignalsForUser, MVP_USER_ID } from "@/lib/db"
 import { OpportunitiesList } from "@/components/opportunities-list"
 import type { OpportunityRow } from "@/components/opportunities-list"
-import type { Analysis, OpportunityWarmPath, WarmPath } from "@/lib/types"
+import type { Analysis, Client, NamedIntro, OpportunityWarmPath, WarmPath } from "@/lib/types"
 import { confidenceFromScore } from "@/lib/scoring"
 import { computeWarmPaths } from "@/lib/warm-paths"
 import { WarmPaths } from "@/components/warm-paths"
@@ -19,13 +19,83 @@ function deriveScore(analysis: Analysis): number {
 }
 
 // ---------------------------------------------------------------------------
+// Named intro helpers
+// ---------------------------------------------------------------------------
+
+/** Title-case a normalized (lowercase) entity name for use in prose. */
+function titleCase(str: string): string {
+  return str.replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+/**
+ * Generate named, actionable intro suggestions for a specific warm path,
+ * scoped to a given target client (the one with the opportunity).
+ *
+ * Rules:
+ *  1. Named contact at source client → reference them by name
+ *  2. No contact → generic "your contact at…"
+ *  3. Named people at target → surface as possible intro candidates (cautious wording)
+ *  4. Never invent names or imply a connection that isn't in the data
+ */
+function generateNamedIntros(
+  path: WarmPath,
+  currentClientId: string,
+  currentClientName: string,
+  clientMap: Map<string, Client>,
+  personSignalsByClient: Map<string, string[]>,
+): NamedIntro[] {
+  const intros: NamedIntro[] = []
+  const targetPeople = (personSignalsByClient.get(currentClientId) ?? [])
+    .map(titleCase)
+    .slice(0, 3)
+
+  const viaDisplay = titleCase(path.entityName)
+  const sourceRefs = path.clients.filter((c) => c.id !== currentClientId)
+
+  for (const sourceRef of sourceRefs) {
+    const fullClient = clientMap.get(sourceRef.id)
+    const sourceContact = fullClient?.contact?.name ?? null
+
+    let suggestedAsk: string
+    let confidence: NamedIntro["confidence"]
+
+    if (sourceContact) {
+      if (targetPeople.length > 0) {
+        const peopleList = targetPeople.slice(0, 2).join(" or ")
+        suggestedAsk = `Ask ${sourceContact} at ${sourceRef.name} whether they may be able to introduce you to ${peopleList} at ${currentClientName} — worth asking given the shared connection via ${viaDisplay}.`
+        confidence = "high"
+      } else {
+        suggestedAsk = `Ask ${sourceContact} at ${sourceRef.name} whether they can introduce you to someone relevant at ${currentClientName}, referencing the shared connection via ${viaDisplay}.`
+        confidence = "medium"
+      }
+    } else {
+      if (targetPeople.length > 0) {
+        const peopleList = targetPeople.slice(0, 2).join(" or ")
+        suggestedAsk = `Ask your contact at ${sourceRef.name} whether they know ${peopleList} at ${currentClientName} — this may be a possible path via ${viaDisplay}.`
+        confidence = "medium"
+      } else {
+        suggestedAsk = `Ask your contact at ${sourceRef.name} whether they know anyone at ${currentClientName}, referencing the shared connection via ${viaDisplay}.`
+        confidence = "low"
+      }
+    }
+
+    intros.push({
+      sourceClient: sourceRef.name,
+      sourceContact,
+      viaEntity: viaDisplay,
+      suggestedAsk,
+      confidence,
+      targetPeople: targetPeople.length > 0 ? targetPeople : undefined,
+    })
+  }
+
+  return intros
+}
+
+// ---------------------------------------------------------------------------
 // Warm path helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Generates a human-readable suggested approach for making a warm intro,
- * given the entity type and the names of the other clients in the path.
- */
 function buildSuggestedApproach(path: WarmPath, currentClientId: string): string {
   const others = path.clients
     .filter((c) => c.id !== currentClientId)
@@ -38,7 +108,7 @@ function buildSuggestedApproach(path: WarmPath, currentClientId: string): string
       ? others[0]
       : `${others.slice(0, -1).join(", ")} and ${others[others.length - 1]}`
 
-  const via = path.entityName
+  const via = titleCase(path.entityName)
 
   switch (path.entityType) {
     case "investor":
@@ -56,9 +126,6 @@ function buildSuggestedApproach(path: WarmPath, currentClientId: string): string
   }
 }
 
-/**
- * Score bonus from warm paths: strong +15, medium +10, weak +5, capped at +20 total.
- */
 function warmBonus(paths: OpportunityWarmPath[]): number {
   let bonus = 0
   for (const p of paths) {
@@ -70,11 +137,13 @@ function warmBonus(paths: OpportunityWarmPath[]): number {
 }
 
 /**
- * Splits the global warm paths into a per-client index.
- * For each client in a path, emits an OpportunityWarmPath pointing at the other clients.
+ * Splits global warm paths into a per-client index, attaching named intros
+ * derived from client contact info and person-type relationship signals.
  */
 function buildClientWarmPathIndex(
   warmPaths: WarmPath[],
+  clientMap: Map<string, Client>,
+  personSignalsByClient: Map<string, string[]>,
 ): Map<string, OpportunityWarmPath[]> {
   const index = new Map<string, OpportunityWarmPath[]>()
 
@@ -83,13 +152,22 @@ function buildClientWarmPathIndex(
       const otherClients = path.clients.filter((c) => c.id !== pathClient.id)
       if (otherClients.length === 0) continue
 
+      const targetClientName = clientMap.get(pathClient.id)?.name ?? pathClient.id
+
       const entry: OpportunityWarmPath = {
-        viaEntity: path.entityName,
+        viaEntity: titleCase(path.entityName),
         viaType: path.entityType,
         sourceClients: otherClients.map((c) => c.name).join(", "),
         strength: path.strength,
         explanation: path.whyItMatters,
         suggestedApproach: buildSuggestedApproach(path, pathClient.id),
+        namedIntros: generateNamedIntros(
+          path,
+          pathClient.id,
+          targetClientName,
+          clientMap,
+          personSignalsByClient,
+        ),
       }
 
       const existing = index.get(pathClient.id) ?? []
@@ -143,8 +221,25 @@ export default async function OpportunitiesPage() {
         console.log(`WARM PATHS: ${warmPaths.length} paths from ${allSignals.length} signals`)
       }
 
-      // Build per-client warm path index (O(n) split of global paths)
-      const clientWarmPathIndex = buildClientWarmPathIndex(warmPaths)
+      // Index clients by id for O(1) contact + connection lookup
+      const clientMap = new Map<string, Client>(clients.map((c) => [c.id, c]))
+
+      // Index person-type signals by target client for named intro candidate lookup
+      const personSignalsByClient = new Map<string, string[]>()
+      for (const sig of allSignals) {
+        if (sig.entityType === "person") {
+          const existing = personSignalsByClient.get(sig.clientId) ?? []
+          existing.push(sig.entityName)
+          personSignalsByClient.set(sig.clientId, existing)
+        }
+      }
+
+      // Build per-client warm path index with named intros attached
+      const clientWarmPathIndex = buildClientWarmPathIndex(
+        warmPaths,
+        clientMap,
+        personSignalsByClient,
+      )
 
       rows = clients
         .map((client): OpportunityRow => {
@@ -250,7 +345,6 @@ export default async function OpportunitiesPage() {
           const outreach = analysis.outreach || top?.outreach || analysis.suggestedPitch || ""
 
           const baseScore = deriveScore(analysis)
-          // Boost score when warm paths exist — used for sorting and badge display
           const boostedScore = hasWarmPath
             ? Math.min(100, baseScore + warmBonus(rawWarmPaths))
             : baseScore
