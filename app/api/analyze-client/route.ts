@@ -110,7 +110,6 @@ export async function POST(req: Request) {
       const entities = await extractRelationshipSignals(
         base,
         relPages,
-        signals.website.homepage,
         signals.extracted?.logoAlts,
       )
 
@@ -147,7 +146,6 @@ export async function POST(req: Request) {
     const entities = await extractRelationshipSignals(
       base,
       relPages,
-      signals.website.homepage,
       signals.extracted?.logoAlts,
     )
 

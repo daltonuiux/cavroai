@@ -444,9 +444,9 @@ function AnalysisResults({
         </div>
       </details>
 
-      {/* Relationship signals — shown outside the "Full breakdown" details so it's always accessible */}
+      {/* Relationship signals — always visible below the breakdown */}
       {relSignals.length > 0 && (
-        <RelationshipSignalsDebug signals={relSignals} />
+        <RelationshipSignalsPanel signals={relSignals} />
       )}
     </div>
   )
@@ -710,67 +710,89 @@ function SignalsDebug({
 }
 
 // ---------------------------------------------------------------------------
-// Relationship signals debug panel
+// Relationship signals panel — grouped by relationship type
 // ---------------------------------------------------------------------------
 
-const ENTITY_TYPE_LABEL: Record<string, string> = {
-  partner:     "Partner",
-  integration: "Integration",
-  customer:    "Customer",
-  investor:    "Investor",
-  tool:        "Tool",
-  person:      "Person",
+/** Display config for each relationship_type value */
+const REL_TYPE_META: Record<string, { label: string; pillColor: string; nameColor: string }> = {
+  customer: {
+    label:     "Customers",
+    pillColor: "bg-emerald-500/10",
+    nameColor: "text-emerald-700 dark:text-emerald-400",
+  },
+  partner: {
+    label:     "Partners",
+    pillColor: "bg-sky-500/10",
+    nameColor: "text-sky-700 dark:text-sky-400",
+  },
+  uses: {
+    label:     "Integrations",
+    pillColor: "bg-foreground/[0.05]",
+    nameColor: "text-foreground/60",
+  },
+  // Legacy values — kept for rows stored before the schema update
+  invested_by: {
+    label:     "Investors",
+    pillColor: "bg-amber-500/10",
+    nameColor: "text-amber-700 dark:text-amber-400",
+  },
+  mentioned: {
+    label:     "Mentioned",
+    pillColor: "bg-foreground/[0.04]",
+    nameColor: "text-foreground/40",
+  },
 }
 
-const ENTITY_TYPE_COLOR: Record<string, string> = {
-  investor:    "text-emerald-600 dark:text-emerald-400",
-  customer:    "text-emerald-600 dark:text-emerald-400",
-  partner:     "text-sky-600 dark:text-sky-400",
-  integration: "text-sky-600 dark:text-sky-400",
-  tool:        "text-muted-foreground/60",
-  person:      "text-muted-foreground/60",
-}
+const REL_TYPE_ORDER = ["customer", "partner", "uses", "invested_by", "mentioned"]
 
-function RelationshipSignalsDebug({ signals }: { signals: RelationshipSignal[] }) {
-  // Group by entity_type
+function RelationshipSignalsPanel({ signals }: { signals: RelationshipSignal[] }) {
+  // Group by relationship_type (fall back to entity_type for legacy rows)
   const groups: Record<string, RelationshipSignal[]> = {}
   for (const s of signals) {
-    if (!groups[s.entityType]) groups[s.entityType] = []
-    groups[s.entityType].push(s)
+    const key = s.relationshipType ?? s.entityType
+    if (!groups[key]) groups[key] = []
+    groups[key].push(s)
   }
 
+  // Stable sort order
+  const orderedKeys = [
+    ...REL_TYPE_ORDER.filter((k) => groups[k]),
+    ...Object.keys(groups).filter((k) => !REL_TYPE_ORDER.includes(k)),
+  ]
+
   return (
-    <details className="group overflow-hidden rounded-md border border-dashed border-border bg-background">
-      <summary className="flex cursor-pointer select-none list-none items-center justify-between px-4 py-3 text-[11px] font-medium text-muted-foreground/40 transition-colors hover:text-muted-foreground/60">
-        <span>Relationship signals ({signals.length})</span>
-        <ChevronDown className="size-3 transition-transform group-open:rotate-180" />
-      </summary>
-      <div className="border-t border-dashed border-border px-4 pt-3 pb-4 flex flex-col gap-3">
-        {Object.entries(groups).map(([type, items]) => (
-          <div key={type}>
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40">
-              {ENTITY_TYPE_LABEL[type] ?? type} ({items.length})
+    <div className="rounded-md border border-border bg-background px-4 py-3.5 flex flex-col gap-3.5">
+      <p className="text-[11px] font-semibold text-foreground/80">
+        Relationships found{" "}
+        <span className="font-normal text-muted-foreground/50">({signals.length})</span>
+      </p>
+
+      {orderedKeys.map((key) => {
+        const items = groups[key]
+        const meta = REL_TYPE_META[key] ?? {
+          label:     key,
+          pillColor: "bg-foreground/[0.04]",
+          nameColor: "text-foreground/50",
+        }
+        return (
+          <div key={key}>
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">
+              {meta.label} ({items.length})
             </p>
-            <ul className="flex flex-col gap-0.5">
+            <div className="flex flex-wrap gap-1.5">
               {items.map((s) => (
-                <li key={s.id} className="flex items-start gap-2">
-                  <span className={`text-[11px] font-medium ${ENTITY_TYPE_COLOR[s.entityType] ?? "text-muted-foreground/60"}`}>
-                    {s.entityName}
-                  </span>
-                  {s.sourceContext && (
-                    <span className="text-[10px] text-muted-foreground/35 truncate italic">
-                      &ldquo;{s.sourceContext.slice(0, 60)}&rdquo;
-                    </span>
-                  )}
-                  <span className={`ml-auto shrink-0 text-[10px] ${s.confidence === "high" ? "text-emerald-600/60" : "text-muted-foreground/30"}`}>
-                    {s.confidence}
-                  </span>
-                </li>
+                <span
+                  key={s.id}
+                  title={s.sourceContext ? `"${s.sourceContext.slice(0, 80)}"` : undefined}
+                  className={`inline-flex items-center rounded px-2 py-1 text-[11px] font-medium capitalize ${meta.pillColor} ${meta.nameColor}`}
+                >
+                  {s.entityName}
+                </span>
               ))}
-            </ul>
+            </div>
           </div>
-        ))}
-      </div>
-    </details>
+        )
+      })}
+    </div>
   )
 }

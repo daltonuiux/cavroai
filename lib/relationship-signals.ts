@@ -1,19 +1,26 @@
 /**
- * Warm Path Engine — page scraping and entity extraction.
+ * Warm Path Engine — focused relationship extraction.
  *
- * Two-phase design for minimal latency impact:
- *   1. fetchRelationshipPages()    — runs in parallel with the main AI analysis call
- *   2. extractRelationshipSignals() — called after both complete (~3s haiku call)
+ * Two-phase design:
+ *   1. fetchRelationshipPages()    — fetches high-signal pages in parallel with analysis
+ *   2. extractRelationshipSignals() — extracts company names from those pages only
+ *
+ * Strategy:
+ *   Only extract from: /customers, /case-studies, /partners, /integrations
+ *   Also use logo img alt texts from those pages (logo walls = structured company lists)
+ *   Homepage logo alts (from signals.extracted.logoAlts) are accepted as a structured signal
+ *
+ *   Do NOT use: homepage prose, /about, /team, /blog, /investors
  *
  * Entity schema (normalized):
- *   entity_type:       "person" | "company" | "investor" | "partner" | "tool"
- *   relationship_type: "uses" | "partner" | "customer" | "invested_by" | "employee" | "mentioned"
+ *   entity_type:       "company" | "partner" | "tool"
+ *   relationship_type: "customer" | "partner" | "uses"
  */
 
 import type { EntityType, RelationshipSignalType } from "./types"
 
 // ---------------------------------------------------------------------------
-// Page manifest
+// Page manifest — high-signal dedicated pages only
 // ---------------------------------------------------------------------------
 
 interface PageManifest {
@@ -24,13 +31,10 @@ interface PageManifest {
 }
 
 const PAGES_TO_SCAN: PageManifest[] = [
-  { path: "/about",        label: "About",          defaultEntityType: "person",  defaultRelationshipType: "employee"   },
-  { path: "/team",         label: "Team",           defaultEntityType: "person",  defaultRelationshipType: "employee"   },
-  { path: "/partners",     label: "Partners",       defaultEntityType: "partner", defaultRelationshipType: "partner"    },
-  { path: "/integrations", label: "Integrations",   defaultEntityType: "tool",    defaultRelationshipType: "uses"       },
-  { path: "/customers",    label: "Customers",      defaultEntityType: "company", defaultRelationshipType: "customer"   },
-  { path: "/case-studies", label: "Case Studies",   defaultEntityType: "company", defaultRelationshipType: "customer"   },
-  { path: "/investors",    label: "Investors",      defaultEntityType: "investor",defaultRelationshipType: "invested_by"},
+  { path: "/customers",    label: "Customers",    defaultEntityType: "company", defaultRelationshipType: "customer" },
+  { path: "/case-studies", label: "Case Studies", defaultEntityType: "company", defaultRelationshipType: "customer" },
+  { path: "/partners",     label: "Partners",     defaultEntityType: "partner", defaultRelationshipType: "partner"  },
+  { path: "/integrations", label: "Integrations", defaultEntityType: "tool",    defaultRelationshipType: "uses"     },
 ]
 
 const FETCH_TIMEOUT_MS = 6000
@@ -44,11 +48,13 @@ export interface PageData {
   label: string
   defaultEntityType: EntityType
   defaultRelationshipType: RelationshipSignalType
+  /** Stripped text content, up to 4000 chars */
   text: string
+  /** Company names extracted from img alt attributes on this page */
+  logoAlts: string[]
 }
 
 export interface ExtractedEntity {
-  /** Normalized: lowercase, trimmed, punctuation removed */
   entityName: string
   entityType: EntityType
   relationshipType: RelationshipSignalType
@@ -74,10 +80,6 @@ export function normalizeEntityName(name: string): string {
     .trim()
 }
 
-/**
- * Generic single-word and phrase names that should be discarded.
- * Checked against the NORMALIZED (lowercase, no-punct) entity name.
- */
 const WEAK_GENERIC_NAMES = new Set([
   // Generic product / tech words
   "ai", "platform", "solution", "solutions", "app", "application", "tool", "tools",
@@ -90,22 +92,29 @@ const WEAK_GENERIC_NAMES = new Set([
   // Generic tech terms
   "cloud", "api", "saas", "data", "analytics", "dashboard", "workflow",
   "automation", "integration", "integrations", "connector", "infrastructure",
-  // Nav / UI words that slip through title-case checks
+  // Nav / UI words
   "new", "all", "our", "your", "the", "this", "that", "with", "more",
   "get started", "learn more", "sign up", "log in", "about us", "contact us",
-  "read more", "view all", "see all",
+  "read more", "view all", "see all", "case study", "case studies",
 ])
 
-/** Returns true if the entity is too generic to be a useful relationship signal. */
 function isWeakGenericEntity(normalizedName: string): boolean {
-  if (normalizedName.length < 3) return true
+  if (normalizedName.length < 2) return true
   if (WEAK_GENERIC_NAMES.has(normalizedName)) return true
-  if (normalizedName.split(" ").length > 4) return true
+  if (normalizedName.split(" ").length > 5) return true
   return false
 }
 
+// UI/nav phrases that should be discarded even if title-cased
+const GENERIC_UI_NAMES = new Set([
+  "About Us", "Contact Us", "Learn More", "Get Started", "Sign Up", "Log In",
+  "Our Team", "Our Partners", "Our Customers", "Case Study", "Case Studies",
+  "Read More", "View All", "See All", "Privacy Policy", "Terms of Service",
+  "Schedule Demo", "Book Demo", "Request Demo", "Watch Demo",
+])
+
 // ---------------------------------------------------------------------------
-// HTML utilities (self-contained — no import from signals.ts)
+// HTML utilities
 // ---------------------------------------------------------------------------
 
 async function fetchPage(url: string): Promise<string | null> {
@@ -142,13 +151,42 @@ function extractText(html: string): string {
     .trim()
 }
 
+/**
+ * Extract company names from img alt attributes on a page.
+ * Logo walls on customer/partner/integration pages are structured signals.
+ */
+function extractLogoAlts(html: string): string[] {
+  const alts: string[] = []
+  const seen = new Set<string>()
+  for (const m of html.matchAll(/<img[^>]+alt=["']([^"']{2,60})["'][^>]*>/gi)) {
+    const raw = m[1].trim()
+    if (
+      /logo$/i.test(raw) ||
+      (
+        /^[A-Z]/.test(raw) &&
+        !/screenshot|photo|banner|background|graphic|placeholder|illustration|avatar|headshot|portrait|arrow|chevron|star|check|icon|spinner|loader|button|badge/i.test(raw)
+      )
+    ) {
+      const name = raw.replace(/\s+logo\s*$/i, "").trim()
+      const key = name.toLowerCase()
+      if (name.length >= 2 && name.length <= 40 && !seen.has(key)) {
+        seen.add(key)
+        alts.push(name)
+      }
+    }
+    if (alts.length >= 30) break
+  }
+  return alts
+}
+
 // ---------------------------------------------------------------------------
-// Phase 1: fetch additional pages (runs in parallel with analyzeWebsite)
+// Phase 1: fetch high-signal pages (runs in parallel with analyzeWebsite)
 // ---------------------------------------------------------------------------
 
 /**
- * Fetches /about, /partners, /integrations, /customers, /case-studies in parallel.
- * Returns only pages that responded with content.
+ * Fetches /customers, /case-studies, /partners, /integrations in parallel.
+ * Also extracts logo alt texts from each page (logo walls = structured company lists).
+ * Returns only pages that responded with useful content (≥200 chars).
  */
 export async function fetchRelationshipPages(baseUrl: string): Promise<PageData[]> {
   const results = await Promise.all(
@@ -156,140 +194,89 @@ export async function fetchRelationshipPages(baseUrl: string): Promise<PageData[
       const url = `${baseUrl}${path}`
       const html = await fetchPage(url)
       if (!html || html.length < 200) return null
-      const text = extractText(html).slice(0, 3000)
-      return { url, label, defaultEntityType, defaultRelationshipType, text } satisfies PageData
+      const text = extractText(html).slice(0, 4000)
+      const logoAlts = extractLogoAlts(html)
+      return { url, label, defaultEntityType, defaultRelationshipType, text, logoAlts } satisfies PageData
     }),
   )
   return results.filter((p): p is PageData => p !== null)
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2: extract entities (AI or regex fallback)
+// Phase 2: extract entities — AI or regex fallback
 // ---------------------------------------------------------------------------
 
-const SYSTEM_PROMPT = `You extract named entities from website pages for B2B relationship mapping.
+const SYSTEM_PROMPT = `You extract B2B company names from structured sections of company websites for relationship mapping.
 
-ABSOLUTE RULES — no exceptions:
-1. Extract ONLY names that appear VERBATIM in the page text you are given.
-2. Do NOT infer, guess, or add any names not literally present in the text.
-3. Ignore generic words: ai, platform, solution, app, tool, software, product, service, system, startup, company, business, team, our, your, the, new, all, more, view, read, learn.
-4. Company/product names must be proper nouns (title-cased or known brand names like "HubSpot", "AWS").
-5. Person names must follow "FirstName LastName" — two words, both capitalised.
-6. Minimum name length: 3 characters.
-7. Maximum 30 entities total.
+STRICT RULES — no exceptions:
+1. Extract ONLY company/product names from structured lists, logo walls, or dedicated relationship pages.
+2. Do NOT extract from: prose paragraphs, navigation menus, footers, blog text, or generic product copy.
+3. Only extract names you are CERTAIN are real companies or products — never guess or infer.
+4. Each name must be a proper noun (title-cased or a known brand name like "HubSpot", "AWS").
+5. Do NOT include the source website's own company name.
+6. Prefer fewer, higher-confidence entries. Maximum 20 total.
 
-Entity types (entity_type):
-- "investor" — a named investor, VC firm, or backer
-- "partner"  — a named formal partner or reseller company
-- "tool"     — a named tool, integration, connector, or software product
-- "person"   — a named individual (founder, team member, advisor, executive)
-- "company"  — any other named company (customer, prospect, or referenced brand)
+SOURCE RULES — the page type tells you the relationship:
+- CUSTOMERS or CASE STUDIES page → every named company is a customer
+  entity_type: "company", relationship_type: "customer"
+- PARTNERS page → every named company is a formal partner
+  entity_type: "partner", relationship_type: "partner"
+- INTEGRATIONS page → every named tool or software is an integration
+  entity_type: "tool", relationship_type: "uses"
+- HOMEPAGE LOGO IMAGES → companies in logo walls are likely customers
+  entity_type: "company", relationship_type: "customer"
 
-Relationship types (relationship_type):
-- "invested_by" — investor or backer ("raised from", "backed by", "led by", "funded by")
-- "partner"     — formal partner or reseller ("partnered with", "certified partner", "reseller")
-- "uses"        — tool or integration in use ("built with", "powered by", "uses X", "integrates with")
-- "employee"    — team member, founder, advisor, or executive
-- "customer"    — customer, client, or case study subject ("how X achieved", "X uses us")
-- "mentioned"   — referenced but relationship is unclear
-
-Page context hints:
-- Partners page → prefer entity_type "partner", relationship_type "partner"
-- Integrations page → prefer entity_type "tool", relationship_type "uses"
-- Customers / Case Studies page → prefer entity_type "company", relationship_type "customer"
-- About page → prefer entity_type "person", relationship_type "employee"
-- Homepage → use best judgement
-
-Return ONLY valid JSON with no markdown or preamble:
+Return ONLY valid JSON, no markdown:
 {
   "entities": [
     {
-      "name": "exact verbatim name from text",
-      "entity_type": "investor | partner | tool | person | company",
-      "relationship_type": "invested_by | partner | uses | employee | customer | mentioned",
+      "name": "Exact company name",
+      "entity_type": "company | partner | tool",
+      "relationship_type": "customer | partner | uses",
       "sourceUrl": "page URL",
-      "context": "short phrase (≤12 words) from the text where this name appears",
+      "context": "brief phrase (≤12 words) showing where this name appeared",
       "confidence": "high | medium | low"
     }
   ]
 }
 
-If no clear entities are found: {"entities":[]}`
+If no structured entity names are found: {"entities":[]}`
 
-const VALID_ENTITY_TYPES = new Set<string>(["investor", "partner", "tool", "person", "company"])
-const VALID_RELATIONSHIP_TYPES = new Set<string>([
-  "invested_by", "partner", "uses", "employee", "customer", "mentioned",
-])
-
-// UI/nav phrases that pass title-case checks but aren't real entity names
-const GENERIC_UI_NAMES = new Set([
-  "About Us", "Contact Us", "Learn More", "Get Started", "Sign Up", "Log In",
-  "Our Team", "Our Partners", "Our Customers", "Case Study", "Case Studies",
-  "Read More", "View All", "See All", "Privacy Policy", "Terms of Service",
-])
-
-function isGenericUI(name: string): boolean {
-  return GENERIC_UI_NAMES.has(name) || name.split(" ").length > 4
-}
-
-/**
- * Extracts entity mentions from common relationship-signal phrases on the homepage.
- * Returns a short hints string to prepend to the AI prompt, or "" if nothing found.
- * Never throws.
- */
-function extractRelationshipPatternHints(homepageText: string): string {
-  const PATTERNS: Array<{ re: RegExp; label: string }> = [
-    { re: /trusted\s+by\s+([A-Z][a-zA-Z0-9\s,&.]{2,60}?)(?:\.|,|\band\b|$)/gi,        label: "trusted by"     },
-    { re: /used\s+by\s+([A-Z][a-zA-Z0-9\s,&.]{2,60}?)(?:\.|,|\band\b|$)/gi,            label: "used by"        },
-    { re: /backed\s+by\s+([A-Z][a-zA-Z0-9\s,&.]{2,60}?)(?:\.|,|\band\b|$)/gi,          label: "backed by"      },
-    { re: /raised\s+(?:from|by)\s+([A-Z][a-zA-Z0-9\s,&.]{2,60}?)(?:\.|,|\band\b|$)/gi, label: "raised from"    },
-    { re: /powered\s+by\s+([A-Z][a-zA-Z0-9\s,&.]{2,60}?)(?:\.|,|\band\b|$)/gi,         label: "powered by"     },
-    { re: /integrates?\s+with\s+([A-Z][a-zA-Z0-9\s,&.]{2,60}?)(?:\.|,|\band\b|$)/gi,   label: "integrates with"},
-    { re: /works?\s+with\s+([A-Z][a-zA-Z0-9\s,&.]{2,60}?)(?:\.|,|\band\b|$)/gi,        label: "works with"     },
-    { re: /partners?\s+with\s+([A-Z][a-zA-Z0-9\s,&.]{2,60}?)(?:\.|,|\band\b|$)/gi,     label: "partners with"  },
-  ]
-
-  const hints: string[] = []
-  for (const { re, label } of PATTERNS) {
-    re.lastIndex = 0
-    const m = re.exec(homepageText)
-    if (m) {
-      const entity = m[1].trim().replace(/[,.]$/, "")
-      if (entity.length >= 3 && entity.length <= 60) {
-        hints.push(`${label}: ${entity}`)
-      }
-    }
-  }
-
-  return hints.length > 0 ? `\nPattern hints from homepage copy:\n${hints.join("\n")}` : ""
-}
+const VALID_ENTITY_TYPES = new Set<string>(["company", "partner", "tool"])
+const VALID_RELATIONSHIP_TYPES = new Set<string>(["customer", "partner", "uses"])
 
 async function extractWithAI(
   pages: PageData[],
-  homepageText: string,
+  homepageLogoAlts: string[],
   apiKey: string,
-  logoAlts?: string[],
 ): Promise<ExtractedEntity[]> {
   const Anthropic = (await import("@anthropic-ai/sdk")).default
   const anthropic = new Anthropic({ apiKey })
 
-  const patternHints = extractRelationshipPatternHints(homepageText)
-  const logoHints =
-    logoAlts && logoAlts.length > 0
-      ? `\nLogo images found on homepage (possible partners/customers): ${logoAlts.join(", ")}`
-      : ""
+  const blocks: string[] = []
 
-  const pageBlocks = [
-    `=== PAGE: Homepage ===\n${homepageText.slice(0, 3000)}${patternHints}${logoHints}`,
-    ...pages.map((p) => `=== PAGE: ${p.label} (${p.url}) ===\n${p.text}`),
-  ].join("\n\n")
+  // Dedicated relationship pages — primary signal source
+  for (const p of pages) {
+    let block = `=== ${p.label.toUpperCase()} PAGE (${p.url}) ===\n${p.text}`
+    if (p.logoAlts.length > 0) {
+      block += `\n\nLogo images on this page: ${p.logoAlts.join(", ")}`
+    }
+    blocks.push(block)
+  }
+
+  // Homepage logo alts — structured signal from homepage logo walls
+  if (homepageLogoAlts.length > 0) {
+    blocks.push(`=== HOMEPAGE LOGO IMAGES (possible customers/partners) ===\n${homepageLogoAlts.join(", ")}`)
+  }
+
+  if (blocks.length === 0) return []
 
   const message = await Promise.race([
     anthropic.messages.create({
       model: "claude-haiku-4-5",
       max_tokens: 1000,
       system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: pageBlocks }],
+      messages: [{ role: "user", content: blocks.join("\n\n") }],
     }),
     new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error("Signal extraction timeout")), 15_000)
@@ -314,28 +301,33 @@ async function extractWithAI(
 
   const results: ExtractedEntity[] = []
   for (const e of parsed.entities ?? []) {
-    if (!e.name || e.name.length < 3 || isGenericUI(e.name)) continue
+    if (!e.name || e.name.length < 2 || GENERIC_UI_NAMES.has(e.name)) continue
 
     const normalized = normalizeEntityName(e.name)
     if (isWeakGenericEntity(normalized)) continue
 
+    // Only accept the relationship types this extractor cares about
+    const relType = VALID_RELATIONSHIP_TYPES.has(e.relationship_type)
+      ? e.relationship_type as RelationshipSignalType
+      : "customer" as RelationshipSignalType
+
+    const entType = VALID_ENTITY_TYPES.has(e.entity_type)
+      ? e.entity_type as EntityType
+      : "company" as EntityType
+
     results.push({
-      entityName: normalized,
-      entityType: (VALID_ENTITY_TYPES.has(e.entity_type)
-        ? e.entity_type
-        : "company") as EntityType,
-      relationshipType: (VALID_RELATIONSHIP_TYPES.has(e.relationship_type)
-        ? e.relationship_type
-        : "mentioned") as RelationshipSignalType,
-      sourceUrl: e.sourceUrl ?? "",
-      sourceContext: (e.context ?? "").slice(0, 120),
-      confidence: (["high", "medium", "low"].includes(e.confidence)
+      entityName:     normalized,
+      entityType:     entType,
+      relationshipType: relType,
+      sourceUrl:      e.sourceUrl ?? "",
+      sourceContext:  (e.context ?? "").slice(0, 120),
+      confidence:     (["high", "medium", "low"].includes(e.confidence)
         ? e.confidence
         : "medium") as ExtractedEntity["confidence"],
     })
   }
 
-  // Deduplicate by normalized name — keep first occurrence (highest context)
+  // Deduplicate by normalized name — keep first occurrence
   const seen = new Set<string>()
   return results.filter((e) => {
     if (seen.has(e.entityName)) return false
@@ -344,64 +336,54 @@ async function extractWithAI(
   })
 }
 
-function extractWithRegex(pages: PageData[], homepageText: string): ExtractedEntity[] {
+function extractWithRegex(
+  pages: PageData[],
+  homepageLogoAlts: string[],
+): ExtractedEntity[] {
   const entities: ExtractedEntity[] = []
 
-  const allPages: PageData[] = [
-    {
-      url: "homepage",
-      label: "Homepage",
-      defaultEntityType: "tool",
-      defaultRelationshipType: "uses",
-      text: homepageText.slice(0, 2000),
-    },
-    ...pages,
-  ]
+  // Process each dedicated page
+  for (const page of pages) {
+    // Logo alts from this page — high-confidence structured signal
+    for (const alt of page.logoAlts) {
+      const normalized = normalizeEntityName(alt)
+      if (!isWeakGenericEntity(normalized)) {
+        entities.push({
+          entityName:       normalized,
+          entityType:       page.defaultEntityType,
+          relationshipType: page.defaultRelationshipType,
+          sourceUrl:        page.url,
+          sourceContext:    `Logo: ${alt}`,
+          confidence:       "medium",
+        })
+      }
+    }
 
-  for (const page of allPages) {
+    // Short, title-cased lines — likely company names in lists
     const lines = page.text.split(/[\n.]+/).map((l) => l.trim()).filter((l) => l.length > 0)
-
     for (const line of lines) {
-      // Short, title-cased lines on partner/tool pages = company/tool names
       if (
-        (page.defaultEntityType === "partner" || page.defaultEntityType === "tool") &&
-        line.length < 35 &&
+        line.length >= 2 &&
+        line.length < 40 &&
         /^[A-Z]/.test(line) &&
-        !/^(The|Our|Your|All|New|See|View|Get|Try|Read|Learn|About|Contact)/.test(line)
+        !GENERIC_UI_NAMES.has(line) &&
+        !/^(The|Our|Your|All|New|See|View|Get|Try|Read|Learn|About|Contact|How|Why|What|When|Schedule|Book|Request)/.test(line)
       ) {
         const normalized = normalizeEntityName(line)
         if (!isWeakGenericEntity(normalized)) {
           entities.push({
-            entityName: normalized,
-            entityType: page.defaultEntityType,
+            entityName:       normalized,
+            entityType:       page.defaultEntityType,
             relationshipType: page.defaultRelationshipType,
-            sourceUrl: page.url,
-            sourceContext: line,
-            confidence: "low",
+            sourceUrl:        page.url,
+            sourceContext:    line,
+            confidence:       "low",
           })
         }
       }
 
-      // "FirstName LastName" on about pages = team member
-      if (page.defaultEntityType === "person") {
-        const m = line.match(/^([A-Z][a-z]+ [A-Z][a-z]+)$/)
-        if (m && !GENERIC_UI_NAMES.has(m[1])) {
-          const normalized = normalizeEntityName(m[1])
-          if (!isWeakGenericEntity(normalized)) {
-            entities.push({
-              entityName: normalized,
-              entityType: "person",
-              relationshipType: "employee",
-              sourceUrl: page.url,
-              sourceContext: line,
-              confidence: "low",
-            })
-          }
-        }
-      }
-
-      // "How [Company] ..." on case study / customer pages = customer
-      if (page.defaultEntityType === "company") {
+      // "How [Company] ..." on case study pages
+      if (page.defaultRelationshipType === "customer") {
         const m = line.match(
           /^How\s+([A-Z][a-zA-Z0-9\s]{2,25})\s+(reduced|increased|grew|scaled|built|cut|saved|achieved|improved)/i
         )
@@ -409,12 +391,12 @@ function extractWithRegex(pages: PageData[], homepageText: string): ExtractedEnt
           const normalized = normalizeEntityName(m[1].trim())
           if (!isWeakGenericEntity(normalized)) {
             entities.push({
-              entityName: normalized,
-              entityType: "company",
+              entityName:       normalized,
+              entityType:       "company",
               relationshipType: "customer",
-              sourceUrl: page.url,
-              sourceContext: line.slice(0, 80),
-              confidence: "medium",
+              sourceUrl:        page.url,
+              sourceContext:    line.slice(0, 80),
+              confidence:       "medium",
             })
           }
         }
@@ -422,7 +404,22 @@ function extractWithRegex(pages: PageData[], homepageText: string): ExtractedEnt
     }
   }
 
-  // Deduplicate by normalized name
+  // Homepage logo alts — structured signal
+  for (const alt of homepageLogoAlts) {
+    const normalized = normalizeEntityName(alt)
+    if (!isWeakGenericEntity(normalized)) {
+      entities.push({
+        entityName:       normalized,
+        entityType:       "company",
+        relationshipType: "customer",
+        sourceUrl:        "homepage",
+        sourceContext:    `Logo: ${alt}`,
+        confidence:       "low",
+      })
+    }
+  }
+
+  // Deduplicate by normalized name — logo alts (higher confidence) are pushed first
   const seen = new Set<string>()
   return entities.filter((e) => {
     if (seen.has(e.entityName)) return false
@@ -436,23 +433,28 @@ function extractWithRegex(pages: PageData[], homepageText: string): ExtractedEnt
 // ---------------------------------------------------------------------------
 
 /**
- * Extracts named relationship entities from pre-fetched pages.
- * Uses claude-haiku when ANTHROPIC_API_KEY is set; falls back to regex.
- * All entity names are normalized (lowercase, trimmed, no punctuation).
+ * Extracts named B2B relationship entities from pre-fetched high-signal pages.
  *
- * @param baseUrl      Origin of the website (for logging)
- * @param pages        Output of fetchRelationshipPages()
- * @param homepageText Already-scraped homepage text from gatherSignals()
- * @param logoAlts     Optional company names from logo img alt attributes
+ * Sources (in priority order):
+ *   1. /customers, /case-studies, /partners, /integrations pages (from fetchRelationshipPages)
+ *   2. Logo img alt texts from those pages (extracted during Phase 1)
+ *   3. Homepage logo alt texts (from signals.extracted.logoAlts — logo walls = structured signal)
+ *
+ * Never uses homepage prose — too noisy, too generic.
+ *
+ * @param baseUrl          Origin of the website (for logging)
+ * @param pages            Output of fetchRelationshipPages()
+ * @param homepageLogoAlts Logo alt texts from the homepage (signals.extracted.logoAlts)
  */
 export async function extractRelationshipSignals(
   baseUrl: string,
   pages: PageData[],
-  homepageText: string,
-  logoAlts?: string[],
+  homepageLogoAlts?: string[],
 ): Promise<ExtractedEntity[]> {
-  if (pages.length === 0 && homepageText.length < 100) {
-    console.log(`SIGNALS [${baseUrl}]: no pages to extract from`)
+  const logoAlts = homepageLogoAlts ?? []
+
+  if (pages.length === 0 && logoAlts.length === 0) {
+    console.log(`SIGNALS [${baseUrl}]: no pages and no logo alts — skipping extraction`)
     return []
   }
 
@@ -460,14 +462,17 @@ export async function extractRelationshipSignals(
     const apiKey = process.env.ANTHROPIC_API_KEY
 
     const entities = apiKey
-      ? await extractWithAI(pages, homepageText, apiKey, logoAlts)
-      : extractWithRegex(pages, homepageText)
+      ? await extractWithAI(pages, logoAlts, apiKey)
+      : extractWithRegex(pages, logoAlts)
 
-    // Discard entities with no source context — they're unverifiable generic mentions
+    // Discard entities with no source context — unverifiable
     const withContext = entities.filter((e) => e.sourceContext.length >= 3)
+
     console.log(
-      `SIGNALS [${baseUrl}]: extracted ${entities.length} entities (${withContext.length} with evidence) from ${pages.length + 1} pages`
+      `SIGNALS [${baseUrl}]: ${withContext.length} entities from ${pages.length} pages` +
+      (logoAlts.length > 0 ? ` + ${logoAlts.length} homepage logo alts` : "")
     )
+
     return withContext
   } catch (err) {
     console.error(`SIGNALS [${baseUrl}]: extraction error:`, err)
