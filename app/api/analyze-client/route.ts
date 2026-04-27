@@ -12,7 +12,8 @@ import { gatherSignals } from "@/lib/signals"
 import { analyzeWebsite } from "@/lib/ai"
 import { detectChanges, summarizeChanges } from "@/lib/diff"
 import { scoreOpportunity } from "@/lib/scoring"
-import { fetchRelationshipPages, extractRelationshipSignals } from "@/lib/relationship-signals"
+import { fetchRelationshipPages, extractRelationshipSignals, type ExtractedEntity } from "@/lib/relationship-signals"
+import { enrichPublicRelationships, mergeExtractedEntities } from "@/lib/enrich-relationships"
 import { extractClientProfile } from "@/lib/client-profile"
 import { createClient } from "@/lib/supabase/server"
 
@@ -86,6 +87,14 @@ export async function POST(req: Request) {
   try {
     const base = new URL(client.websiteUrl).origin
 
+    // Start public enrichment immediately — 6 parallel RSS queries + haiku call.
+    // Runs alongside gatherSignals and is typically done before analyzeWebsite starts.
+    const publicEnrichmentPromise = enrichPublicRelationships(client.name, base)
+      .catch((err): ExtractedEntity[] => {
+        console.error("Public enrichment error (non-fatal):", err)
+        return []
+      })
+
     // Gather signals and agency profile in parallel
     const [agencyProfile, signals] = await Promise.all([
       getAgencyProfile().catch(() => null),
@@ -94,9 +103,10 @@ export async function POST(req: Request) {
 
     // Always extract a lightweight client profile — runs even when score is too low
     // Also start fetching relationship pages in parallel (pure HTTP, fast)
-    const [clientProfile, relPages] = await Promise.all([
+    const [clientProfile, relPages, publicEntities] = await Promise.all([
       extractClientProfile(signals),
       fetchRelationshipPages(base),
+      publicEnrichmentPromise,
     ])
 
     // Deterministic opportunity score — gates the full AI analysis call
@@ -107,11 +117,12 @@ export async function POST(req: Request) {
       console.log("SCORE TOO LOW - PROFILE ONLY", score.total, client.websiteUrl)
 
       // Extract relationship signals even for profile-only — warm paths work with any status
-      const entities = await extractRelationshipSignals(
+      const pageEntities = await extractRelationshipSignals(
         base,
         relPages,
         signals.extracted?.logoAlts,
       )
+      const allEntities = mergeExtractedEntities(pageEntities, publicEntities)
 
       // Persist profile-only result and relationship signals in parallel
       await Promise.all([
@@ -122,7 +133,7 @@ export async function POST(req: Request) {
           signals,
           lastAnalyzedAt: new Date().toISOString(),
         }),
-        saveRelationshipSignals(client.id, userId, entities).catch((err) =>
+        saveRelationshipSignals(client.id, userId, allEntities).catch((err) =>
           console.error("Signal save error (non-fatal):", err)
         ),
       ])
@@ -142,12 +153,13 @@ export async function POST(req: Request) {
       agencyProfile ?? undefined,
     )
 
-    // Extract named entities from the fetched pages (haiku, ~3s)
-    const entities = await extractRelationshipSignals(
+    // Extract named entities from the fetched pages (haiku, ~3s) and merge with public enrichment
+    const pageEntities = await extractRelationshipSignals(
       base,
       relPages,
       signals.extracted?.logoAlts,
     )
+    const allEntities = mergeExtractedEntities(pageEntities, publicEntities)
 
     // Persist analysis result and relationship signals in parallel
     await Promise.all([
@@ -162,7 +174,7 @@ export async function POST(req: Request) {
         changeSummary,
         lastAnalyzedAt: new Date().toISOString(),
       }),
-      saveRelationshipSignals(client.id, userId, entities).catch((err) =>
+      saveRelationshipSignals(client.id, userId, allEntities).catch((err) =>
         console.error("Signal save error (non-fatal):", err)
       ),
     ])

@@ -25,6 +25,7 @@ const STRENGTH_BY_ENTITY: Partial<Record<EntityType, WarmPath["strength"]>> = {
 const STRENGTH_BY_RELATIONSHIP: Partial<Record<RelationshipSignalType, WarmPath["strength"]>> = {
   invested_by: "strong",
   customer:    "strong",
+  founder:     "strong",
   partner:     "medium",
   uses:        "weak",
   employee:    "weak",
@@ -95,6 +96,8 @@ const WHY_IT_MATTERS_BY_RELATIONSHIP: Partial<Record<RelationshipSignalType, str
     "A shared customer means overlapping ICP. This company may already trust your work or know your clients.",
   partner:
     "A shared partner creates a natural intro channel through the partner ecosystem.",
+  founder:
+    "A shared founder or founding-team connection creates one of the strongest possible intro paths.",
 }
 
 /** Why-it-matters copy for seed-boosted paths, keyed by seed relationship type */
@@ -123,6 +126,7 @@ function typeLabel(sig: RelationshipSignal): string {
     case "customer":    return "Customer"
     case "partner":     return "Partner"
     case "uses":        return "Uses"
+    case "founder":     return "Founder"
     case "employee":    return "Team member"
     case "mentioned":   return "Mentioned"
     // legacy entity-type fallbacks

@@ -207,6 +207,7 @@ export type RelationshipSignalType =
   | "customer"
   | "invested_by"
   | "employee"
+  | "founder"
   | "mentioned"
 
 export interface RelationshipSignal {
