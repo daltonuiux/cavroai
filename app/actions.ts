@@ -17,13 +17,20 @@ import { analyzeWebsite } from "@/lib/ai"
 import { detectChanges, summarizeChanges } from "@/lib/diff"
 import type { RelationshipType, ClientContact } from "@/lib/types"
 
+function ensureUrl(raw: string): string {
+  const trimmed = raw.trim()
+  if (!trimmed) return trimmed
+  // Add https if missing
+  return trimmed.startsWith("http") ? trimmed : `https://${trimmed}`
+}
+
 export async function addClient(
   name: string,
   websiteUrl: string
 ): Promise<{ clientId: string }> {
   if (!name || !websiteUrl) throw new Error("Name and website are required")
 
-  const client = await createClient({ name, websiteUrl })
+  const client = await createClient({ name, websiteUrl: ensureUrl(websiteUrl) })
 
   const analysis = await createAnalysis({
     clientId: client.id,
@@ -73,7 +80,7 @@ export async function addClient(
  */
 export async function addClientFromForm(formData: FormData): Promise<void> {
   const name = (formData.get("name") as string | null)?.trim() ?? ""
-  const websiteUrl = (formData.get("websiteUrl") as string | null)?.trim() ?? ""
+  const websiteUrl = ensureUrl((formData.get("websiteUrl") as string | null)?.trim() ?? "")
   const { clientId } = await addClient(name, websiteUrl)
   redirect(`/clients/${clientId}`)
 }

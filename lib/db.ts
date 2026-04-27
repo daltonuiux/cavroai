@@ -137,6 +137,48 @@ function rowToAnalysis(row: any): Analysis {
 }
 
 // ---------------------------------------------------------------------------
+// URL normalization helpers — used for client deduplication
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalizes a website URL to a bare domain for deduplication.
+ * Strips protocol, www., trailing slash, and query string.
+ *
+ * Examples:
+ *   https://www.acme.com/   →  acme.com
+ *   http://acme.com         →  acme.com
+ *   https://acme.com/path   →  acme.com/path
+ */
+export function normalizeWebsiteUrl(url: string): string {
+  return url
+    .toLowerCase()
+    .replace(/^https?:\/\//i, "")
+    .replace(/^www\./i, "")
+    .replace(/\/+$/, "")
+    .split("?")[0]
+    .trim()
+}
+
+/**
+ * Normalizes a website URL for consistent storage:
+ * - ensures https:// prefix
+ * - removes trailing slash
+ * - removes www. for uniformity
+ */
+function canonicalizeUrl(url: string): string {
+  const withProto = url.startsWith("http") ? url : `https://${url}`
+  try {
+    const u = new URL(withProto)
+    // Rebuild: https + hostname (no www) + pathname without trailing slash
+    const host = u.hostname.replace(/^www\./i, "")
+    const path = u.pathname.replace(/\/+$/, "")
+    return `https://${host}${path}${u.search}`
+  } catch {
+    return withProto.replace(/\/+$/, "")
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Client CRUD
 // ---------------------------------------------------------------------------
 
@@ -167,11 +209,29 @@ export async function getClientById(id: string): Promise<Client | null> {
 export async function createClient(
   input: Omit<Client, "id" | "createdAt">
 ): Promise<Client> {
+  const canonicalUrl = canonicalizeUrl(input.websiteUrl)
+  const targetDomain = normalizeWebsiteUrl(canonicalUrl)
+
+  // --- Duplicate check: compare normalized domains across all existing clients ---
+  const { data: existingRows } = await db()
+    .from("clients")
+    .select("*")
+    .order("created_at", { ascending: true })
+
+  for (const row of existingRows ?? []) {
+    if (normalizeWebsiteUrl(row.website_url) === targetDomain) {
+      console.log(
+        `CREATE CLIENT: domain "${targetDomain}" already exists — returning existing client ${row.id}`
+      )
+      return rowToClient(row)
+    }
+  }
+
   const { data, error } = await db()
     .from("clients")
     .insert({
       name: input.name,
-      website_url: input.websiteUrl,
+      website_url: canonicalUrl,          // store normalized URL
       relationship_type: input.relationshipType ?? null,
       services: input.services ?? null,
       contact: input.contact ?? null,

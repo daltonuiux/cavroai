@@ -251,6 +251,14 @@ export interface ExtractedSignals {
   hasCareersPage: boolean
   hasBlog: boolean
   hasPricing: boolean
+  /** <title> text — populated by extractPageSignals() */
+  pageTitle?: string
+  /** <meta name="description"> content — populated by extractPageSignals() */
+  metaDescription?: string
+  /** First meaningful paragraph outside nav/header/footer — cleaner than raw homepage text */
+  firstParagraph?: string
+  /** Company names extracted from logo img alt attributes on the homepage */
+  logoAlts?: string[]
 }
 
 export interface JobSignals {

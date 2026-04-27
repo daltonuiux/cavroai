@@ -55,7 +55,7 @@ If there is insufficient context to confidently identify real similar companies,
 
 function buildMessage(
   client: Pick<Client, "name" | "websiteUrl">,
-  signals: Signals,
+  signals: Signals | undefined,
   clientProfile?: ClientProfile,
 ): string {
   const parts: string[] = [
@@ -64,6 +64,7 @@ function buildMessage(
   ]
 
   // Prepend extracted profile when available — helps AI find better matches
+  // When signals are absent, the profile is the primary source of context
   if (clientProfile && (clientProfile.category || clientProfile.productDescription)) {
     parts.push("", "=== COMPANY PROFILE (extracted) ===")
     if (clientProfile.category) parts.push(`Category: ${clientProfile.category}`)
@@ -73,35 +74,39 @@ function buildMessage(
     if (clientProfile.keywords.length) parts.push(`Keywords: ${clientProfile.keywords.join(", ")}`)
   }
 
-  // Structured signals
-  const ex = signals.extracted
-  if (ex) {
-    const flags: string[] = []
-    if (ex.hasPricing)     flags.push("has pricing page")
-    if (ex.hasBlog)        flags.push("active blog")
-    if (ex.hasCareersPage) flags.push("careers page")
-    if (ex.keywords.length) flags.push(`keywords: ${ex.keywords.join(", ")}`)
-    if (flags.length) parts.push(`Website signals: ${flags.join(" | ")}`)
-    if (ex.headings.length) {
-      parts.push(`Page headings: ${ex.headings.slice(0, 6).join(" / ")}`)
+  if (signals) {
+    // Structured signals
+    const ex = signals.extracted
+    if (ex) {
+      const flags: string[] = []
+      if (ex.hasPricing)     flags.push("has pricing page")
+      if (ex.hasBlog)        flags.push("active blog")
+      if (ex.hasCareersPage) flags.push("careers page")
+      if (ex.keywords.length) flags.push(`keywords: ${ex.keywords.join(", ")}`)
+      if (flags.length) parts.push(`Website signals: ${flags.join(" | ")}`)
+      if (ex.headings.length) {
+        parts.push(`Page headings: ${ex.headings.slice(0, 6).join(" / ")}`)
+      }
     }
-  }
 
-  // Homepage text (truncated)
-  parts.push("", "=== HOMEPAGE TEXT ===")
-  parts.push(signals.website.homepage.slice(0, 2000))
+    // Homepage text (truncated)
+    if (signals.website.homepage) {
+      parts.push("", "=== HOMEPAGE TEXT ===")
+      parts.push(signals.website.homepage.slice(0, 2000))
+    }
 
-  // Job signals
-  const js = signals.jobSignals
-  if (js && js.roles.length > 0) {
-    parts.push("", `Open roles: ${js.roles.slice(0, 8).join(", ")}`)
-  }
+    // Job signals
+    const js = signals.jobSignals
+    if (js && js.roles.length > 0) {
+      parts.push("", `Open roles: ${js.roles.slice(0, 8).join(", ")}`)
+    }
 
-  // News signals
-  const ns = signals.newsSignals
-  if (ns?.hasNews && ns.articles.length > 0) {
-    parts.push("", "Recent news:")
-    ns.articles.forEach((a) => parts.push(`  - ${a.title}`))
+    // News signals
+    const ns = signals.newsSignals
+    if (ns?.hasNews && ns.articles.length > 0) {
+      parts.push("", "Recent news:")
+      ns.articles.forEach((a) => parts.push(`  - ${a.title}`))
+    }
   }
 
   parts.push(
@@ -123,14 +128,16 @@ function buildMessage(
  */
 export async function generateProspects(
   client: Pick<Client, "name" | "websiteUrl">,
-  signals: Signals,
+  signals: Signals | undefined,
   clientProfile?: ClientProfile,
 ): Promise<ProspectsResult> {
   const empty: ProspectsResult = { companyProfile: null, similarCompanies: [] }
 
-  // Require at least some homepage text — skip if nothing was scraped
-  if (!signals.website.homepage || signals.website.homepage.length < 100) {
-    console.log("PROSPECTS: insufficient homepage text, skipping")
+  // Need either signals with homepage text OR a usable client profile
+  const hasSignals = !!(signals?.website.homepage && signals.website.homepage.length >= 100)
+  const hasProfile = !!(clientProfile?.category || clientProfile?.productDescription)
+  if (!hasSignals && !hasProfile) {
+    console.log("PROSPECTS: no homepage text and no profile — skipping")
     return empty
   }
 

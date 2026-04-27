@@ -111,6 +111,7 @@ export async function POST(req: Request) {
         base,
         relPages,
         signals.website.homepage,
+        signals.extracted?.logoAlts,
       )
 
       // Persist profile-only result and relationship signals in parallel
@@ -147,6 +148,7 @@ export async function POST(req: Request) {
       base,
       relPages,
       signals.website.homepage,
+      signals.extracted?.logoAlts,
     )
 
     // Persist analysis result and relationship signals in parallel

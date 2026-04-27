@@ -30,10 +30,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Client not found" }, { status: 404 })
   }
 
-  // Require a completed or profile-only analysis with saved signals
+  // Gate: require either a full analysis or a usable client profile.
+  // A clientProfile is sufficient — we don't need strong opportunity signals for similar companies.
   const signals = analysis?.signals
-  const isReady = analysis?.status === "complete" || analysis?.status === "profile_only"
-  if (!signals || !isReady) {
+  const hasUsableProfile = !!(
+    analysis?.clientProfile?.category ||
+    analysis?.clientProfile?.productDescription
+  )
+  const isReady =
+    analysis?.status === "complete" ||
+    analysis?.status === "profile_only" ||
+    (analysis?.status === "insufficient_data" && hasUsableProfile)
+
+  if (!isReady) {
     return NextResponse.json(
       { error: "Run analysis first before generating prospects" },
       { status: 422 },

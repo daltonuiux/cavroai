@@ -70,15 +70,67 @@ function extractText(html: string): string {
 // Page signal extraction — works on raw HTML before tag-stripping
 // ---------------------------------------------------------------------------
 
+// Phrases that indicate nav/footer/cookie text — skip paragraphs that contain these
+const NAV_LIKE_RE = /^(home|about|contact|pricing|sign\s*(up|in)|log\s*(in|out)|get started|book|learn more|cookie|accept|privacy|terms|copyright|all rights)/i
+
 export function extractPageSignals(html: string): ExtractedSignals {
   // Strip scripts/styles so their content doesn't pollute tag matches
   const clean = html
     .replace(/<script[\s\S]*?<\/script>/gi, "")
     .replace(/<style[\s\S]*?<\/style>/gi, "")
 
+  // --- Structured fields (avoid nav/footer pollution) ---
+
   // Page title
   const titleMatch = clean.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
-  const title = titleMatch ? extractText(titleMatch[1]).trim() : ""
+  const pageTitle = titleMatch ? extractText(titleMatch[1]).trim() : undefined
+
+  // Meta description
+  const metaMatch =
+    clean.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']{1,300})["']/i) ??
+    clean.match(/<meta[^>]+content=["']([^"']{1,300})["'][^>]+name=["']description["']/i)
+  const metaDescription = metaMatch ? metaMatch[1].trim() : undefined
+
+  // First meaningful paragraph — strip nav/header/footer first
+  const bodyHtml = clean
+    .replace(/<nav[\s\S]*?<\/nav>/gi, "")
+    .replace(/<header[\s\S]*?<\/header>/gi, "")
+    .replace(/<footer[\s\S]*?<\/footer>/gi, "")
+
+  let firstParagraph: string | undefined
+  for (const m of bodyHtml.matchAll(/<p[^>]*>([\s\S]{40,800}?)<\/p>/gi)) {
+    const text = extractText(m[1]).trim()
+    if (
+      text.length >= 40 &&
+      !text.startsWith("©") &&
+      !NAV_LIKE_RE.test(text) &&
+      text.split(/[|•·]/).length < 4  // not a nav-style bullet list
+    ) {
+      firstParagraph = text.slice(0, 300)
+      break
+    }
+  }
+
+  // Logo alt text — company names from img alt on the homepage
+  const logoAlts: string[] = []
+  const seenAlts = new Set<string>()
+  for (const m of clean.matchAll(/<img[^>]+alt=["']([^"']{2,60})["'][^>]*>/gi)) {
+    const alt = m[1].trim()
+    // Likely a company logo: ends with "logo" or "Logo", or is a short proper noun
+    if (
+      /logo$/i.test(alt) ||
+      (/^[A-Z]/.test(alt) &&
+        !/screenshot|photo|banner|background|graphic|placeholder|illustration|avatar|headshot|portrait|arrow|chevron|star|check|icon|spinner|loader/i.test(alt))
+    ) {
+      const name = alt.replace(/\s+logo\s*$/i, "").trim()
+      const key = name.toLowerCase()
+      if (name.length >= 3 && name.length <= 40 && !seenAlts.has(key)) {
+        seenAlts.add(key)
+        logoAlts.push(name)
+      }
+    }
+    if (logoAlts.length >= 20) break
+  }
 
   // H1 and H2 text
   const h1s = [...clean.matchAll(/<h1[^>]*>([\s\S]*?)<\/h1>/gi)]
@@ -87,7 +139,7 @@ export function extractPageSignals(html: string): ExtractedSignals {
     .map((m) => extractText(m[1]).trim())
 
   const headings = [
-    ...(title ? [title] : []),
+    ...(pageTitle ? [pageTitle] : []),
     ...h1s,
     ...h2s,
   ]
@@ -111,6 +163,10 @@ export function extractPageSignals(html: string): ExtractedSignals {
     hasCareersPage: /href="[^"]*\/(careers|jobs)["/?]/.test(lower),
     hasBlog:        /href="[^"]*\/blog["/?]/.test(lower),
     hasPricing:     /href="[^"]*\/pricing["/?]/.test(lower),
+    pageTitle:      pageTitle || undefined,
+    metaDescription: metaDescription || undefined,
+    firstParagraph:  firstParagraph || undefined,
+    logoAlts:        logoAlts.length > 0 ? logoAlts : undefined,
   }
 }
 

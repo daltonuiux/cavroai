@@ -33,6 +33,16 @@ export default async function ClientPage({
 
   if (!client) notFound()
 
+  // Gate for similar companies: any analysis status is fine as long as a usable profile exists
+  const hasUsableProfile = !!(
+    analysis?.clientProfile?.category ||
+    analysis?.clientProfile?.productDescription
+  )
+  const canGenerateSimilar =
+    analysis?.status === "complete" ||
+    analysis?.status === "profile_only" ||
+    (analysis?.status === "insufficient_data" && hasUsableProfile)
+
   return (
     <div>
       <Link
@@ -62,16 +72,23 @@ export default async function ClientPage({
         )}
       </div>
 
+      {/* Data status strip — always shown when analysis exists */}
+      {analysis && analysis.status !== "pending" && (
+        <ClientDataStatusStrip
+          analysis={analysis}
+          signalCount={relSignals.length}
+          prospectCount={(prospects ?? []).length}
+        />
+      )}
+
       {!analysis || analysis.status === "pending" ? (
-        // No analysis yet (or a stuck pending from a previous after() attempt).
-        // Show empty state — spinner is only shown when the user actively requests analysis.
         <RunAnalysisButton clientId={client.id} />
       ) : analysis.status === "error" ? (
         <AnalysisError message={analysis.errorMessage} />
       ) : analysis.status === "insufficient_data" ? (
-        <AnalysisInsufficient />
+        <AnalysisInsufficient clientProfile={analysis.clientProfile} relSignalCount={relSignals.length} />
       ) : analysis.status === "profile_only" ? (
-        <AnalysisProfileOnly clientProfile={analysis.clientProfile} />
+        <AnalysisProfileOnly clientProfile={analysis.clientProfile} relSignalCount={relSignals.length} />
       ) : (
         <AnalysisResults
           analysis={analysis}
@@ -84,34 +101,125 @@ export default async function ClientPage({
         />
       )}
 
-      {/* Deal sourcing — similar companies to target */}
+      {/* Deal sourcing — similar companies */}
       <div className="mt-4">
         <SimilarCompanies
           clientId={client.id}
           initialProspects={prospects}
-          hasAnalysis={analysis?.status === "complete" || analysis?.status === "profile_only"}
+          hasAnalysis={canGenerateSimilar}
         />
       </div>
     </div>
   )
 }
 
-function AnalysisInsufficient() {
+// ---------------------------------------------------------------------------
+// Data status strip — always visible when analysis is not pending
+// ---------------------------------------------------------------------------
+
+const ANALYSIS_STATUS_LABELS: Record<string, string> = {
+  complete:          "Complete",
+  profile_only:      "Profile only",
+  insufficient_data: "Low data",
+  error:             "Error",
+  pending:           "Pending",
+}
+
+const ANALYSIS_STATUS_COLORS: Record<string, string> = {
+  complete:          "text-emerald-600 dark:text-emerald-400",
+  profile_only:      "text-sky-600 dark:text-sky-400",
+  insufficient_data: "text-muted-foreground/50",
+  error:             "text-destructive",
+  pending:           "text-amber-600 dark:text-amber-400",
+}
+
+function ClientDataStatusStrip({
+  analysis,
+  signalCount,
+  prospectCount,
+}: {
+  analysis: Analysis
+  signalCount: number
+  prospectCount: number
+}) {
+  const hasProfile = !!(
+    analysis.clientProfile?.category ||
+    analysis.clientProfile?.productDescription
+  )
+
+  const items = [
+    {
+      label: "Profile",
+      value: hasProfile ? "Extracted" : "Not extracted",
+      color: hasProfile ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground/35",
+    },
+    {
+      label: "Opportunity",
+      value: ANALYSIS_STATUS_LABELS[analysis.status] ?? analysis.status,
+      color: ANALYSIS_STATUS_COLORS[analysis.status] ?? "text-muted-foreground/50",
+    },
+    {
+      label: "Relationship signals",
+      value: signalCount > 0 ? `${signalCount} found` : "None found",
+      color: signalCount > 0 ? "text-sky-600 dark:text-sky-400" : "text-muted-foreground/35",
+    },
+    {
+      label: "Similar companies",
+      value: prospectCount > 0 ? `${prospectCount} generated` : "Not generated",
+      color: prospectCount > 0 ? "text-sky-600 dark:text-sky-400" : "text-muted-foreground/35",
+    },
+  ]
+
   return (
-    <div className="flex items-start gap-3 rounded-md border border-border bg-foreground/[0.02] p-4">
-      <AlertCircle className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-      <div>
-        <p className="text-[13px] font-medium text-foreground">Not enough data to analyse</p>
-        <p className="mt-0.5 text-[12px] text-muted-foreground">
-          The website didn&apos;t return enough signals (hiring, pricing, product, or meaningful content)
-          to generate a reliable analysis. Try re-analyzing once the site has more public content.
-        </p>
-      </div>
+    <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-border bg-foreground/[0.02] px-4 py-2.5">
+      {items.map((item) => (
+        <div key={item.label} className="flex items-center gap-1.5">
+          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/40">
+            {item.label}:
+          </span>
+          <span className={`text-[11px] font-semibold ${item.color}`}>{item.value}</span>
+        </div>
+      ))}
     </div>
   )
 }
 
-function AnalysisProfileOnly({ clientProfile }: { clientProfile?: ClientProfile }) {
+function AnalysisInsufficient({
+  clientProfile,
+  relSignalCount,
+}: {
+  clientProfile?: ClientProfile
+  relSignalCount: number
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-start gap-3 rounded-md border border-border bg-foreground/[0.02] p-4">
+        <AlertCircle className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <div>
+          <p className="text-[13px] font-medium text-foreground">Not enough signals to analyse</p>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
+            The website didn&apos;t return enough signals (hiring, pricing, product, or meaningful content)
+            to generate a reliable opportunity analysis.
+            {relSignalCount > 0 && ` ${relSignalCount} relationship signal${relSignalCount > 1 ? "s" : ""} were found and will appear in Warm Paths.`}
+            {" "}Try re-scanning once the site has more public content.
+          </p>
+        </div>
+      </div>
+      {/* Show extracted profile even for insufficient_data if available */}
+      {clientProfile && (clientProfile.category || clientProfile.productDescription) && (
+        <ClientProfileCard clientProfile={clientProfile} />
+      )}
+    </div>
+  )
+}
+
+function AnalysisProfileOnly({
+  clientProfile,
+  relSignalCount,
+}: {
+  clientProfile?: ClientProfile
+  relSignalCount: number
+}) {
   return (
     <div className="flex flex-col gap-3">
       {/* Explanation */}
@@ -122,53 +230,60 @@ function AnalysisProfileOnly({ clientProfile }: { clientProfile?: ClientProfile 
           <p className="mt-0.5 text-[12px] text-muted-foreground">
             Not enough hiring, pricing, or product signals for a full opportunity analysis. A company profile
             has been extracted below to power similar-company suggestions.
+            {relSignalCount > 0 && ` ${relSignalCount} relationship signal${relSignalCount > 1 ? "s" : ""} found — check Warm Paths.`}
           </p>
         </div>
       </div>
 
-      {/* Client profile card */}
       {clientProfile && (clientProfile.category || clientProfile.productDescription) && (
-        <div className="card-cavro rounded-md px-4 py-3.5 flex flex-col gap-3">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
-            Company Profile
-          </p>
+        <ClientProfileCard clientProfile={clientProfile} />
+      )}
+    </div>
+  )
+}
 
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded border border-border bg-border">
-            {clientProfile.category && (
-              <div className="bg-background px-3 py-2">
-                <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">Category</p>
-                <p className="text-[12px] text-foreground/80">{clientProfile.category}</p>
-              </div>
-            )}
-            {clientProfile.industry && (
-              <div className="bg-background px-3 py-2">
-                <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">Industry</p>
-                <p className="text-[12px] text-foreground/80">{clientProfile.industry}</p>
-              </div>
-            )}
-            {clientProfile.targetCustomer && (
-              <div className="col-span-2 bg-background px-3 py-2">
-                <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">Target customer</p>
-                <p className="text-[12px] text-foreground/80">{clientProfile.targetCustomer}</p>
-              </div>
-            )}
-            {clientProfile.productDescription && (
-              <div className="col-span-2 bg-background px-3 py-2">
-                <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">Description</p>
-                <p className="text-[12px] leading-relaxed text-foreground/80">{clientProfile.productDescription}</p>
-              </div>
-            )}
+function ClientProfileCard({ clientProfile }: { clientProfile: ClientProfile }) {
+  const isUnknown = (v?: string) => !v || v === "Unknown"
+  return (
+    <div className="card-cavro rounded-md px-4 py-3.5 flex flex-col gap-3">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+        Company Profile
+      </p>
+
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded border border-border bg-border">
+        {!isUnknown(clientProfile.category) && (
+          <div className="bg-background px-3 py-2">
+            <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">Category</p>
+            <p className="text-[12px] text-foreground/80">{clientProfile.category}</p>
           </div>
+        )}
+        {!isUnknown(clientProfile.industry) && (
+          <div className="bg-background px-3 py-2">
+            <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">Industry</p>
+            <p className="text-[12px] text-foreground/80">{clientProfile.industry}</p>
+          </div>
+        )}
+        {!isUnknown(clientProfile.targetCustomer) && (
+          <div className="col-span-2 bg-background px-3 py-2">
+            <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">Target customer</p>
+            <p className="text-[12px] text-foreground/80">{clientProfile.targetCustomer}</p>
+          </div>
+        )}
+        {!isUnknown(clientProfile.productDescription) && (
+          <div className="col-span-2 bg-background px-3 py-2">
+            <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">Description</p>
+            <p className="text-[12px] leading-relaxed text-foreground/80">{clientProfile.productDescription}</p>
+          </div>
+        )}
+      </div>
 
-          {clientProfile.keywords.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {clientProfile.keywords.map((kw) => (
-                <span key={kw} className="rounded px-1.5 py-px text-[10px] font-medium bg-foreground/[0.05] text-foreground/50">
-                  {kw}
-                </span>
-              ))}
-            </div>
-          )}
+      {clientProfile.keywords.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {clientProfile.keywords.map((kw) => (
+            <span key={kw} className="rounded px-1.5 py-px text-[10px] font-medium bg-foreground/[0.05] text-foreground/50">
+              {kw}
+            </span>
+          ))}
         </div>
       )}
     </div>
@@ -326,11 +441,13 @@ function AnalysisResults({
           {analysis.signals && (
             <SignalsDebug signals={analysis.signals} scoreBreakdown={scoreBreakdown} fitScore={analysis.fitScore} />
           )}
-          {relSignals.length > 0 && (
-            <RelationshipSignalsDebug signals={relSignals} />
-          )}
         </div>
       </details>
+
+      {/* Relationship signals — shown outside the "Full breakdown" details so it's always accessible */}
+      {relSignals.length > 0 && (
+        <RelationshipSignalsDebug signals={relSignals} />
+      )}
     </div>
   )
 }
@@ -625,7 +742,7 @@ function RelationshipSignalsDebug({ signals }: { signals: RelationshipSignal[] }
   return (
     <details className="group overflow-hidden rounded-md border border-dashed border-border bg-background">
       <summary className="flex cursor-pointer select-none list-none items-center justify-between px-4 py-3 text-[11px] font-medium text-muted-foreground/40 transition-colors hover:text-muted-foreground/60">
-        <span>Debug: Relationship signals ({signals.length})</span>
+        <span>Relationship signals ({signals.length})</span>
         <ChevronDown className="size-3 transition-transform group-open:rotate-180" />
       </summary>
       <div className="border-t border-dashed border-border px-4 pt-3 pb-4 flex flex-col gap-3">

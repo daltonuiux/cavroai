@@ -300,9 +300,10 @@ export function WarmPathsPage({ rows }: { rows: WarmPathRow[] }) {
   if (rows.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-border px-6 py-12 text-center">
-        <p className="text-[13px] font-medium text-foreground">No warm paths yet</p>
+        <p className="text-[13px] font-medium text-foreground">No shared relationship signals yet</p>
         <p className="mt-1 text-[12px] text-muted-foreground">
-          Run analysis on more clients to discover shared partners, tools, customers and investors.
+          Scan more clients to discover shared partners, tools, customers, and investors.
+          Warm paths appear when at least two clients share an entity.
         </p>
       </div>
     )

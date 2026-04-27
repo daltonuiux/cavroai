@@ -24,11 +24,13 @@ interface PageManifest {
 }
 
 const PAGES_TO_SCAN: PageManifest[] = [
-  { path: "/about",        label: "About",        defaultEntityType: "person",  defaultRelationshipType: "employee" },
-  { path: "/partners",     label: "Partners",     defaultEntityType: "partner", defaultRelationshipType: "partner"  },
-  { path: "/integrations", label: "Integrations", defaultEntityType: "tool",    defaultRelationshipType: "uses"     },
-  { path: "/customers",    label: "Customers",    defaultEntityType: "company", defaultRelationshipType: "customer" },
-  { path: "/case-studies", label: "Case Studies", defaultEntityType: "company", defaultRelationshipType: "customer" },
+  { path: "/about",        label: "About",          defaultEntityType: "person",  defaultRelationshipType: "employee"   },
+  { path: "/team",         label: "Team",           defaultEntityType: "person",  defaultRelationshipType: "employee"   },
+  { path: "/partners",     label: "Partners",       defaultEntityType: "partner", defaultRelationshipType: "partner"    },
+  { path: "/integrations", label: "Integrations",   defaultEntityType: "tool",    defaultRelationshipType: "uses"       },
+  { path: "/customers",    label: "Customers",      defaultEntityType: "company", defaultRelationshipType: "customer"   },
+  { path: "/case-studies", label: "Case Studies",   defaultEntityType: "company", defaultRelationshipType: "customer"   },
+  { path: "/investors",    label: "Investors",      defaultEntityType: "investor",defaultRelationshipType: "invested_by"},
 ]
 
 const FETCH_TIMEOUT_MS = 6000
@@ -230,16 +232,55 @@ function isGenericUI(name: string): boolean {
   return GENERIC_UI_NAMES.has(name) || name.split(" ").length > 4
 }
 
+/**
+ * Extracts entity mentions from common relationship-signal phrases on the homepage.
+ * Returns a short hints string to prepend to the AI prompt, or "" if nothing found.
+ * Never throws.
+ */
+function extractRelationshipPatternHints(homepageText: string): string {
+  const PATTERNS: Array<{ re: RegExp; label: string }> = [
+    { re: /trusted\s+by\s+([A-Z][a-zA-Z0-9\s,&.]{2,60}?)(?:\.|,|\band\b|$)/gi,        label: "trusted by"     },
+    { re: /used\s+by\s+([A-Z][a-zA-Z0-9\s,&.]{2,60}?)(?:\.|,|\band\b|$)/gi,            label: "used by"        },
+    { re: /backed\s+by\s+([A-Z][a-zA-Z0-9\s,&.]{2,60}?)(?:\.|,|\band\b|$)/gi,          label: "backed by"      },
+    { re: /raised\s+(?:from|by)\s+([A-Z][a-zA-Z0-9\s,&.]{2,60}?)(?:\.|,|\band\b|$)/gi, label: "raised from"    },
+    { re: /powered\s+by\s+([A-Z][a-zA-Z0-9\s,&.]{2,60}?)(?:\.|,|\band\b|$)/gi,         label: "powered by"     },
+    { re: /integrates?\s+with\s+([A-Z][a-zA-Z0-9\s,&.]{2,60}?)(?:\.|,|\band\b|$)/gi,   label: "integrates with"},
+    { re: /works?\s+with\s+([A-Z][a-zA-Z0-9\s,&.]{2,60}?)(?:\.|,|\band\b|$)/gi,        label: "works with"     },
+    { re: /partners?\s+with\s+([A-Z][a-zA-Z0-9\s,&.]{2,60}?)(?:\.|,|\band\b|$)/gi,     label: "partners with"  },
+  ]
+
+  const hints: string[] = []
+  for (const { re, label } of PATTERNS) {
+    re.lastIndex = 0
+    const m = re.exec(homepageText)
+    if (m) {
+      const entity = m[1].trim().replace(/[,.]$/, "")
+      if (entity.length >= 3 && entity.length <= 60) {
+        hints.push(`${label}: ${entity}`)
+      }
+    }
+  }
+
+  return hints.length > 0 ? `\nPattern hints from homepage copy:\n${hints.join("\n")}` : ""
+}
+
 async function extractWithAI(
   pages: PageData[],
   homepageText: string,
   apiKey: string,
+  logoAlts?: string[],
 ): Promise<ExtractedEntity[]> {
   const Anthropic = (await import("@anthropic-ai/sdk")).default
   const anthropic = new Anthropic({ apiKey })
 
+  const patternHints = extractRelationshipPatternHints(homepageText)
+  const logoHints =
+    logoAlts && logoAlts.length > 0
+      ? `\nLogo images found on homepage (possible partners/customers): ${logoAlts.join(", ")}`
+      : ""
+
   const pageBlocks = [
-    `=== PAGE: Homepage ===\n${homepageText.slice(0, 1500)}`,
+    `=== PAGE: Homepage ===\n${homepageText.slice(0, 3000)}${patternHints}${logoHints}`,
     ...pages.map((p) => `=== PAGE: ${p.label} (${p.url}) ===\n${p.text}`),
   ].join("\n\n")
 
@@ -402,11 +443,13 @@ function extractWithRegex(pages: PageData[], homepageText: string): ExtractedEnt
  * @param baseUrl      Origin of the website (for logging)
  * @param pages        Output of fetchRelationshipPages()
  * @param homepageText Already-scraped homepage text from gatherSignals()
+ * @param logoAlts     Optional company names from logo img alt attributes
  */
 export async function extractRelationshipSignals(
   baseUrl: string,
   pages: PageData[],
   homepageText: string,
+  logoAlts?: string[],
 ): Promise<ExtractedEntity[]> {
   if (pages.length === 0 && homepageText.length < 100) {
     console.log(`SIGNALS [${baseUrl}]: no pages to extract from`)
@@ -417,11 +460,15 @@ export async function extractRelationshipSignals(
     const apiKey = process.env.ANTHROPIC_API_KEY
 
     const entities = apiKey
-      ? await extractWithAI(pages, homepageText, apiKey)
+      ? await extractWithAI(pages, homepageText, apiKey, logoAlts)
       : extractWithRegex(pages, homepageText)
 
-    console.log(`SIGNALS [${baseUrl}]: extracted ${entities.length} entities from ${pages.length + 1} pages`)
-    return entities
+    // Discard entities with no source context — they're unverifiable generic mentions
+    const withContext = entities.filter((e) => e.sourceContext.length >= 3)
+    console.log(
+      `SIGNALS [${baseUrl}]: extracted ${entities.length} entities (${withContext.length} with evidence) from ${pages.length + 1} pages`
+    )
+    return withContext
   } catch (err) {
     console.error(`SIGNALS [${baseUrl}]: extraction error:`, err)
     return []
