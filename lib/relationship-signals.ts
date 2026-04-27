@@ -2,22 +2,33 @@
  * Warm Path Engine — page scraping and entity extraction.
  *
  * Two-phase design for minimal latency impact:
- *   1. fetchRelationshipPages()  — runs in parallel with the main AI analysis call
+ *   1. fetchRelationshipPages()    — runs in parallel with the main AI analysis call
  *   2. extractRelationshipSignals() — called after both complete (~3s haiku call)
+ *
+ * Entity schema (normalized):
+ *   entity_type:       "person" | "company" | "investor" | "partner" | "tool"
+ *   relationship_type: "uses" | "partner" | "customer" | "invested_by" | "employee" | "mentioned"
  */
 
-import type { EntityType } from "./types"
+import type { EntityType, RelationshipSignalType } from "./types"
 
 // ---------------------------------------------------------------------------
 // Page manifest
 // ---------------------------------------------------------------------------
 
-const PAGES_TO_SCAN = [
-  { path: "/about",        label: "About",        defaultType: "person"      as EntityType },
-  { path: "/partners",     label: "Partners",     defaultType: "partner"     as EntityType },
-  { path: "/integrations", label: "Integrations", defaultType: "integration" as EntityType },
-  { path: "/customers",    label: "Customers",    defaultType: "customer"    as EntityType },
-  { path: "/case-studies", label: "Case Studies", defaultType: "customer"    as EntityType },
+interface PageManifest {
+  path: string
+  label: string
+  defaultEntityType: EntityType
+  defaultRelationshipType: RelationshipSignalType
+}
+
+const PAGES_TO_SCAN: PageManifest[] = [
+  { path: "/about",        label: "About",        defaultEntityType: "person",  defaultRelationshipType: "employee" },
+  { path: "/partners",     label: "Partners",     defaultEntityType: "partner", defaultRelationshipType: "partner"  },
+  { path: "/integrations", label: "Integrations", defaultEntityType: "tool",    defaultRelationshipType: "uses"     },
+  { path: "/customers",    label: "Customers",    defaultEntityType: "company", defaultRelationshipType: "customer" },
+  { path: "/case-studies", label: "Case Studies", defaultEntityType: "company", defaultRelationshipType: "customer" },
 ]
 
 const FETCH_TIMEOUT_MS = 6000
@@ -29,16 +40,66 @@ const FETCH_TIMEOUT_MS = 6000
 export interface PageData {
   url: string
   label: string
-  defaultType: EntityType
+  defaultEntityType: EntityType
+  defaultRelationshipType: RelationshipSignalType
   text: string
 }
 
 export interface ExtractedEntity {
+  /** Normalized: lowercase, trimmed, punctuation removed */
   entityName: string
   entityType: EntityType
+  relationshipType: RelationshipSignalType
   sourceUrl: string
   sourceContext: string
   confidence: "high" | "medium" | "low"
+}
+
+// ---------------------------------------------------------------------------
+// Normalization
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalize entity names for deduplication and DB storage.
+ * Applies: lowercase → trim → remove punctuation → collapse whitespace.
+ */
+export function normalizeEntityName(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+/**
+ * Generic single-word and phrase names that should be discarded.
+ * Checked against the NORMALIZED (lowercase, no-punct) entity name.
+ */
+const WEAK_GENERIC_NAMES = new Set([
+  // Generic product / tech words
+  "ai", "platform", "solution", "solutions", "app", "application", "tool", "tools",
+  "software", "product", "products", "service", "services", "system", "systems",
+  "feature", "features", "module", "plugin", "extension", "addon",
+  // Generic business words
+  "startup", "company", "companies", "business", "team", "partner", "partners",
+  "customer", "customers", "client", "clients", "user", "users", "developer",
+  "developers", "enterprise", "vendor", "vendors", "agency",
+  // Generic tech terms
+  "cloud", "api", "saas", "data", "analytics", "dashboard", "workflow",
+  "automation", "integration", "integrations", "connector", "infrastructure",
+  // Nav / UI words that slip through title-case checks
+  "new", "all", "our", "your", "the", "this", "that", "with", "more",
+  "get started", "learn more", "sign up", "log in", "about us", "contact us",
+  "read more", "view all", "see all",
+])
+
+/** Returns true if the entity is too generic to be a useful relationship signal. */
+function isWeakGenericEntity(normalizedName: string): boolean {
+  if (normalizedName.length < 3) return true
+  if (WEAK_GENERIC_NAMES.has(normalizedName)) return true
+  if (normalizedName.split(" ").length > 4) return true
+  return false
 }
 
 // ---------------------------------------------------------------------------
@@ -89,12 +150,12 @@ function extractText(html: string): string {
  */
 export async function fetchRelationshipPages(baseUrl: string): Promise<PageData[]> {
   const results = await Promise.all(
-    PAGES_TO_SCAN.map(async ({ path, label, defaultType }) => {
+    PAGES_TO_SCAN.map(async ({ path, label, defaultEntityType, defaultRelationshipType }) => {
       const url = `${baseUrl}${path}`
       const html = await fetchPage(url)
       if (!html || html.length < 200) return null
       const text = extractText(html).slice(0, 3000)
-      return { url, label, defaultType, text } satisfies PageData
+      return { url, label, defaultEntityType, defaultRelationshipType, text } satisfies PageData
     }),
   )
   return results.filter((p): p is PageData => p !== null)
@@ -109,25 +170,32 @@ const SYSTEM_PROMPT = `You extract named entities from website pages for B2B rel
 ABSOLUTE RULES — no exceptions:
 1. Extract ONLY names that appear VERBATIM in the page text you are given.
 2. Do NOT infer, guess, or add any names not literally present in the text.
-3. Ignore generic words: team, company, product, platform, solution, app, startup, our, your, the, new, all, more, view, read, learn, get, start, sign, log, about, contact, pricing, blog, terms, privacy, cookie, copyright.
+3. Ignore generic words: ai, platform, solution, app, tool, software, product, service, system, startup, company, business, team, our, your, the, new, all, more, view, read, learn.
 4. Company/product names must be proper nouns (title-cased or known brand names like "HubSpot", "AWS").
 5. Person names must follow "FirstName LastName" — two words, both capitalised.
 6. Minimum name length: 3 characters.
 7. Maximum 30 entities total.
 
-Entity types:
-- "partner"     — named as a partner, reseller, or certified partner
-- "integration" — named as an integration, connector, or compatible tool
-- "customer"    — named as a customer, client, case study subject, or user
-- "investor"    — named as an investor, VC firm, or backer
-- "tool"        — named as a tool or technology used internally ("built with X", "powered by X")
-- "person"      — named individual: founder, team member, advisor, or executive
+Entity types (entity_type):
+- "investor" — a named investor, VC firm, or backer
+- "partner"  — a named formal partner or reseller company
+- "tool"     — a named tool, integration, connector, or software product
+- "person"   — a named individual (founder, team member, advisor, executive)
+- "company"  — any other named company (customer, prospect, or referenced brand)
+
+Relationship types (relationship_type):
+- "invested_by" — investor or backer ("raised from", "backed by", "led by", "funded by")
+- "partner"     — formal partner or reseller ("partnered with", "certified partner", "reseller")
+- "uses"        — tool or integration in use ("built with", "powered by", "uses X", "integrates with")
+- "employee"    — team member, founder, advisor, or executive
+- "customer"    — customer, client, or case study subject ("how X achieved", "X uses us")
+- "mentioned"   — referenced but relationship is unclear
 
 Page context hints:
-- Partners page → prefer "partner"
-- Integrations page → prefer "integration"
-- Customers / Case Studies page → prefer "customer"
-- About page → prefer "person"
+- Partners page → prefer entity_type "partner", relationship_type "partner"
+- Integrations page → prefer entity_type "tool", relationship_type "uses"
+- Customers / Case Studies page → prefer entity_type "company", relationship_type "customer"
+- About page → prefer entity_type "person", relationship_type "employee"
 - Homepage → use best judgement
 
 Return ONLY valid JSON with no markdown or preamble:
@@ -135,7 +203,8 @@ Return ONLY valid JSON with no markdown or preamble:
   "entities": [
     {
       "name": "exact verbatim name from text",
-      "type": "entity_type",
+      "entity_type": "investor | partner | tool | person | company",
+      "relationship_type": "invested_by | partner | uses | employee | customer | mentioned",
       "sourceUrl": "page URL",
       "context": "short phrase (≤12 words) from the text where this name appears",
       "confidence": "high | medium | low"
@@ -145,15 +214,20 @@ Return ONLY valid JSON with no markdown or preamble:
 
 If no clear entities are found: {"entities":[]}`
 
-// Words that look like names but aren't company/person names
-const GENERIC_ENTITY_NAMES = new Set([
+const VALID_ENTITY_TYPES = new Set<string>(["investor", "partner", "tool", "person", "company"])
+const VALID_RELATIONSHIP_TYPES = new Set<string>([
+  "invested_by", "partner", "uses", "employee", "customer", "mentioned",
+])
+
+// UI/nav phrases that pass title-case checks but aren't real entity names
+const GENERIC_UI_NAMES = new Set([
   "About Us", "Contact Us", "Learn More", "Get Started", "Sign Up", "Log In",
   "Our Team", "Our Partners", "Our Customers", "Case Study", "Case Studies",
   "Read More", "View All", "See All", "Privacy Policy", "Terms of Service",
 ])
 
-function isGeneric(name: string): boolean {
-  return GENERIC_ENTITY_NAMES.has(name) || name.split(" ").length > 4
+function isGenericUI(name: string): boolean {
+  return GENERIC_UI_NAMES.has(name) || name.split(" ").length > 4
 }
 
 async function extractWithAI(
@@ -164,7 +238,6 @@ async function extractWithAI(
   const Anthropic = (await import("@anthropic-ai/sdk")).default
   const anthropic = new Anthropic({ apiKey })
 
-  // Build a single message with all page texts separated by markers
   const pageBlocks = [
     `=== PAGE: Homepage ===\n${homepageText.slice(0, 1500)}`,
     ...pages.map((p) => `=== PAGE: ${p.label} (${p.url}) ===\n${p.text}`),
@@ -173,7 +246,7 @@ async function extractWithAI(
   const message = await Promise.race([
     anthropic.messages.create({
       model: "claude-haiku-4-5",
-      max_tokens: 800,
+      max_tokens: 1000,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: pageBlocks }],
     }),
@@ -188,29 +261,59 @@ async function extractWithAI(
   if (!jsonMatch) return []
 
   const parsed = JSON.parse(jsonMatch[0]) as {
-    entities: Array<{ name: string; type: string; sourceUrl: string; context: string; confidence: string }>
+    entities: Array<{
+      name: string
+      entity_type: string
+      relationship_type: string
+      sourceUrl: string
+      context: string
+      confidence: string
+    }>
   }
 
-  return (parsed.entities ?? [])
-    .filter((e) => e.name && e.name.length >= 3 && !isGeneric(e.name))
-    .map((e) => ({
-      entityName: e.name.trim(),
-      entityType: (["partner", "integration", "customer", "investor", "tool", "person"].includes(e.type)
-        ? e.type
-        : "tool") as EntityType,
+  const results: ExtractedEntity[] = []
+  for (const e of parsed.entities ?? []) {
+    if (!e.name || e.name.length < 3 || isGenericUI(e.name)) continue
+
+    const normalized = normalizeEntityName(e.name)
+    if (isWeakGenericEntity(normalized)) continue
+
+    results.push({
+      entityName: normalized,
+      entityType: (VALID_ENTITY_TYPES.has(e.entity_type)
+        ? e.entity_type
+        : "company") as EntityType,
+      relationshipType: (VALID_RELATIONSHIP_TYPES.has(e.relationship_type)
+        ? e.relationship_type
+        : "mentioned") as RelationshipSignalType,
       sourceUrl: e.sourceUrl ?? "",
       sourceContext: (e.context ?? "").slice(0, 120),
       confidence: (["high", "medium", "low"].includes(e.confidence)
         ? e.confidence
         : "medium") as ExtractedEntity["confidence"],
-    }))
+    })
+  }
+
+  // Deduplicate by normalized name — keep first occurrence (highest context)
+  const seen = new Set<string>()
+  return results.filter((e) => {
+    if (seen.has(e.entityName)) return false
+    seen.add(e.entityName)
+    return true
+  })
 }
 
 function extractWithRegex(pages: PageData[], homepageText: string): ExtractedEntity[] {
   const entities: ExtractedEntity[] = []
 
   const allPages: PageData[] = [
-    { url: "homepage", label: "Homepage", defaultType: "tool", text: homepageText.slice(0, 2000) },
+    {
+      url: "homepage",
+      label: "Homepage",
+      defaultEntityType: "tool",
+      defaultRelationshipType: "uses",
+      text: homepageText.slice(0, 2000),
+    },
     ...pages,
   ]
 
@@ -218,29 +321,19 @@ function extractWithRegex(pages: PageData[], homepageText: string): ExtractedEnt
     const lines = page.text.split(/[\n.]+/).map((l) => l.trim()).filter((l) => l.length > 0)
 
     for (const line of lines) {
-      // Short, title-cased lines on partner/integration pages = company names
+      // Short, title-cased lines on partner/tool pages = company/tool names
       if (
-        (page.defaultType === "partner" || page.defaultType === "integration") &&
+        (page.defaultEntityType === "partner" || page.defaultEntityType === "tool") &&
         line.length < 35 &&
         /^[A-Z]/.test(line) &&
         !/^(The|Our|Your|All|New|See|View|Get|Try|Read|Learn|About|Contact)/.test(line)
       ) {
-        entities.push({
-          entityName: line,
-          entityType: page.defaultType,
-          sourceUrl: page.url,
-          sourceContext: line,
-          confidence: "low",
-        })
-      }
-
-      // "FirstName LastName" on about pages = team member
-      if (page.defaultType === "person") {
-        const m = line.match(/^([A-Z][a-z]+ [A-Z][a-z]+)$/)
-        if (m && !GENERIC_ENTITY_NAMES.has(m[1])) {
+        const normalized = normalizeEntityName(line)
+        if (!isWeakGenericEntity(normalized)) {
           entities.push({
-            entityName: m[1],
-            entityType: "person",
+            entityName: normalized,
+            entityType: page.defaultEntityType,
+            relationshipType: page.defaultRelationshipType,
             sourceUrl: page.url,
             sourceContext: line,
             confidence: "low",
@@ -248,28 +341,51 @@ function extractWithRegex(pages: PageData[], homepageText: string): ExtractedEnt
         }
       }
 
+      // "FirstName LastName" on about pages = team member
+      if (page.defaultEntityType === "person") {
+        const m = line.match(/^([A-Z][a-z]+ [A-Z][a-z]+)$/)
+        if (m && !GENERIC_UI_NAMES.has(m[1])) {
+          const normalized = normalizeEntityName(m[1])
+          if (!isWeakGenericEntity(normalized)) {
+            entities.push({
+              entityName: normalized,
+              entityType: "person",
+              relationshipType: "employee",
+              sourceUrl: page.url,
+              sourceContext: line,
+              confidence: "low",
+            })
+          }
+        }
+      }
+
       // "How [Company] ..." on case study / customer pages = customer
-      if (page.defaultType === "customer") {
-        const m = line.match(/^How\s+([A-Z][a-zA-Z0-9\s]{2,25})\s+(reduced|increased|grew|scaled|built|cut|saved|achieved|improved)/i)
+      if (page.defaultEntityType === "company") {
+        const m = line.match(
+          /^How\s+([A-Z][a-zA-Z0-9\s]{2,25})\s+(reduced|increased|grew|scaled|built|cut|saved|achieved|improved)/i
+        )
         if (m) {
-          entities.push({
-            entityName: m[1].trim(),
-            entityType: "customer",
-            sourceUrl: page.url,
-            sourceContext: line.slice(0, 80),
-            confidence: "medium",
-          })
+          const normalized = normalizeEntityName(m[1].trim())
+          if (!isWeakGenericEntity(normalized)) {
+            entities.push({
+              entityName: normalized,
+              entityType: "company",
+              relationshipType: "customer",
+              sourceUrl: page.url,
+              sourceContext: line.slice(0, 80),
+              confidence: "medium",
+            })
+          }
         }
       }
     }
   }
 
-  // Deduplicate by name
+  // Deduplicate by normalized name
   const seen = new Set<string>()
   return entities.filter((e) => {
-    const key = e.entityName.toLowerCase()
-    if (seen.has(key)) return false
-    seen.add(key)
+    if (seen.has(e.entityName)) return false
+    seen.add(e.entityName)
     return true
   })
 }
@@ -281,6 +397,7 @@ function extractWithRegex(pages: PageData[], homepageText: string): ExtractedEnt
 /**
  * Extracts named relationship entities from pre-fetched pages.
  * Uses claude-haiku when ANTHROPIC_API_KEY is set; falls back to regex.
+ * All entity names are normalized (lowercase, trimmed, no punctuation).
  *
  * @param baseUrl      Origin of the website (for logging)
  * @param pages        Output of fetchRelationshipPages()

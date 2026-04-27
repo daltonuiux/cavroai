@@ -147,11 +147,18 @@ export interface CompanyProfile {
 
 export type EntityType =
   | "partner"
-  | "integration"
-  | "customer"
+  | "company"
   | "investor"
   | "tool"
   | "person"
+
+export type RelationshipSignalType =
+  | "uses"
+  | "partner"
+  | "customer"
+  | "invested_by"
+  | "employee"
+  | "mentioned"
 
 export interface RelationshipSignal {
   id: string
@@ -159,6 +166,7 @@ export interface RelationshipSignal {
   userId: string
   entityName: string
   entityType: EntityType
+  relationshipType?: RelationshipSignalType
   sourceUrl?: string
   sourceContext?: string
   confidence: "high" | "medium" | "low"

@@ -8,6 +8,7 @@
 //     user_id uuid NOT NULL,
 //     entity_name text NOT NULL,
 //     entity_type text NOT NULL,
+//     relationship_type text,
 //     source_url text,
 //     source_context text,
 //     confidence text NOT NULL DEFAULT 'medium',
@@ -16,6 +17,13 @@
 //   );
 //   CREATE INDEX IF NOT EXISTS idx_relationship_signals_user ON relationship_signals(user_id);
 //   CREATE INDEX IF NOT EXISTS idx_relationship_signals_client ON relationship_signals(client_id);
+//
+// Migration — add relationship_type column and backfill legacy rows:
+//   ALTER TABLE relationship_signals ADD COLUMN IF NOT EXISTS relationship_type text;
+//   UPDATE relationship_signals SET relationship_type = 'customer' WHERE entity_type = 'customer';
+//   UPDATE relationship_signals SET entity_type = 'company'        WHERE entity_type = 'customer';
+//   UPDATE relationship_signals SET relationship_type = 'uses'      WHERE entity_type = 'integration';
+//   UPDATE relationship_signals SET entity_type = 'tool'           WHERE entity_type = 'integration';
 //
 // Prospects table (deal sourcing):
 //   CREATE TABLE IF NOT EXISTS prospects (
@@ -551,6 +559,7 @@ function rowToRelationshipSignal(row: any): RelationshipSignal {
     userId: row.user_id,
     entityName: row.entity_name,
     entityType: row.entity_type,
+    relationshipType: row.relationship_type ?? undefined,
     sourceUrl: row.source_url ?? undefined,
     sourceContext: row.source_context ?? undefined,
     confidence: (row.confidence ?? "medium") as RelationshipSignal["confidence"],
@@ -560,7 +569,8 @@ function rowToRelationshipSignal(row: any): RelationshipSignal {
 
 /**
  * Upserts relationship signals for a client.
- * Deduplicates on (client_id, entity_name, entity_type) — existing rows are left unchanged.
+ * Deduplicates on (client_id, entity_name, entity_type) — existing rows are updated
+ * with the latest relationship_type when there is a conflict.
  */
 export async function saveRelationshipSignals(
   clientId: string,
@@ -568,6 +578,7 @@ export async function saveRelationshipSignals(
   signals: Array<{
     entityName: string
     entityType: string
+    relationshipType?: string
     sourceUrl?: string
     sourceContext?: string
     confidence?: string
@@ -580,6 +591,7 @@ export async function saveRelationshipSignals(
     user_id: userId,
     entity_name: s.entityName,
     entity_type: s.entityType,
+    relationship_type: s.relationshipType ?? null,
     source_url: s.sourceUrl ?? null,
     source_context: s.sourceContext ?? null,
     confidence: s.confidence ?? "medium",
@@ -587,7 +599,7 @@ export async function saveRelationshipSignals(
 
   const { error } = await db()
     .from("relationship_signals")
-    .upsert(rows, { onConflict: "client_id,entity_name,entity_type", ignoreDuplicates: true })
+    .upsert(rows, { onConflict: "client_id,entity_name,entity_type", ignoreDuplicates: false })
 
   if (error) throw new Error(`saveRelationshipSignals: ${error.message}`)
 }

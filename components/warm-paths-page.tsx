@@ -44,11 +44,13 @@ function StrengthBadge({ strength }: { strength: WarmPath["strength"] }) {
 
 const TYPE_META: Record<string, { label: string; color: string }> = {
   investor:    { label: "Investor",    color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
-  customer:    { label: "Customer",    color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
+  company:     { label: "Company",     color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
   partner:     { label: "Partner",     color: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
-  integration: { label: "Integration", color: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
   tool:        { label: "Tool",        color: "bg-foreground/[0.04] text-foreground/40" },
   person:      { label: "Contact",     color: "bg-foreground/[0.04] text-foreground/40" },
+  // Legacy values kept for rows stored before the schema migration
+  customer:    { label: "Customer",    color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
+  integration: { label: "Integration", color: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
 }
 
 function EntityTypePill({ type }: { type: string }) {
@@ -212,7 +214,7 @@ export function WarmPathsPage({ rows }: { rows: WarmPathRow[] }) {
   return (
     <div className="flex flex-col gap-6">
       <Section title="Strong — shared investor or customer" rows={strong} />
-      <Section title="Medium — shared partner or integration" rows={medium} />
+      <Section title="Medium — shared partner or company" rows={medium} />
       <Section title="Weak — shared tool or contact" rows={weak} />
     </div>
   )
