@@ -14,7 +14,8 @@
       "Bash(kill 13216)",
       "Bash(xargs kill *)",
       "Bash(node -e ' *)",
-      "Bash(python3)"
+      "Bash(python3)",
+      "Bash(xargs ls *)"
     ]
   }
 }

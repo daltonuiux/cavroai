@@ -155,6 +155,75 @@ function escapeRegex(s: string): string {
 }
 
 /**
+ * Builds a domain-aware filter for Tavily results.
+ *
+ * Strategy (in priority order):
+ *   1. KEEP   — result URL domain matches the client domain exactly
+ *   2. KEEP   — result content mentions the client domain (e.g. "theopenlane.io")
+ *   3. KEEP   — result mentions company name AND brand token (when brand ≠ company slug)
+ *   4. KEEP   — result mentions company name AND brand differs from company are the same token
+ *   5. REJECT — company name appears but brand token is absent (likely a different entity)
+ *
+ * The "brand token" is the first label of the client domain (e.g. "theopenlane" for
+ * theopenlane.io).  When it differs from the normalised company name slug this is a
+ * strong signal that results mentioning only the company name may belong to a
+ * different organisation (e.g. the car-auction "Openlane" vs the dev-tool "The Openlane").
+ */
+function buildEntityFilter(companyName: string, websiteUrl: string) {
+  const companyRe = new RegExp(`\\b${escapeRegex(companyName)}\\b`, "i")
+
+  let clientDomain = ""
+  let brandToken   = ""
+
+  try {
+    const u   = new URL(websiteUrl)
+    clientDomain = u.hostname.replace(/^www\./i, "").toLowerCase()   // e.g. "theopenlane.io"
+    brandToken   = clientDomain.split(".")[0]                        // e.g. "theopenlane"
+  } catch { /* ignore bad URL */ }
+
+  // Normalise company name to a slug for comparison: "The Openlane" → "theopenlane"
+  const companySlug = companyName.toLowerCase().replace(/^the\s+/i, "").replace(/\s+/g, "")
+  const brandDiffersFromCompany = brandToken.length > 0 && brandToken !== companySlug
+
+  const brandRe  = brandToken   ? new RegExp(escapeRegex(brandToken),   "i") : null
+  const domainRe = clientDomain ? new RegExp(escapeRegex(clientDomain), "i") : null
+
+  function resultDomain(url: string): string {
+    try { return new URL(url).hostname.replace(/^www\./i, "").toLowerCase() } catch { return "" }
+  }
+
+  return function filter(result: TavilyResult): { keep: boolean; reason: string } {
+    const text = `${result.title} ${result.content}`
+
+    // Must at least mention the company name somewhere
+    if (!companyRe.test(text)) {
+      return { keep: false, reason: "no company name mention" }
+    }
+
+    // 1. URL domain matches client domain exactly → always keep
+    if (clientDomain && resultDomain(result.url) === clientDomain) {
+      return { keep: true, reason: "domain match" }
+    }
+
+    // 2. Content or title explicitly mentions the client domain string → keep
+    if (domainRe && domainRe.test(text)) {
+      return { keep: true, reason: "domain mentioned in content" }
+    }
+
+    // 3. Brand differs from company slug → require brand token in content
+    if (brandDiffersFromCompany && brandRe) {
+      if (!brandRe.test(text)) {
+        return { keep: false, reason: "brand token absent — likely different entity with same name" }
+      }
+      return { keep: true, reason: "brand token match" }
+    }
+
+    // 4. Brand same as company slug (or no domain info) → company name mention is enough
+    return { keep: true, reason: "company name match" }
+  }
+}
+
+/**
  * Attempts to extract a lead entity name from a case-study / partner headline.
  *
  * Handles patterns like:
@@ -241,7 +310,7 @@ class TavilyProvider implements EnrichmentProvider {
     return data.results ?? []
   }
 
-  async enrich(companyName: string, _websiteUrl: string): Promise<EnrichmentResult> {
+  async enrich(companyName: string, websiteUrl: string): Promise<EnrichmentResult> {
     // 5 queries in parallel
     const [fundingRaw, customerRaw, partnerRaw, peopleRaw, hiringRaw] = await Promise.all([
       this.search(`"${companyName}" funding investors`,      "advanced", 10),
@@ -251,23 +320,40 @@ class TavilyProvider implements EnrichmentProvider {
       this.search(`"${companyName}" hiring jobs`,            "basic",     5),
     ])
 
-    // Filter: title or snippet must mention the company name (whole word)
-    const companyRe = new RegExp(`\\b${escapeRegex(companyName)}\\b`, "i")
-    const keep = (results: TavilyResult[]) =>
-      results.filter(r => companyRe.test(r.title) || companyRe.test(r.content))
-
-    const funding  = keep(fundingRaw)
-    const customer = keep(customerRaw)
-    const partner  = keep(partnerRaw)
-    const people   = keep(peopleRaw)
-    const hiring   = keep(hiringRaw)
-
     const rawTotal =
       fundingRaw.length + customerRaw.length + partnerRaw.length +
       peopleRaw.length  + hiringRaw.length
 
+    // Domain-aware filter — rejects results about different entities with the same name
+    const isRelevant = buildEntityFilter(companyName, websiteUrl)
+
+    let keptCount     = 0
+    let rejectedCount = 0
+
+    function applyFilter(results: TavilyResult[], label: string): TavilyResult[] {
+      const kept: TavilyResult[] = []
+      for (const r of results) {
+        const { keep, reason } = isRelevant(r)
+        if (keep) {
+          kept.push(r)
+          keptCount++
+        } else {
+          rejectedCount++
+          console.log(`TAVILY [${companyName}] REJECT (${label}): "${r.title.slice(0, 60)}" — ${reason}`)
+        }
+      }
+      return kept
+    }
+
+    const funding  = applyFilter(fundingRaw,  "funding")
+    const customer = applyFilter(customerRaw, "customers")
+    const partner  = applyFilter(partnerRaw,  "partners")
+    const people   = applyFilter(peopleRaw,   "people")
+    const hiring   = applyFilter(hiringRaw,   "hiring")
+
     console.log(
-      `TAVILY [${companyName}]: ${rawTotal} raw results — ` +
+      `TAVILY [${companyName}]: ${rawTotal} raw — ` +
+      `kept=${keptCount} rejected=${rejectedCount} | ` +
       `funding=${funding.length} customers=${customer.length} ` +
       `partners=${partner.length} people=${people.length} hiring=${hiring.length}`,
     )
