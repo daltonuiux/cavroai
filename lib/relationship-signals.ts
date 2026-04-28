@@ -121,6 +121,12 @@ export interface PageData {
   defaultRelationshipType: RelationshipSignalType
   /** Stripped text content, up to 10 000 chars */
   text: string
+  /**
+   * Extracted meta tag text (description, og:description, og:title, keywords).
+   * Always server-side rendered even on fully JS-rendered sites.
+   * Often contains integration names, tech stack, and customer mentions.
+   */
+  metaText: string
   /** Company names from img alt/title/aria-label on this page */
   logoAlts: string[]
   /** Text of <h2>/<h3>/<h4> elements */
@@ -409,6 +415,30 @@ function extractText(html: string): string {
 }
 
 /**
+ * Extracts text from meta tags — always server-side rendered, even on JS-heavy sites.
+ * Meta descriptions often name integrations, customers, and technology stack directly.
+ *
+ * Returns a single space-joined string ready for pattern matching.
+ */
+function extractMetaTags(html: string): string {
+  const parts: string[] = []
+  for (const m of html.matchAll(/<meta[^>]+>/gi)) {
+    const tag     = m[0]
+    const nameAttr = tag.match(/(?:name|property)=["']([^"']{1,80})["']/i)?.[1]?.toLowerCase()
+    const content  = tag.match(/content=["']([^"']{5,500})["']/i)?.[1]?.trim()
+    if (!content || !nameAttr) continue
+    if (/^(?:description|og:description|og:title|twitter:description|twitter:title|keywords|application-name)$/.test(nameAttr)) {
+      parts.push(content)
+    }
+  }
+  // Also grab <title> text — often "Company | Product Category" or "Platform Name"
+  const titleMatch = html.match(/<title[^>]*>([^<]{3,120})<\/title>/i)
+  if (titleMatch) parts.push(titleMatch[1].trim())
+
+  return parts.join(". ")
+}
+
+/**
  * Extract company names from img alt/title attributes and SVG aria-labels.
  * Also handles <picture>/<source> siblings and data-* name attributes.
  */
@@ -539,9 +569,36 @@ function extractTextPatterns(
 
   // Powered-by / built-on patterns (tools/infrastructure)
   for (const m of text.matchAll(
-    /(?:powered\s+by|built\s+on(?:\s+top\s+of)?|runs?\s+on)\s+([A-Z][a-zA-Z0-9\s,&]{2,80}?)(?=[.!?\n]|\s*—|\s*\||\s{3,}|$)/gim,
+    /(?:powered\s+by|built\s+on(?:\s+top\s+of)?|runs?\s+on|built\s+with|using\s+(?:the\s+)?|deployed\s+on|hosted\s+on|available\s+on)\s+([A-Z][a-zA-Z0-9\s,&+]{2,80}?)(?=[.!?\n]|\s*—|\s*\||\s{3,}|$)/gim,
   )) {
     addList(m[1], "uses", "tool", `powered by: ${m[1].slice(0, 60)}`)
+  }
+
+  // Backer / investor patterns (common on startup/web3 sites)
+  for (const m of text.matchAll(
+    /(?:backed\s+by|investors?\s+(?:include|:)\s*|funded\s+by|investment\s+from|raised\s+(?:from|by))\s+([A-Z][a-zA-Z0-9\s,&]{2,100}?)(?=[.!?\n]|\s*—|\s*\||\s{3,}|$)/gim,
+  )) {
+    addList(m[1], "partner", "company", `investor: ${m[1].slice(0, 60)}`)
+  }
+
+  // "Available as X plugin" / "connects to X" / "native X integration"
+  for (const m of text.matchAll(
+    /(?:native\s+|official\s+)?([A-Z][a-zA-Z0-9]{2,25})\s+(?:integration|plugin|connector|extension|app|SDK|API)(?:\s+available)?/gm,
+  )) {
+    const norm = cleanName(m[1], clientNorm)
+    if (norm && !["Native", "Official", "Custom", "New", "Free", "Open"].includes(m[1])) {
+      const key = norm
+      if (!entities.some((e) => e.entityName === key)) {
+        entities.push({
+          entityName:       norm,
+          entityType:       "tool",
+          relationshipType: "uses",
+          sourceUrl,
+          sourceContext:    `${m[1]} integration`,
+          confidence:       "medium",
+        })
+      }
+    }
   }
 
   return entities
@@ -772,6 +829,7 @@ export async function fetchRelationshipPages(baseUrl: string, clientNorm = ""): 
       if (!best) return null
 
       const text      = extractText(best.html).slice(0, 10_000)
+      const metaText  = extractMetaTags(best.html)
       const logoAlts  = extractLogoAlts(best.html)
       const headings  = extractHeadings(best.html)
 
@@ -810,6 +868,7 @@ export async function fetchRelationshipPages(baseUrl: string, clientNorm = ""): 
         defaultEntityType:       cat.defaultEntityType,
         defaultRelationshipType: cat.defaultRelationshipType,
         text,
+        metaText,
         logoAlts,
         headings,
         slugEntities,
@@ -824,26 +883,38 @@ export async function fetchRelationshipPages(baseUrl: string, clientNorm = ""): 
 // Phase 2A: AI extraction
 // ---------------------------------------------------------------------------
 
-const SYSTEM_PROMPT = `You extract B2B company names from company website content for relationship mapping.
+const SYSTEM_PROMPT = `You extract B2B entity names from company website content for relationship mapping.
 
 STRICT RULES:
-1. Extract ONLY real company/product/tool names — proper nouns.
-2. Skip: navigation labels, generic phrases, the source company itself.
-3. Maximum 30 entities. Prefer quality over quantity.
-4. Every name must be a recognised brand (title-cased or a known name like "HubSpot", "AWS").
+1. Extract real company, product, tool, platform, protocol, SDK, and ecosystem names — proper nouns only.
+2. Skip: navigation labels, generic phrases ("the platform", "our solution"), the source company itself.
+3. Maximum 30 entities total. Quality over quantity.
+4. CamelCase tokens (BitTensor, OpenAI, HubSpot, deBridge) are VERY LIKELY brands — always extract them.
+5. Meta descriptions are HIGH PRIORITY — they name integrations, tech stack, and customers directly.
 
-HIGH-CONFIDENCE SIGNALS (include all of these):
-- "URL slugs" lines — each slug is a dedicated company page created by the site owner.
-- "Logo images" lines — curated lists of partner/customer logos.
-- "Page headings" lines — structural company names.
+HIGH-CONFIDENCE SIGNALS (include ALL of these):
+- "URL slugs" — each slug is a dedicated company page. Highest confidence.
+- "Logo images" — curated partner/customer logo lists from the design team.
+- "Meta description" — marketing copy, directly names integrations and customers.
+
+WHAT TO EXTRACT (broad scope):
+- Customer companies (use case studies, logos, "trusted by" mentions)
+- Technology partners (co-marketing, ecosystem listings)
+- Dev tools & platforms (SDKs, APIs, databases, cloud, blockchain protocols)
+- Open-source ecosystems and frameworks the site is built on or integrates with
+- Investors and backers (from "backed by", "investors include" text)
+
+WHAT TO SKIP:
+- Generic words: "platform", "cloud", "data", "API", "tool", "solution"
+- Navigation / UI: "Learn More", "Get Started", "Documentation"
+- Months, days, cities, countries
 
 RELATIONSHIP MAPPING:
-- Customers/Case Studies page → relationship_type: "customer", entity_type: "company"
-- Partners/Ecosystem page    → relationship_type: "partner",   entity_type: "partner"
-- Integrations/Marketplace   → relationship_type: "uses",      entity_type: "tool"
-- Homepage logo images       → relationship_type: "customer",  entity_type: "company"
-- "integrates with" text     → relationship_type: "uses",      entity_type: "tool"
-- "trusted by" text          → relationship_type: "customer",  entity_type: "company"
+- Customers / Case Studies / "trusted by" → relationship_type: "customer",  entity_type: "company"
+- Partners / Ecosystem listings           → relationship_type: "partner",   entity_type: "partner"
+- Integrations / Marketplace / "uses"    → relationship_type: "uses",      entity_type: "tool"
+- "built on" / "powered by" / "running"  → relationship_type: "uses",      entity_type: "tool"
+- "backed by" / "funded by" / investors  → relationship_type: "partner",   entity_type: "company"
 
 Return ONLY valid JSON (no markdown):
 {"entities":[{"name":"...","entity_type":"company|partner|tool","relationship_type":"customer|partner|uses","sourceUrl":"...","context":"≤12 words","confidence":"high|medium|low"}]}
@@ -865,7 +936,10 @@ async function extractWithAI(
   const blocks: string[] = []
 
   for (const p of pages) {
-    const parts = [`=== ${p.label.toUpperCase()} PAGE (${p.url}) ===`, p.text]
+    const parts = [`=== ${p.label.toUpperCase()} PAGE (${p.url}) ===`]
+    // Meta tags first — always SSR'd, often the richest signal on JS-rendered sites
+    if (p.metaText) parts.push(`Meta description (HIGH PRIORITY): ${p.metaText}`)
+    parts.push(p.text)
     if (p.logoAlts.length > 0)
       parts.push(`\nLogo images (high confidence): ${p.logoAlts.slice(0, 50).join(", ")}`)
     if (p.headings.length > 0)
@@ -963,9 +1037,11 @@ function extractWithRegex(pages: PageData[], homepageLogoAlts: string[], clientN
     }
   }
 
-  // 3. Text patterns ("integrates with X", "trusted by X")
+  // 3. Text patterns ("integrates with X", "trusted by X", "built with X")
+  // Run on metaText first — always available even on JS-rendered sites
   for (const p of pages) {
-    for (const e of extractTextPatterns(p.text, p.url, clientNorm)) add(e)
+    const combined = p.metaText ? `${p.metaText}\n${p.text}` : p.text
+    for (const e of extractTextPatterns(combined, p.url, clientNorm)) add(e)
   }
 
   // 4. Headings on relationship pages — cleanName handles "Company - Section" titles
@@ -1058,10 +1134,12 @@ function detectCompanyMentions(
 
   const entities: ExtractedEntity[] = []
   for (const [name, count] of counts) {
-    // CamelCase: 2+ mentions; Title-case pair: 2+ mentions; single word: 3+ mentions
+    // CamelCase: 1+ mention (strong brand signal — e.g. "BitTensor", "HubSpot")
+    // Title-case pair: 2+ mentions (e.g. "Acme Corp")
+    // Single capitalised word: 3+ mentions (higher bar — lots of false positives)
     const isCamel = /[A-Z][a-z]+[A-Z]/.test(name)
     const isPair  = name.includes(" ")
-    const minCount = (isCamel || isPair) ? 2 : 3
+    const minCount = isCamel ? 1 : isPair ? 2 : 3
 
     if (count < minCount) continue
 
@@ -1164,10 +1242,11 @@ export async function extractRelationshipSignals(
   // Slug entities take priority
   let merged = mergeWithPriority(allSlugEntities, textEntities)
 
-  // Fallback: if we're still below target, scan all text for company mentions
+  // Fallback: if we're still below target, scan all text for company mentions.
+  // Include metaText — always available even on JS-rendered sites.
   if (merged.length < MIN_ENTITY_TARGET) {
     const knownNames = new Set(merged.map((e) => e.entityName))
-    const allText    = pages.map((p) => `${p.text} ${p.headings.join(" ")} ${p.logoAlts.join(" ")}`).join("\n")
+    const allText    = pages.map((p) => `${p.metaText} ${p.text} ${p.headings.join(" ")} ${p.logoAlts.join(" ")}`).join("\n")
     const mentions   = detectCompanyMentions(allText, knownNames, baseUrl, clientNorm)
 
     const needed = MIN_ENTITY_TARGET - merged.length
