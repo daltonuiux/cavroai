@@ -371,6 +371,31 @@ export interface EnrichedSignals {
 }
 
 // ---------------------------------------------------------------------------
+// External enrichment — Exa / Tavily / mock provider output
+// ---------------------------------------------------------------------------
+
+/**
+ * Structured output from an external enrichment provider (Exa, Tavily, mock).
+ * Stored as-is in analysis.signals.enrichmentResult for display and conversion.
+ *
+ * status:
+ *   "ok"             — provider ran and returned data (arrays may still be empty)
+ *   "error"          — provider threw; signals are empty
+ *   "not_configured" — ENRICHMENT_PROVIDER env var is not set
+ */
+export interface EnrichmentResult {
+  provider:        string
+  status:          "ok" | "error" | "not_configured"
+  fundingSignals:  string[]  // "Series B — Sequoia Capital — $20M", "Seed — Y Combinator"
+  hiringSignals:   string[]  // "Account Executive (Remote)", "Senior Product Designer"
+  customerSignals: string[]  // clean company names: "Stripe", "Notion"
+  partnerSignals:  string[]  // clean company names: "HubSpot", "Salesforce"
+  peopleSignals:   string[]  // "Sarah Chen — Co-founder & CEO"
+  newsSignals:     string[]  // article headlines
+  sourceUrls:      string[]  // provenance URLs used by the provider
+}
+
+// ---------------------------------------------------------------------------
 // LinkedIn — placeholder schema (scraping not yet implemented)
 // ---------------------------------------------------------------------------
 
@@ -397,4 +422,6 @@ export interface Signals {
   enrichedSignals?: EnrichedSignals
   /** LinkedIn placeholder — structure reserved, not yet scraped. */
   linkedin?: LinkedInSignals
+  /** External enrichment results (Exa/Tavily/mock) — undefined if analysis predates this feature. */
+  enrichmentResult?: EnrichmentResult
 }

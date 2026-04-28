@@ -4,7 +4,7 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, AlertCircle, ChevronDown } from "lucide-react"
 import { getClientById, getAnalysisByClientId, getAgencyProfile, getProspectsByClientId, getRelationshipSignalsByClientId, MVP_USER_ID } from "@/lib/db"
-import type { Analysis, ClientProfile, RelationshipSignal, SignalChange, Signals } from "@/lib/types"
+import type { Analysis, ClientProfile, EnrichmentResult, RelationshipSignal, SignalChange, Signals } from "@/lib/types"
 import { scoreOpportunity, type ScoreBreakdown } from "@/lib/scoring"
 import { SimilarCompanies } from "@/components/similar-companies"
 import { createClient } from "@/lib/supabase/server"
@@ -448,6 +448,9 @@ function AnalysisResults({
       {relSignals.length > 0 && (
         <RelationshipSignalsPanel signals={relSignals} />
       )}
+
+      {/* External enrichment panel — always rendered; shows "not configured" when no provider */}
+      <EnrichmentPanel enrichmentResult={analysis.signals?.enrichmentResult} />
     </div>
   )
 }
@@ -710,6 +713,118 @@ function SignalsDebug({
 }
 
 // ---------------------------------------------------------------------------
+// External enrichment panel
+// ---------------------------------------------------------------------------
+
+const ENRICHMENT_SECTIONS: Array<{
+  key: keyof Omit<EnrichmentResult, "provider" | "status" | "sourceUrls">
+  label: string
+  pillColor: string
+  nameColor: string
+}> = [
+  { key: "fundingSignals",  label: "Funding & Investors", pillColor: "bg-amber-500/10",    nameColor: "text-amber-700 dark:text-amber-400" },
+  { key: "customerSignals", label: "Customers",           pillColor: "bg-emerald-500/10",  nameColor: "text-emerald-700 dark:text-emerald-400" },
+  { key: "partnerSignals",  label: "Partners",            pillColor: "bg-sky-500/10",      nameColor: "text-sky-700 dark:text-sky-400" },
+  { key: "peopleSignals",   label: "People",              pillColor: "bg-violet-500/10",   nameColor: "text-violet-700 dark:text-violet-400" },
+  { key: "hiringSignals",   label: "Hiring",              pillColor: "bg-foreground/[0.05]", nameColor: "text-foreground/60" },
+  { key: "newsSignals",     label: "News",                pillColor: "bg-foreground/[0.04]", nameColor: "text-foreground/50" },
+]
+
+function EnrichmentPanel({ enrichmentResult }: { enrichmentResult?: EnrichmentResult }) {
+  // Not configured — show a muted prompt rather than hiding entirely
+  if (!enrichmentResult || enrichmentResult.status === "not_configured") {
+    return (
+      <div className="rounded-md border border-dashed border-border bg-background px-4 py-3 flex items-center gap-3">
+        <div className="size-1.5 shrink-0 rounded-full bg-muted-foreground/20" />
+        <p className="text-[11px] text-muted-foreground/40">
+          External enrichment not configured —{" "}
+          <span className="font-mono text-[10px]">ENRICHMENT_PROVIDER=mock|exa|tavily</span>
+        </p>
+      </div>
+    )
+  }
+
+  if (enrichmentResult.status === "error") {
+    return (
+      <div className="rounded-md border border-dashed border-border bg-background px-4 py-3">
+        <p className="text-[11px] text-muted-foreground/40">
+          External enrichment ({enrichmentResult.provider}) returned an error.
+        </p>
+      </div>
+    )
+  }
+
+  // status === "ok" — render grouped sections
+  const totalSignals = ENRICHMENT_SECTIONS.reduce(
+    (sum, s) => sum + (enrichmentResult[s.key]?.length ?? 0),
+    0,
+  )
+
+  return (
+    <details className="group">
+      <summary className="card-cavro flex cursor-pointer select-none list-none items-center justify-between rounded-md px-4 py-3 text-[12px] font-medium text-muted-foreground/55 transition-colors hover:text-muted-foreground/80">
+        <span>
+          External enrichment
+          <span className="ml-1.5 font-mono text-[10px] text-muted-foreground/35">
+            ({enrichmentResult.provider})
+          </span>
+          <span className="ml-2 font-normal text-muted-foreground/40">
+            {totalSignals} signal{totalSignals !== 1 ? "s" : ""}
+          </span>
+        </span>
+        <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
+      </summary>
+
+      <div className="mt-2 rounded-md border border-border bg-background px-4 py-3.5 flex flex-col gap-4">
+        {ENRICHMENT_SECTIONS.map(({ key, label, pillColor, nameColor }) => {
+          const items = enrichmentResult[key] ?? []
+          if (items.length === 0) return null
+          return (
+            <div key={key}>
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">
+                {label} ({items.length})
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {items.map((item, i) => (
+                  <span
+                    key={i}
+                    className={`inline-flex items-center rounded px-2 py-1 text-[11px] font-medium ${pillColor} ${nameColor}`}
+                  >
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+
+        {enrichmentResult.sourceUrls && enrichmentResult.sourceUrls.length > 0 && (
+          <div>
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">
+              Sources
+            </p>
+            <ul className="flex flex-col gap-0.5">
+              {enrichmentResult.sourceUrls.map((url, i) => (
+                <li key={i}>
+                  <a
+                    href={url.startsWith("mock://") ? undefined : url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-muted-foreground/40 hover:text-muted-foreground/70 underline underline-offset-2 transition-colors"
+                  >
+                    {url.slice(0, 80)}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </details>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Relationship signals panel — grouped by relationship type
 // ---------------------------------------------------------------------------
 
@@ -743,7 +858,7 @@ const REL_TYPE_META: Record<string, { label: string; pillColor: string; nameColo
   },
 }
 
-const REL_TYPE_ORDER = ["customer", "partner", "uses", "invested_by", "mentioned"]
+const REL_TYPE_ORDER = ["customer", "partner", "uses", "invested_by", "founder", "employee", "mentioned"]
 
 function RelationshipSignalsPanel({ signals }: { signals: RelationshipSignal[] }) {
   // Group by relationship_type (fall back to entity_type for legacy rows)

@@ -14,6 +14,7 @@ import { detectChanges, summarizeChanges } from "@/lib/diff"
 import { scoreOpportunity } from "@/lib/scoring"
 import { fetchRelationshipPages, extractRelationshipSignals, type ExtractedEntity } from "@/lib/relationship-signals"
 import { enrichPublicRelationships, mergeExtractedEntities } from "@/lib/enrich-relationships"
+import { enrichCompany, convertEnrichmentToEntities } from "@/lib/enrichment"
 import { extractClientProfile } from "@/lib/client-profile"
 import { createClient } from "@/lib/supabase/server"
 
@@ -95,6 +96,10 @@ export async function POST(req: Request) {
         return []
       })
 
+    // Start external provider enrichment immediately (Exa/Tavily/mock/none).
+    // Also runs in parallel with gatherSignals — costs ~0 wall-clock time.
+    const externalEnrichmentPromise = enrichCompany(client.name, base)
+
     // Gather signals and agency profile in parallel
     const [agencyProfile, signals] = await Promise.all([
       getAgencyProfile().catch(() => null),
@@ -103,11 +108,15 @@ export async function POST(req: Request) {
 
     // Always extract a lightweight client profile — runs even when score is too low
     // Also start fetching relationship pages in parallel (pure HTTP, fast)
-    const [clientProfile, relPages, publicEntities] = await Promise.all([
+    const [clientProfile, relPages, publicEntities, enrichmentResult] = await Promise.all([
       extractClientProfile(signals),
       fetchRelationshipPages(base),
       publicEnrichmentPromise,
+      externalEnrichmentPromise,
     ])
+
+    // Attach enrichment result to signals so it's stored and shown in the UI
+    const signalsWithEnrichment = { ...signals, enrichmentResult }
 
     // Deterministic opportunity score — gates the full AI analysis call
     const score = scoreOpportunity(signals, agencyProfile, client.name)
@@ -122,7 +131,11 @@ export async function POST(req: Request) {
         relPages,
         signals.extracted?.logoAlts,
       )
-      const allEntities = mergeExtractedEntities(pageEntities, publicEntities)
+      const enrichedEntities = convertEnrichmentToEntities(enrichmentResult)
+      const allEntities = mergeExtractedEntities(
+        mergeExtractedEntities(pageEntities, publicEntities),
+        enrichedEntities,
+      )
 
       // Persist profile-only result and relationship signals in parallel
       await Promise.all([
@@ -130,7 +143,7 @@ export async function POST(req: Request) {
           status: "profile_only",
           fitScore: score.total,
           clientProfile,
-          signals,
+          signals: signalsWithEnrichment,
           lastAnalyzedAt: new Date().toISOString(),
         }),
         saveRelationshipSignals(client.id, userId, allEntities).catch((err) =>
@@ -159,7 +172,11 @@ export async function POST(req: Request) {
       relPages,
       signals.extracted?.logoAlts,
     )
-    const allEntities = mergeExtractedEntities(pageEntities, publicEntities)
+    const enrichedEntities = convertEnrichmentToEntities(enrichmentResult)
+    const allEntities = mergeExtractedEntities(
+      mergeExtractedEntities(pageEntities, publicEntities),
+      enrichedEntities,
+    )
 
     // Persist analysis result and relationship signals in parallel
     await Promise.all([
@@ -168,7 +185,7 @@ export async function POST(req: Request) {
         fitScore: score.total,
         status: "complete",
         clientProfile,
-        signals,
+        signals: signalsWithEnrichment,
         lastSignals: prevSignals,
         changes,
         changeSummary,
