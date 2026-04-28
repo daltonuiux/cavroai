@@ -10,26 +10,53 @@ import type {
 } from "./types"
 
 // ---------------------------------------------------------------------------
-// Strength maps — relationship_type takes priority over entity_type
+// Strength calculation
+//
+// Primary driver: number of distinct clients sharing the entity
+//   2 clients  → weak
+//   3–4 clients → medium
+//   5+ clients  → strong
+//
+// Secondary boost: high-value relationship/entity type can upgrade one level
+//   (investor, customer, founder → +1 level; others → no boost)
 // ---------------------------------------------------------------------------
 
-const STRENGTH_BY_ENTITY: Partial<Record<EntityType, WarmPath["strength"]>> = {
-  investor:  "strong",
-  partner:   "medium",
-  company:   "medium",
-  tool:      "weak",
-  person:    "weak",
-  community: "weak",
+const STRENGTH_ORDER: Record<WarmPath["strength"], number> = {
+  strong: 3,
+  medium: 2,
+  weak:   1,
 }
 
-const STRENGTH_BY_RELATIONSHIP: Partial<Record<RelationshipSignalType, WarmPath["strength"]>> = {
-  invested_by: "strong",
-  customer:    "strong",
-  founder:     "strong",
-  partner:     "medium",
-  uses:        "weak",
-  employee:    "weak",
-  mentioned:   "weak",
+/**
+ * Base strength derived from the number of distinct clients that share an entity.
+ * This is the primary signal — more clients sharing = stronger path.
+ */
+function clientCountStrength(distinctClientCount: number): WarmPath["strength"] {
+  if (distinctClientCount >= 5) return "strong"
+  if (distinctClientCount >= 3) return "medium"
+  return "weak"
+}
+
+/**
+ * Whether the relationship/entity type qualifies for a one-level boost.
+ * Investor, customer and founder relationships are high-value and can
+ * upgrade weak→medium or medium→strong.
+ */
+const HIGH_VALUE_RELATIONSHIP = new Set<RelationshipSignalType>([
+  "invested_by", "customer", "founder",
+])
+const HIGH_VALUE_ENTITY = new Set<EntityType>(["investor"])
+
+function typeBoost(sig: RelationshipSignal): boolean {
+  if (sig.relationshipType && HIGH_VALUE_RELATIONSHIP.has(sig.relationshipType)) return true
+  return HIGH_VALUE_ENTITY.has(sig.entityType as EntityType)
+}
+
+function applyBoost(base: WarmPath["strength"], boost: boolean): WarmPath["strength"] {
+  if (!boost) return base
+  if (base === "weak")   return "medium"
+  if (base === "medium") return "strong"
+  return "strong"
 }
 
 /** Strength of a manually seeded relationship */
@@ -42,19 +69,6 @@ const STRENGTH_BY_SEED_RELATIONSHIP: Partial<Record<SeedRelationshipType, WarmPa
   ecosystem:   "weak",
   uses:        "weak",
   member_of:   "weak",
-}
-
-const STRENGTH_ORDER: Record<WarmPath["strength"], number> = {
-  strong: 3,
-  medium: 2,
-  weak:   1,
-}
-
-function signalStrength(sig: RelationshipSignal): WarmPath["strength"] {
-  if (sig.relationshipType) {
-    return STRENGTH_BY_RELATIONSHIP[sig.relationshipType] ?? STRENGTH_BY_ENTITY[sig.entityType as EntityType] ?? "weak"
-  }
-  return STRENGTH_BY_ENTITY[sig.entityType as EntityType] ?? "weak"
 }
 
 function seedStrength(seed: RelationshipSeed): WarmPath["strength"] {
@@ -213,15 +227,10 @@ export function computeWarmPaths(
       continue
     }
 
-    // Pick the strongest scraped signal
+    // Pick the best signal for type boost (prefer investor / customer / founder)
     let bestSig: RelationshipSignal = group[0]
-    let bestScrapedStrength: WarmPath["strength"] = signalStrength(group[0])
-    for (const sig of group.slice(1)) {
-      const s = signalStrength(sig)
-      if (STRENGTH_ORDER[s] > STRENGTH_ORDER[bestScrapedStrength]) {
-        bestSig = sig
-        bestScrapedStrength = s
-      }
+    for (const sig of group) {
+      if (typeBoost(sig)) { bestSig = sig; break }
     }
 
     const bestEntityType = bestSig.entityType as EntityType
@@ -243,9 +252,9 @@ export function computeWarmPaths(
 
     // Source and strength
     const source: WarmPathSource = seed ? "both" : "scraped"
-    const strength = seed
-      ? maxStrength(bestScrapedStrength, seedStrength(seed))
-      : bestScrapedStrength
+    const base    = clientCountStrength(distinctClientIds.length)
+    const boosted = applyBoost(base, typeBoost(bestSig))
+    const strength = seed ? maxStrength(boosted, seedStrength(seed)) : boosted
 
     // Reason and why-it-matters
     const reason = seed

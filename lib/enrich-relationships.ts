@@ -488,6 +488,17 @@ export async function enrichPublicRelationships(
 // ---------------------------------------------------------------------------
 
 /**
+ * Caps an entity list to `max` entries (default 15), preferring higher-confidence
+ * entities. Call this before persisting to keep signal noise low.
+ */
+export function capEntities(entities: ExtractedEntity[], max = 15): ExtractedEntity[] {
+  if (entities.length <= max) return entities
+  return [...entities]
+    .sort((a, b) => (CONFIDENCE_ORDER[b.confidence] ?? 0) - (CONFIDENCE_ORDER[a.confidence] ?? 0))
+    .slice(0, max)
+}
+
+/**
  * Merges two ExtractedEntity arrays, deduplicating by (entityName, entityType).
  * When the same entity appears in both, keeps the higher-confidence entry.
  */

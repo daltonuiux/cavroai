@@ -13,7 +13,7 @@ import { analyzeWebsite } from "@/lib/ai"
 import { detectChanges, summarizeChanges } from "@/lib/diff"
 import { scoreOpportunity } from "@/lib/scoring"
 import { fetchRelationshipPages, extractRelationshipSignals, type ExtractedEntity } from "@/lib/relationship-signals"
-import { enrichPublicRelationships, mergeExtractedEntities } from "@/lib/enrich-relationships"
+import { enrichPublicRelationships, mergeExtractedEntities, capEntities } from "@/lib/enrich-relationships"
 import { enrichCompany, convertEnrichmentToEntities } from "@/lib/enrichment"
 import { extractClientProfile } from "@/lib/client-profile"
 import { extractWebsiteSignals } from "@/lib/website-signals"
@@ -139,10 +139,10 @@ export async function POST(req: Request) {
         signals.extracted?.logoAlts,
       )
       const enrichedEntities = convertEnrichmentToEntities(enrichmentResult)
-      const allEntities = mergeExtractedEntities(
+      const allEntities = capEntities(mergeExtractedEntities(
         mergeExtractedEntities(pageEntities, publicEntities),
         enrichedEntities,
-      )
+      ))
 
       // Persist profile-only result and relationship signals in parallel
       await Promise.all([
@@ -185,10 +185,10 @@ export async function POST(req: Request) {
       signals.extracted?.logoAlts,
     )
     const enrichedEntities = convertEnrichmentToEntities(enrichmentResult)
-    const allEntities = mergeExtractedEntities(
+    const allEntities = capEntities(mergeExtractedEntities(
       mergeExtractedEntities(pageEntities, publicEntities),
       enrichedEntities,
-    )
+    ))
 
     // Persist analysis result and relationship signals in parallel
     await Promise.all([

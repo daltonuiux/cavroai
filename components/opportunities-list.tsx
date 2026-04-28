@@ -326,7 +326,7 @@ function IntroAskBlock({ intro }: { intro: OpportunityWarmPath["namedIntros"][nu
   )
 }
 
-function WarmPathsPanel({ paths }: { paths: OpportunityWarmPath[] }) {
+function WarmPathsPanel({ paths, targetCompany }: { paths: OpportunityWarmPath[]; targetCompany: string }) {
   return (
     <div className="px-4 py-3">
       <p className="text-[10px] font-semibold uppercase tracking-widest text-violet-500/70 dark:text-violet-400/70 mb-2.5">
@@ -335,26 +335,35 @@ function WarmPathsPanel({ paths }: { paths: OpportunityWarmPath[] }) {
       <div className="flex flex-col gap-3">
         {paths.map((path, i) => {
           const meta = STRENGTH_META[path.strength] ?? STRENGTH_META.weak
+          // sourceClients may be comma-joined; split for display
+          const clientNames = path.sourceClients.split(",").map((s) => s.trim()).filter(Boolean)
           return (
             <div key={i} className="rounded-md border border-violet-500/10 bg-violet-500/[0.03] px-3 py-2.5">
-              {/* Header row */}
-              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                <span className="text-[12px] font-semibold text-foreground capitalize">
+
+              {/* Intro chain: You → Client(s) → Entity → Target */}
+              <div className="flex items-center gap-1 flex-wrap mb-2">
+                <span className="text-[11px] font-semibold text-foreground/50">You</span>
+                <span className="text-[10px] text-muted-foreground/30">→</span>
+                {clientNames.map((name, ci) => (
+                  <span key={ci} className="flex items-center gap-1">
+                    <span className="rounded bg-foreground/[0.06] px-1.5 py-px text-[11px] font-medium text-foreground/70">
+                      {name}
+                    </span>
+                    {ci < clientNames.length - 1 && (
+                      <span className="text-[10px] text-muted-foreground/30">·</span>
+                    )}
+                  </span>
+                ))}
+                <span className="text-[10px] text-muted-foreground/30">→</span>
+                <span className="rounded bg-violet-500/10 px-1.5 py-px text-[11px] font-semibold text-violet-600 dark:text-violet-400 capitalize">
                   {path.viaEntity}
                 </span>
-                <span className={`rounded px-1.5 py-px text-[10px] font-semibold ${meta.color}`}>
+                <span className="text-[10px] text-muted-foreground/30">→</span>
+                <span className="text-[11px] font-semibold text-foreground/80">{targetCompany}</span>
+                <span className={`ml-1 rounded px-1.5 py-px text-[10px] font-semibold ${meta.color}`}>
                   {meta.label}
                 </span>
-                <span className="text-[10px] text-muted-foreground/40 capitalize">
-                  via {path.viaType}
-                </span>
               </div>
-
-              {/* Source clients */}
-              <p className="text-[11px] text-muted-foreground/60 mb-1">
-                Also connected to{" "}
-                <span className="font-medium text-foreground/70">{path.sourceClients}</span>
-              </p>
 
               {/* Explanation */}
               <p className="text-[11px] leading-relaxed text-muted-foreground/50 mb-1.5">
@@ -437,7 +446,7 @@ function AnalysedCard({ row, onDone }: { row: OpportunityRow; onDone: () => void
 
           {/* Warm intro paths */}
           {row.warmPaths && row.warmPaths.length > 0 && (
-            <WarmPathsPanel paths={row.warmPaths} />
+            <WarmPathsPanel paths={row.warmPaths} targetCompany={row.company} />
           )}
 
           {/* Agency fit reason */}

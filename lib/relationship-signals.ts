@@ -71,13 +71,84 @@ export interface ExtractedEntity {
  * Normalize entity names for deduplication and DB storage.
  * Applies: lowercase → trim → remove punctuation → collapse whitespace.
  */
+/**
+ * Canonical display names — keys are the fully-normalized (lowercase, no
+ * punctuation) form; values are the preferred display representation.
+ * Handles common abbreviation variations so they cluster correctly.
+ */
+const CANONICAL_NAMES: Record<string, string> = {
+  // Cloud / infra
+  "amazon web services": "AWS",
+  "aws":                 "AWS",
+  "google cloud platform": "Google Cloud",
+  "google cloud":        "Google Cloud",
+  "gcp":                 "Google Cloud",
+  "microsoft azure":     "Azure",
+  "azure":               "Azure",
+  // Version control & CI
+  "github":              "GitHub",
+  "gitlab":              "GitLab",
+  "bitbucket":           "Bitbucket",
+  // Databases
+  "postgresql":          "PostgreSQL",
+  "postgres":            "PostgreSQL",
+  "mongodb":             "MongoDB",
+  "redis":               "Redis",
+  "mysql":               "MySQL",
+  "supabase":            "Supabase",
+  "planetscale":         "PlanetScale",
+  // Containers / infra tools
+  "kubernetes":          "Kubernetes",
+  "k8s":                 "Kubernetes",
+  "docker":              "Docker",
+  "terraform":           "Terraform",
+  "datadog":             "Datadog",
+  // Payments / comms
+  "stripe":              "Stripe",
+  "twilio":              "Twilio",
+  "sendgrid":            "SendGrid",
+  // Analytics / BI
+  "snowflake":           "Snowflake",
+  "looker":              "Looker",
+  "tableau":             "Tableau",
+  "amplitude":           "Amplitude",
+  "mixpanel":            "Mixpanel",
+  "segment":             "Segment",
+  "dbt":                 "dbt",
+  "airflow":             "Airflow",
+  // CRM / support / sales
+  "salesforce":          "Salesforce",
+  "hubspot":             "HubSpot",
+  "zendesk":             "Zendesk",
+  "intercom":            "Intercom",
+  // Productivity / collab
+  "slack":               "Slack",
+  "notion":              "Notion",
+  "linear":              "Linear",
+  "figma":               "Figma",
+  "jira":                "Jira",
+  "confluence":          "Confluence",
+  "asana":               "Asana",
+  // Hosting / deploy
+  "vercel":              "Vercel",
+  "netlify":             "Netlify",
+  "heroku":              "Heroku",
+  "cloudflare":          "Cloudflare",
+  // AI
+  "openai":              "OpenAI",
+  "anthropic":           "Anthropic",
+}
+
 export function normalizeEntityName(name: string): string {
-  return name
+  const normalized = name
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9\s]/g, "")
     .replace(/\s+/g, " ")
     .trim()
+  // Return canonical display name when one is registered; otherwise return
+  // the normalized lowercase form so grouping stays consistent.
+  return CANONICAL_NAMES[normalized] ?? normalized
 }
 
 const WEAK_GENERIC_NAMES = new Set([
