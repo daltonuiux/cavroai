@@ -345,6 +345,9 @@ class TavilyProvider implements EnrichmentProvider {
 // ---------------------------------------------------------------------------
 
 function createProvider(): EnrichmentProvider | null {
+  console.log("ENRICHMENT_PROVIDER:", process.env.ENRICHMENT_PROVIDER)
+  console.log("TAVILY_API_KEY exists:", !!process.env.TAVILY_API_KEY)
+
   const name = (process.env.ENRICHMENT_PROVIDER ?? "").toLowerCase().trim()
 
   if (!name) return null
