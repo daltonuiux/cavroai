@@ -393,6 +393,12 @@ export interface EnrichmentResult {
   peopleSignals:   string[]  // "Sarah Chen — Co-founder & CEO"
   newsSignals:     string[]  // article headlines
   sourceUrls:      string[]  // provenance URLs used by the provider
+  /** ISO timestamp when this enrichment run completed */
+  scannedAt?:      string
+  /** Total results fetched from the provider before any filtering */
+  rawCount?:       number
+  /** Results dropped by the entity/domain relevance filter */
+  rejectedCount?:  number
 }
 
 // ---------------------------------------------------------------------------

@@ -450,7 +450,10 @@ function AnalysisResults({
       )}
 
       {/* External enrichment panel — always rendered; shows "not configured" when no provider */}
-      <EnrichmentPanel enrichmentResult={analysis.signals?.enrichmentResult} />
+      <EnrichmentPanel
+        enrichmentResult={analysis.signals?.enrichmentResult}
+        lastAnalyzedAt={analysis.lastAnalyzedAt}
+      />
     </div>
   )
 }
@@ -717,7 +720,7 @@ function SignalsDebug({
 // ---------------------------------------------------------------------------
 
 const ENRICHMENT_SECTIONS: Array<{
-  key: keyof Omit<EnrichmentResult, "provider" | "status" | "sourceUrls">
+  key: keyof Omit<EnrichmentResult, "provider" | "status" | "sourceUrls" | "scannedAt" | "rawCount" | "rejectedCount">
   label: string
   pillColor: string
   nameColor: string
@@ -730,7 +733,13 @@ const ENRICHMENT_SECTIONS: Array<{
   { key: "newsSignals",     label: "News",                pillColor: "bg-foreground/[0.04]", nameColor: "text-foreground/50" },
 ]
 
-function EnrichmentPanel({ enrichmentResult }: { enrichmentResult?: EnrichmentResult }) {
+function EnrichmentPanel({
+  enrichmentResult,
+  lastAnalyzedAt,
+}: {
+  enrichmentResult?: EnrichmentResult
+  lastAnalyzedAt?: string
+}) {
   // Not configured — show a muted prompt rather than hiding entirely
   if (!enrichmentResult || enrichmentResult.status === "not_configured") {
     return (
@@ -746,20 +755,86 @@ function EnrichmentPanel({ enrichmentResult }: { enrichmentResult?: EnrichmentRe
 
   if (enrichmentResult.status === "error") {
     return (
-      <div className="rounded-md border border-dashed border-border bg-background px-4 py-3">
+      <div className="rounded-md border border-dashed border-border bg-background px-4 py-3 flex flex-col gap-1">
+        <p className="text-[11px] font-medium text-foreground/50">
+          External enrichment failed
+        </p>
         <p className="text-[11px] text-muted-foreground/40">
-          External enrichment ({enrichmentResult.provider}) returned an error.
+          Provider: {enrichmentResult.provider}. Check server logs for details.
         </p>
       </div>
     )
   }
 
-  // status === "ok" — render grouped sections
+  // status === "ok" — count signals across all categories
   const totalSignals = ENRICHMENT_SECTIONS.reduce(
     (sum, s) => sum + (enrichmentResult[s.key]?.length ?? 0),
     0,
   )
 
+  // Shared metadata row shown in both zero-signal and signal states
+  const scannedAgo = (enrichmentResult.scannedAt ?? lastAnalyzedAt)
+    ? formatRelative(enrichmentResult.scannedAt ?? lastAnalyzedAt!)
+    : null
+
+  const metaItems: Array<{ label: string; value: string }> = [
+    { label: "Provider",     value: enrichmentResult.provider },
+    ...(scannedAgo ? [{ label: "Last scanned", value: scannedAgo }] : []),
+    ...(enrichmentResult.rawCount !== undefined
+      ? [{ label: "Results checked", value: String(enrichmentResult.rawCount) }]
+      : []),
+    ...(enrichmentResult.rejectedCount !== undefined
+      ? [{ label: "Rejected (unrelated)", value: String(enrichmentResult.rejectedCount) }]
+      : []),
+  ]
+
+  // ── Zero-signal state ─────────────────────────────────────────────────────
+  if (totalSignals === 0) {
+    return (
+      <div className="rounded-md border border-border bg-background px-4 py-4 flex flex-col gap-3">
+        {/* Header */}
+        <div>
+          <p className="text-[12px] font-semibold text-foreground/70">
+            No external signals found
+          </p>
+          <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground/55">
+            We couldn&apos;t find reliable funding, hiring, customer, partner, or news signals
+            for this company from public sources.
+          </p>
+        </div>
+
+        {/* Metadata */}
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {metaItems.map(({ label, value }) => (
+            <div key={label} className="flex items-center gap-1">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/35">
+                {label}:
+              </span>
+              <span className="text-[11px] text-muted-foreground/50">{value}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Suggested next step */}
+        <div className="border-t border-border pt-3 flex items-start gap-2.5">
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 mb-0.5">
+              Suggested next step
+            </p>
+            <p className="text-[12px] leading-relaxed text-muted-foreground/55">
+              Add known relationships on the{" "}
+              <a href="/network" className="underline underline-offset-2 text-foreground/60 hover:text-foreground/80 transition-colors">
+                Network page
+              </a>
+              {" "}or re-scan this client once the company has more public activity.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Signals found — collapsible ───────────────────────────────────────────
   return (
     <details className="group">
       <summary className="card-cavro flex cursor-pointer select-none list-none items-center justify-between rounded-md px-4 py-3 text-[12px] font-medium text-muted-foreground/55 transition-colors hover:text-muted-foreground/80">
@@ -776,6 +851,22 @@ function EnrichmentPanel({ enrichmentResult }: { enrichmentResult?: EnrichmentRe
       </summary>
 
       <div className="mt-2 rounded-md border border-border bg-background px-4 py-3.5 flex flex-col gap-4">
+
+        {/* Metadata strip */}
+        {metaItems.length > 0 && (
+          <div className="flex flex-wrap gap-x-4 gap-y-0.5 pb-2 border-b border-border">
+            {metaItems.map(({ label, value }) => (
+              <div key={label} className="flex items-center gap-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/35">
+                  {label}:
+                </span>
+                <span className="text-[11px] text-muted-foreground/50">{value}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Signal sections */}
         {ENRICHMENT_SECTIONS.map(({ key, label, pillColor, nameColor }) => {
           const items = enrichmentResult[key] ?? []
           if (items.length === 0) return null
@@ -798,6 +889,7 @@ function EnrichmentPanel({ enrichmentResult }: { enrichmentResult?: EnrichmentRe
           )
         })}
 
+        {/* Source URLs */}
         {enrichmentResult.sourceUrls && enrichmentResult.sourceUrls.length > 0 && (
           <div>
             <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">

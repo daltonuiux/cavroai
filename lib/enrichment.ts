@@ -413,8 +413,8 @@ class TavilyProvider implements EnrichmentProvider {
     )
 
     return {
-      provider: "tavily",
-      status:   "ok",
+      provider:     "tavily",
+      status:       "ok",
       fundingSignals,
       customerSignals,
       partnerSignals,
@@ -422,6 +422,8 @@ class TavilyProvider implements EnrichmentProvider {
       hiringSignals,
       newsSignals,
       sourceUrls,
+      rawCount:     rawTotal,
+      rejectedCount,
     }
   }
 }
@@ -506,6 +508,9 @@ export async function enrichCompany(
       peopleSignals:   result.peopleSignals   ?? [],
       newsSignals:     result.newsSignals     ?? [],
       sourceUrls:      result.sourceUrls      ?? [],
+      scannedAt:       new Date().toISOString(),
+      rawCount:        result.rawCount,
+      rejectedCount:   result.rejectedCount,
     }
 
     console.log(
