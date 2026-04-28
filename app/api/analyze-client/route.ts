@@ -17,6 +17,7 @@ import { fetchRelationshipPages, fetchSitemapEntities, extractRelationshipSignal
 import { enrichPublicRelationships, mergeExtractedEntities, capEntities } from "@/lib/enrich-relationships"
 import { extractEnrichmentProspects } from "@/lib/extract-enrichment-prospects"
 import { enrichCompany, convertEnrichmentToEntities } from "@/lib/enrichment"
+import { enrichEntitySignals, mergeProspects } from "@/lib/enrich-entities"
 import { extractClientProfile } from "@/lib/client-profile"
 import { extractWebsiteSignals } from "@/lib/website-signals"
 import { createClient } from "@/lib/supabase/server"
@@ -168,9 +169,22 @@ export async function POST(req: Request) {
       )
       console.log(`ENTITIES [profile_only]: ${allEntities.length} total (${sitemapEntities.length} sitemap, ${pageEntities.length} page, ${publicEntities.length} public, ${enrichedEntities.length} enrichment)`)
 
-      // Extract enrichment prospects
-      const enrichmentProspects = extractEnrichmentProspects(enrichmentResult, client.name)
-      console.log("Prospects extracted (profile_only):", enrichmentProspects.length, enrichmentProspects.map((p) => p.name))
+      // Extract enrichment prospects from external provider (Tavily/Exa/mock)
+      const providerProspects = extractEnrichmentProspects(enrichmentResult, client.name)
+      console.log("Provider prospects (profile_only):", providerProspects.length, providerProspects.map((p) => p.name))
+
+      // Expand extracted entities → related companies via AI (works with Anthropic key alone)
+      const apiKey = process.env.ANTHROPIC_API_KEY
+      const entityProspects = apiKey
+        ? await enrichEntitySignals(allEntities, client.name, apiKey).catch((err) => {
+            console.error("Entity enrichment error (non-fatal):", err)
+            return []
+          })
+        : []
+
+      // Merge: provider prospects take precedence; entity prospects fill the rest
+      const allProspects = mergeProspects(providerProspects, entityProspects)
+      console.log("Total prospects (profile_only):", allProspects.length, `(${providerProspects.length} provider + ${entityProspects.length} entity)`)
 
       // Persist profile-only result and relationship signals in parallel
       await Promise.all([
@@ -187,10 +201,10 @@ export async function POST(req: Request) {
         ),
       ])
 
-      // Persist enrichment prospects separately so errors surface clearly
+      // Persist all prospects in a single call (delete + insert)
       try {
-        const count = await saveEnrichmentProspects(client.id, client.name, userId, enrichmentProspects)
-        console.log("Prospects created (profile_only):", count)
+        const count = await saveEnrichmentProspects(client.id, client.name, userId, allProspects)
+        console.log("Prospects saved (profile_only):", count)
       } catch (err) {
         console.error("PROSPECT SAVE FAILED (profile_only):", err)
       }
@@ -234,9 +248,22 @@ export async function POST(req: Request) {
     )
     console.log(`ENTITIES [complete]: ${allEntities.length} total (${sitemapEntities.length} sitemap, ${pageEntities.length} page, ${publicEntities.length} public, ${enrichedEntities.length} enrichment)`)
 
-    // Extract enrichment prospects
-    const enrichmentProspects = extractEnrichmentProspects(enrichmentResult, client.name)
-    console.log("Prospects extracted (complete):", enrichmentProspects.length, enrichmentProspects.map((p) => p.name))
+    // Extract enrichment prospects from external provider (Tavily/Exa/mock)
+    const providerProspects = extractEnrichmentProspects(enrichmentResult, client.name)
+    console.log("Provider prospects (complete):", providerProspects.length, providerProspects.map((p) => p.name))
+
+    // Expand extracted entities → related companies via AI (works with Anthropic key alone)
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    const entityProspects = apiKey
+      ? await enrichEntitySignals(allEntities, client.name, apiKey).catch((err) => {
+          console.error("Entity enrichment error (non-fatal):", err)
+          return []
+        })
+      : []
+
+    // Merge: provider prospects take precedence; entity prospects fill the rest
+    const allProspects = mergeProspects(providerProspects, entityProspects)
+    console.log("Total prospects (complete):", allProspects.length, `(${providerProspects.length} provider + ${entityProspects.length} entity)`)
 
     // Persist analysis result and relationship signals in parallel
     await Promise.all([
@@ -257,10 +284,10 @@ export async function POST(req: Request) {
       ),
     ])
 
-    // Persist enrichment prospects separately so errors surface clearly
+    // Persist all prospects in a single call (delete + insert)
     try {
-      const count = await saveEnrichmentProspects(client.id, client.name, userId, enrichmentProspects)
-      console.log("Prospects created (complete):", count)
+      const count = await saveEnrichmentProspects(client.id, client.name, userId, allProspects)
+      console.log("Prospects saved (complete):", count)
     } catch (err) {
       console.error("PROSPECT SAVE FAILED (complete):", err)
     }
