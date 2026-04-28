@@ -57,6 +57,29 @@ export interface EvidenceItem {
 }
 
 // ---------------------------------------------------------------------------
+// Website Signal Engine — AI-detected design/UX/product signals
+// ---------------------------------------------------------------------------
+
+export type WebsiteSignalType =
+  | "messaging_issue"
+  | "conversion_issue"
+  | "ux_issue"
+  | "product_expansion"
+  | "onboarding_friction"
+
+/**
+ * A single detected signal from website content analysis.
+ * Evidence must be traceable to actual scraped text — never invented.
+ */
+export interface WebsiteSignal {
+  type:        WebsiteSignalType
+  summary:     string
+  evidence:    string
+  opportunity: string
+  confidence:  "low" | "medium" | "high"
+}
+
+// ---------------------------------------------------------------------------
 // Agency profile — describes the user's own agency so analysis can assess fit
 // ---------------------------------------------------------------------------
 
@@ -105,6 +128,8 @@ export interface Analysis {
   fitReason?: string
   // Lightweight profile — always extracted, even when score is too low for full analysis
   clientProfile?: ClientProfile
+  // AI-detected website signals — always extracted alongside clientProfile
+  websiteSignals?: WebsiteSignal[]
 }
 
 export interface DB {

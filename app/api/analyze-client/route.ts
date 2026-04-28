@@ -16,6 +16,7 @@ import { fetchRelationshipPages, extractRelationshipSignals, type ExtractedEntit
 import { enrichPublicRelationships, mergeExtractedEntities } from "@/lib/enrich-relationships"
 import { enrichCompany, convertEnrichmentToEntities } from "@/lib/enrichment"
 import { extractClientProfile } from "@/lib/client-profile"
+import { extractWebsiteSignals } from "@/lib/website-signals"
 import { createClient } from "@/lib/supabase/server"
 
 export async function POST(req: Request) {
@@ -106,10 +107,11 @@ export async function POST(req: Request) {
       gatherSignals(client.websiteUrl, client.name),
     ])
 
-    // Always extract a lightweight client profile — runs even when score is too low
-    // Also start fetching relationship pages in parallel (pure HTTP, fast)
-    const [clientProfile, relPages, publicEntities, enrichmentResult] = await Promise.all([
+    // Always extract a lightweight client profile and website signals — run even when
+    // opportunity score is too low, so warm-paths and the website signal gate still work.
+    const [clientProfile, websiteSignals, relPages, publicEntities, enrichmentResult] = await Promise.all([
       extractClientProfile(signals),
+      extractWebsiteSignals(signals, agencyProfile).catch((): [] => []),
       fetchRelationshipPages(base),
       publicEnrichmentPromise,
       externalEnrichmentPromise,
@@ -118,11 +120,16 @@ export async function POST(req: Request) {
     // Attach enrichment result to signals so it's stored and shown in the UI
     const signalsWithEnrichment = { ...signals, enrichmentResult }
 
-    // Deterministic opportunity score — gates the full AI analysis call
-    const score = scoreOpportunity(signals, agencyProfile, client.name)
+    // Deterministic opportunity score — now includes AI-detected website signal boost
+    const score = scoreOpportunity(signals, agencyProfile, client.name, websiteSignals)
     console.log("OPPORTUNITY SCORE:", score.total, score.breakdown)
 
-    if (score.total < 50) {
+    // Gate: proceed with full AI analysis when score is sufficient OR when website
+    // signals are strong enough + agency fit exists (website-signal override).
+    const wsOverride =
+      score.breakdown.websiteSignal >= 20 && score.breakdown.agencyFit > 0
+
+    if (score.total < 50 && !wsOverride) {
       console.log("SCORE TOO LOW - PROFILE ONLY", score.total, client.websiteUrl)
 
       // Extract relationship signals even for profile-only — warm paths work with any status
@@ -143,6 +150,7 @@ export async function POST(req: Request) {
           status: "profile_only",
           fitScore: score.total,
           clientProfile,
+          websiteSignals,
           signals: signalsWithEnrichment,
           lastAnalyzedAt: new Date().toISOString(),
         }),
@@ -152,6 +160,10 @@ export async function POST(req: Request) {
       ])
 
       return NextResponse.json({ status: "profile_only" })
+    }
+
+    if (wsOverride && score.total < 50) {
+      console.log("WEBSITE SIGNAL OVERRIDE — running full analysis despite low score", score.total, `ws=${score.breakdown.websiteSignal}`)
     }
 
     const changes = prevSignals ? detectChanges(prevSignals, signals) : []
@@ -185,6 +197,7 @@ export async function POST(req: Request) {
         fitScore: score.total,
         status: "complete",
         clientProfile,
+        websiteSignals,
         signals: signalsWithEnrichment,
         lastSignals: prevSignals,
         changes,

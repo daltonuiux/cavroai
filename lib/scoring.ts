@@ -1,4 +1,5 @@
-import type { AgencyProfile, Signals } from "./types"
+import type { AgencyProfile, Signals, WebsiteSignal } from "./types"
+import { scoreWebsiteSignals } from "./website-signals"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -13,6 +14,8 @@ export interface ScoreBreakdown {
   website: number
   /** Agency-profile match points */
   agencyFit: number
+  /** AI-detected website signals: high +15, medium +8, max 30 */
+  websiteSignal: number
   /** Bad-fit penalty (positive number = subtracted) */
   penalties: number
   /** Clamped total (0–100) */
@@ -55,12 +58,14 @@ export function scoreOpportunity(
   signals: Signals,
   agencyProfile?: AgencyProfile | null,
   companyName = "",
+  websiteSignals?: WebsiteSignal[],
 ): OpportunityScore {
   let funding = 0
   let hiring = 0
   let website = 0
   let agencyFit = 0
   let penalties = 0
+  const websiteSignal = scoreWebsiteSignals(websiteSignals ?? [])
 
   // ── News signals ──────────────────────────────────────────────────────────
   const ns = signals.newsSignals
@@ -142,7 +147,7 @@ export function scoreOpportunity(
     if (badFit.length       > 0 && matchesAny(searchText, badFit))       penalties += 40
   }
 
-  const raw   = funding + hiring + website + agencyFit - penalties
+  const raw   = funding + hiring + website + agencyFit + websiteSignal - penalties
   const total = Math.min(100, Math.max(0, raw))
 
   const confidence: "low" | "medium" | "high" =
@@ -151,7 +156,7 @@ export function scoreOpportunity(
   return {
     total,
     confidence,
-    breakdown: { funding, hiring, website, agencyFit, penalties, total },
+    breakdown: { funding, hiring, website, agencyFit, websiteSignal, penalties, total },
   }
 }
 

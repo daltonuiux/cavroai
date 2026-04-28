@@ -4,7 +4,7 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, AlertCircle, ChevronDown } from "lucide-react"
 import { getClientById, getAnalysisByClientId, getAgencyProfile, getProspectsByClientId, getRelationshipSignalsByClientId, MVP_USER_ID } from "@/lib/db"
-import type { Analysis, ClientProfile, EnrichmentResult, RelationshipSignal, SignalChange, Signals } from "@/lib/types"
+import type { Analysis, ClientProfile, EnrichmentResult, RelationshipSignal, SignalChange, Signals, WebsiteSignal } from "@/lib/types"
 import { scoreOpportunity, type ScoreBreakdown } from "@/lib/scoring"
 import { SimilarCompanies } from "@/components/similar-companies"
 import { createClient } from "@/lib/supabase/server"
@@ -88,13 +88,17 @@ export default async function ClientPage({
       ) : analysis.status === "insufficient_data" ? (
         <AnalysisInsufficient clientProfile={analysis.clientProfile} relSignalCount={relSignals.length} />
       ) : analysis.status === "profile_only" ? (
-        <AnalysisProfileOnly clientProfile={analysis.clientProfile} relSignalCount={relSignals.length} />
+        <AnalysisProfileOnly
+          clientProfile={analysis.clientProfile}
+          websiteSignals={analysis.websiteSignals}
+          relSignalCount={relSignals.length}
+        />
       ) : (
         <AnalysisResults
           analysis={analysis}
           scoreBreakdown={
             analysis.signals
-              ? scoreOpportunity(analysis.signals, agencyProfile, client.name).breakdown
+              ? scoreOpportunity(analysis.signals, agencyProfile, client.name, analysis.websiteSignals).breakdown
               : null
           }
           relSignals={relSignals}
@@ -215,9 +219,11 @@ function AnalysisInsufficient({
 
 function AnalysisProfileOnly({
   clientProfile,
+  websiteSignals,
   relSignalCount,
 }: {
   clientProfile?: ClientProfile
+  websiteSignals?: WebsiteSignal[]
   relSignalCount: number
 }) {
   return (
@@ -237,6 +243,10 @@ function AnalysisProfileOnly({
 
       {clientProfile && (clientProfile.category || clientProfile.productDescription) && (
         <ClientProfileCard clientProfile={clientProfile} />
+      )}
+
+      {websiteSignals && websiteSignals.length > 0 && (
+        <WebsiteSignalsSection signals={websiteSignals} />
       )}
     </div>
   )
@@ -411,6 +421,11 @@ function AnalysisResults({
         </div>
       )}
 
+      {/* Website signals */}
+      {analysis.websiteSignals && analysis.websiteSignals.length > 0 && (
+        <WebsiteSignalsSection signals={analysis.websiteSignals} />
+      )}
+
       {/* Full breakdown */}
       <details className="group">
         <summary className="card-cavro flex cursor-pointer select-none list-none items-center justify-between rounded-md px-4 py-3 text-[12px] font-medium text-muted-foreground/55 transition-colors hover:text-muted-foreground/80">
@@ -574,11 +589,12 @@ function SignalsDebug({
             <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
               {(
                 [
-                  ["News / funding",  scoreBreakdown.funding],
-                  ["Hiring",          scoreBreakdown.hiring],
-                  ["Website",         scoreBreakdown.website],
-                  ["Agency fit",      scoreBreakdown.agencyFit],
-                  ["Penalties",       -scoreBreakdown.penalties],
+                  ["News / funding",    scoreBreakdown.funding],
+                  ["Hiring",            scoreBreakdown.hiring],
+                  ["Website",           scoreBreakdown.website],
+                  ["Website signals",   scoreBreakdown.websiteSignal],
+                  ["Agency fit",        scoreBreakdown.agencyFit],
+                  ["Penalties",         -scoreBreakdown.penalties],
                 ] as [string, number][]
               ).map(([label, pts]) => (
                 <div key={label} className="flex items-center justify-between gap-2">
@@ -712,6 +728,74 @@ function SignalsDebug({
         })()}
       </div>
     </details>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Website signals section
+// ---------------------------------------------------------------------------
+
+const SIGNAL_TYPE_META: Record<string, { label: string; color: string }> = {
+  messaging_issue:     { label: "Messaging",   color: "bg-amber-500/10 text-amber-700 dark:text-amber-400"   },
+  conversion_issue:    { label: "Conversion",  color: "bg-red-500/10 text-red-700 dark:text-red-400"         },
+  ux_issue:            { label: "UX",          color: "bg-purple-500/10 text-purple-700 dark:text-purple-400" },
+  product_expansion:   { label: "Product",     color: "bg-sky-500/10 text-sky-700 dark:text-sky-400"         },
+  onboarding_friction: { label: "Onboarding",  color: "bg-orange-500/10 text-orange-700 dark:text-orange-400" },
+}
+
+const CONFIDENCE_COLOR: Record<string, string> = {
+  high:   "text-emerald-600 dark:text-emerald-400",
+  medium: "text-amber-600 dark:text-amber-400",
+  low:    "text-muted-foreground/35",
+}
+
+function WebsiteSignalsSection({ signals }: { signals: WebsiteSignal[] }) {
+  return (
+    <div className="rounded-md border border-border bg-background px-4 py-3.5 flex flex-col gap-4">
+      <p className="text-[11px] font-semibold text-foreground/80">
+        Website Signals{" "}
+        <span className="font-normal text-muted-foreground/50">({signals.length})</span>
+      </p>
+
+      {signals.map((signal, i) => {
+        const meta = SIGNAL_TYPE_META[signal.type] ?? { label: signal.type, color: "bg-foreground/5 text-foreground/50" }
+        return (
+          <div key={i} className="flex flex-col gap-2">
+            {/* Type + confidence */}
+            <div className="flex items-center gap-2">
+              <span className={`rounded px-1.5 py-px text-[10px] font-semibold ${meta.color}`}>
+                {meta.label}
+              </span>
+              <span className={`text-[10px] font-semibold uppercase tracking-wide ${CONFIDENCE_COLOR[signal.confidence]}`}>
+                {signal.confidence}
+              </span>
+            </div>
+
+            {/* Summary */}
+            <p className="text-[12px] font-medium leading-snug text-foreground/85">
+              {signal.summary}
+            </p>
+
+            {/* Evidence */}
+            <blockquote className="border-l-2 border-border pl-3">
+              <p className="text-[11px] italic leading-relaxed text-muted-foreground/60">
+                &ldquo;{signal.evidence}&rdquo;
+              </p>
+            </blockquote>
+
+            {/* Opportunity */}
+            <p className="text-[11px] leading-relaxed text-foreground/60">
+              <span className="font-semibold text-foreground/40 mr-1">Opportunity:</span>
+              {signal.opportunity}
+            </p>
+
+            {i < signals.length - 1 && (
+              <div className="border-t border-border pt-0" />
+            )}
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
