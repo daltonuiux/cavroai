@@ -1,43 +1,114 @@
 /**
- * Warm Path Engine — focused relationship extraction.
+ * Warm Path Engine — relationship entity extraction.
  *
- * Two-phase design:
- *   1. fetchRelationshipPages()    — fetches high-signal pages in parallel with analysis
- *   2. extractRelationshipSignals() — extracts company names from those pages only
+ * Extraction strategy (ordered by reliability):
  *
- * Strategy:
- *   Only extract from: /customers, /case-studies, /partners, /integrations
- *   Also use logo img alt texts from those pages (logo walls = structured company lists)
- *   Homepage logo alts (from signals.extracted.logoAlts) are accepted as a structured signal
+ *  0. Sitemap parsing   — /sitemap.xml is static XML on every site, even fully
+ *                         JS-rendered ones. URLs like /customers/stripe are
+ *                         guaranteed company slugs. Highest signal-to-noise.
  *
- *   Do NOT use: homepage prose, /about, /team, /blog, /investors
+ *  1. URL slug scan     — <a href="/customers/stripe"> in raw HTML. Works even
+ *                         when body content is JS-rendered (nav links are SSR'd).
  *
- * Entity schema (normalized):
- *   entity_type:       "company" | "partner" | "tool"
- *   relationship_type: "customer" | "partner" | "uses"
+ *  2. Logo alt texts    — <img alt="Stripe logo"> in page HTML. Curated by the
+ *                         site's design team → high confidence.
+ *
+ *  3. Homepage scan     — "Trusted by", logo grids, text patterns on the root URL.
+ *
+ *  4. Relationship pages— /customers, /partners, /integrations + multi-path tries.
+ *     Text patterns     — "integrates with X", "trusted by X", "works with X".
+ *     Headings          — <h2>/<h3> on relationship pages.
+ *     JSON-LD           — structured data with Organization names.
+ *     AI extraction     — claude-haiku on page text (when API key present).
+ *
+ *  5. Mention fallback  — if total < 5 entities, count ALL CamelCase /
+ *                         Title-Case mentions across collected text. Anything
+ *                         mentioned ≥ 2 times that passes the name filter is
+ *                         added at "low" confidence.
+ *
+ * Output: ExtractedEntity[] — passed to saveRelationshipSignals().
  */
 
 import type { EntityType, RelationshipSignalType } from "./types"
 
 // ---------------------------------------------------------------------------
-// Page manifest — high-signal dedicated pages only
+// Page categories — multiple path variants per relationship type
 // ---------------------------------------------------------------------------
 
-interface PageManifest {
-  path: string
+interface PageCategory {
+  /** Tried in parallel; the richest HTML response wins. */
+  paths: string[]
   label: string
   defaultEntityType: EntityType
   defaultRelationshipType: RelationshipSignalType
+  /**
+   * Regex for matching <a href> and sitemap <loc> values.
+   * Group 1 = path segment label, Group 2 = the company slug.
+   */
+  slugMatchers: RegExp[]
 }
 
-const PAGES_TO_SCAN: PageManifest[] = [
-  { path: "/customers",    label: "Customers",    defaultEntityType: "company", defaultRelationshipType: "customer" },
-  { path: "/case-studies", label: "Case Studies", defaultEntityType: "company", defaultRelationshipType: "customer" },
-  { path: "/partners",     label: "Partners",     defaultEntityType: "partner", defaultRelationshipType: "partner"  },
-  { path: "/integrations", label: "Integrations", defaultEntityType: "tool",    defaultRelationshipType: "uses"     },
+const PAGE_CATEGORIES: PageCategory[] = [
+  {
+    paths: [
+      "/customers",
+      "/customers/",
+      "/case-studies",
+      "/case-studies/",
+      "/success-stories",
+      "/stories",
+      "/testimonials",
+      "/resources/case-studies",
+    ],
+    label: "Customers",
+    defaultEntityType: "company",
+    defaultRelationshipType: "customer",
+    slugMatchers: [
+      /\/(customers|case-studies|success-stories|stories|testimonials)\/([a-z0-9][a-z0-9-]{1,50})(?:\/|$)/i,
+    ],
+  },
+  {
+    paths: [
+      "/partners",
+      "/partners/",
+      "/ecosystem",
+      "/partner-ecosystem",
+      "/technology-partners",
+      "/channel-partners",
+    ],
+    label: "Partners",
+    defaultEntityType: "partner",
+    defaultRelationshipType: "partner",
+    slugMatchers: [
+      /\/(partners|ecosystem|technology-partners|channel-partners)\/([a-z0-9][a-z0-9-]{1,50})(?:\/|$)/i,
+    ],
+  },
+  {
+    paths: [
+      "/integrations",
+      "/integrations/",
+      "/marketplace",
+      "/marketplace/",
+      "/apps",
+      "/connect",
+      "/extensions",
+      "/app-marketplace",
+    ],
+    label: "Integrations",
+    defaultEntityType: "tool",
+    defaultRelationshipType: "uses",
+    slugMatchers: [
+      /\/(integrations|marketplace|apps|extensions)\/([a-z0-9][a-z0-9-]{1,50})(?:\/|$)/i,
+    ],
+  },
 ]
 
-const FETCH_TIMEOUT_MS = 6000
+const FETCH_TIMEOUT_MS  = 7_000
+const SITEMAP_TIMEOUT_MS = 8_000
+/** Minimum HTML length for a page to be considered real content. */
+const MIN_HTML_LENGTH   = 200
+/** Target minimum entity count before the mention-fallback fires. */
+const MIN_ENTITY_TARGET = 5
 
 // ---------------------------------------------------------------------------
 // Types
@@ -48,10 +119,14 @@ export interface PageData {
   label: string
   defaultEntityType: EntityType
   defaultRelationshipType: RelationshipSignalType
-  /** Stripped text content, up to 4000 chars */
+  /** Stripped text content, up to 10 000 chars */
   text: string
-  /** Company names extracted from img alt attributes on this page */
+  /** Company names from img alt/title/aria-label on this page */
   logoAlts: string[]
+  /** Text of <h2>/<h3>/<h4> elements */
+  headings: string[]
+  /** High-confidence entities pre-extracted from URL slugs in <a href> */
+  slugEntities: ExtractedEntity[]
 }
 
 export interface ExtractedEntity {
@@ -64,79 +139,78 @@ export interface ExtractedEntity {
 }
 
 // ---------------------------------------------------------------------------
-// Normalization
+// Normalisation & filtering
 // ---------------------------------------------------------------------------
 
-/**
- * Normalize entity names for deduplication and DB storage.
- * Applies: lowercase → trim → remove punctuation → collapse whitespace.
- */
-/**
- * Canonical display names — keys are the fully-normalized (lowercase, no
- * punctuation) form; values are the preferred display representation.
- * Handles common abbreviation variations so they cluster correctly.
- */
 const CANONICAL_NAMES: Record<string, string> = {
-  // Cloud / infra
   "amazon web services": "AWS",
-  "aws":                 "AWS",
+  "aws": "AWS",
   "google cloud platform": "Google Cloud",
-  "google cloud":        "Google Cloud",
-  "gcp":                 "Google Cloud",
-  "microsoft azure":     "Azure",
-  "azure":               "Azure",
-  // Version control & CI
-  "github":              "GitHub",
-  "gitlab":              "GitLab",
-  "bitbucket":           "Bitbucket",
-  // Databases
-  "postgresql":          "PostgreSQL",
-  "postgres":            "PostgreSQL",
-  "mongodb":             "MongoDB",
-  "redis":               "Redis",
-  "mysql":               "MySQL",
-  "supabase":            "Supabase",
-  "planetscale":         "PlanetScale",
-  // Containers / infra tools
-  "kubernetes":          "Kubernetes",
-  "k8s":                 "Kubernetes",
-  "docker":              "Docker",
-  "terraform":           "Terraform",
-  "datadog":             "Datadog",
-  // Payments / comms
-  "stripe":              "Stripe",
-  "twilio":              "Twilio",
-  "sendgrid":            "SendGrid",
-  // Analytics / BI
-  "snowflake":           "Snowflake",
-  "looker":              "Looker",
-  "tableau":             "Tableau",
-  "amplitude":           "Amplitude",
-  "mixpanel":            "Mixpanel",
-  "segment":             "Segment",
-  "dbt":                 "dbt",
-  "airflow":             "Airflow",
-  // CRM / support / sales
-  "salesforce":          "Salesforce",
-  "hubspot":             "HubSpot",
-  "zendesk":             "Zendesk",
-  "intercom":            "Intercom",
-  // Productivity / collab
-  "slack":               "Slack",
-  "notion":              "Notion",
-  "linear":              "Linear",
-  "figma":               "Figma",
-  "jira":                "Jira",
-  "confluence":          "Confluence",
-  "asana":               "Asana",
-  // Hosting / deploy
-  "vercel":              "Vercel",
-  "netlify":             "Netlify",
-  "heroku":              "Heroku",
-  "cloudflare":          "Cloudflare",
-  // AI
-  "openai":              "OpenAI",
-  "anthropic":           "Anthropic",
+  "google cloud": "Google Cloud",
+  "gcp": "Google Cloud",
+  "microsoft azure": "Azure",
+  "azure": "Azure",
+  "github": "GitHub",
+  "gitlab": "GitLab",
+  "bitbucket": "Bitbucket",
+  "postgresql": "PostgreSQL",
+  "postgres": "PostgreSQL",
+  "mongodb": "MongoDB",
+  "redis": "Redis",
+  "mysql": "MySQL",
+  "supabase": "Supabase",
+  "planetscale": "PlanetScale",
+  "kubernetes": "Kubernetes",
+  "k8s": "Kubernetes",
+  "docker": "Docker",
+  "terraform": "Terraform",
+  "datadog": "Datadog",
+  "stripe": "Stripe",
+  "twilio": "Twilio",
+  "sendgrid": "SendGrid",
+  "snowflake": "Snowflake",
+  "looker": "Looker",
+  "tableau": "Tableau",
+  "amplitude": "Amplitude",
+  "mixpanel": "Mixpanel",
+  "segment": "Segment",
+  "dbt": "dbt",
+  "airflow": "Airflow",
+  "salesforce": "Salesforce",
+  "hubspot": "HubSpot",
+  "zendesk": "Zendesk",
+  "intercom": "Intercom",
+  "slack": "Slack",
+  "notion": "Notion",
+  "linear": "Linear",
+  "figma": "Figma",
+  "jira": "Jira",
+  "confluence": "Confluence",
+  "asana": "Asana",
+  "vercel": "Vercel",
+  "netlify": "Netlify",
+  "heroku": "Heroku",
+  "cloudflare": "Cloudflare",
+  "openai": "OpenAI",
+  "anthropic": "Anthropic",
+  "shopify": "Shopify",
+  "freshdesk": "Freshdesk",
+  "pagerduty": "PagerDuty",
+  "okta": "Okta",
+  "workday": "Workday",
+  "servicenow": "ServiceNow",
+  "microsoft": "Microsoft",
+  "google": "Google",
+  "apple": "Apple",
+  "amazon": "Amazon",
+  "meta": "Meta",
+  "twitter": "Twitter",
+  "linkedin": "LinkedIn",
+  "zapier": "Zapier",
+  "airtable": "Airtable",
+  "mondaycom": "Monday.com",
+  "clickup": "ClickUp",
+  "coda": "Coda",
 }
 
 export function normalizeEntityName(name: string): string {
@@ -146,55 +220,66 @@ export function normalizeEntityName(name: string): string {
     .replace(/[^a-z0-9\s]/g, "")
     .replace(/\s+/g, " ")
     .trim()
-  // Return canonical display name when one is registered; otherwise return
-  // the normalized lowercase form so grouping stays consistent.
   return CANONICAL_NAMES[normalized] ?? normalized
 }
 
-const WEAK_GENERIC_NAMES = new Set([
-  // Generic product / tech words
+/** One-word generic terms and UI labels to discard. */
+const WEAK_TERMS = new Set([
   "ai", "platform", "solution", "solutions", "app", "application", "tool", "tools",
   "software", "product", "products", "service", "services", "system", "systems",
   "feature", "features", "module", "plugin", "extension", "addon",
-  // Generic business words
   "startup", "company", "companies", "business", "team", "partner", "partners",
   "customer", "customers", "client", "clients", "user", "users", "developer",
   "developers", "enterprise", "vendor", "vendors", "agency",
-  // Generic tech terms
   "cloud", "api", "saas", "data", "analytics", "dashboard", "workflow",
   "automation", "integration", "integrations", "connector", "infrastructure",
-  // Nav / UI words
-  "new", "all", "our", "your", "the", "this", "that", "with", "more",
+  "open source", "opensource", "free", "paid", "pro", "plus",
+  "new", "all", "our", "your", "the", "this", "that", "with", "more", "home",
   "get started", "learn more", "sign up", "log in", "about us", "contact us",
   "read more", "view all", "see all", "case study", "case studies",
+  "overview", "testimonial", "testimonials", "story", "stories", "success",
+  "review", "reviews", "blog", "resources", "press", "news", "media",
+  // Common proper-noun-looking words that aren't companies
+  "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+  "january", "february", "march", "april", "june", "july", "august",
+  "september", "october", "november", "december",
+  "united states", "new york", "san francisco", "los angeles", "london", "berlin",
 ])
 
-function isWeakGenericEntity(normalizedName: string): boolean {
-  if (normalizedName.length < 2) return true
-  if (WEAK_GENERIC_NAMES.has(normalizedName)) return true
-  if (normalizedName.split(" ").length > 5) return true
-  return false
-}
-
-// UI/nav phrases that should be discarded even if title-cased
-const GENERIC_UI_NAMES = new Set([
+/** UI phrases to skip even when title-cased. */
+const UI_PHRASES = new Set([
   "About Us", "Contact Us", "Learn More", "Get Started", "Sign Up", "Log In",
   "Our Team", "Our Partners", "Our Customers", "Case Study", "Case Studies",
   "Read More", "View All", "See All", "Privacy Policy", "Terms of Service",
   "Schedule Demo", "Book Demo", "Request Demo", "Watch Demo",
+  "Success Stories", "Success Story", "All Integrations", "All Partners",
+  "Explore All", "See All Integrations", "See All Partners",
 ])
+
+function isWeakName(normalized: string): boolean {
+  if (normalized.length < 2 || normalized.length > 60) return true
+  if (WEAK_TERMS.has(normalized)) return true
+  if (normalized.split(" ").length > 6) return true
+  if (/^\d+$/.test(normalized)) return true
+  return false
+}
+
+// Slug-specific noise
+const SLUG_SUFFIX  = /-(case-study|success-story|story|overview|testimonial|review|feature|blog|page|solution|guide|how|why|what)$/i
+const SLUG_SKIP    = /^(blog|news|press|about|team|pricing|contact|login|signup|careers|jobs|support|help|docs|legal|privacy|terms|resources|api|status|integrations|partners|customers|overview|all|new|more|get|try|home|index|404|en|us|uk)$/i
 
 // ---------------------------------------------------------------------------
 // HTML utilities
 // ---------------------------------------------------------------------------
 
-async function fetchPage(url: string): Promise<string | null> {
+async function fetchPage(url: string, timeoutMs = FETCH_TIMEOUT_MS): Promise<string | null> {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const res = await fetch(url, {
-      signal: controller.signal,
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; IntelligenceBot/1.0)" },
+      signal:   controller.signal,
+      headers:  { "User-Agent": "Mozilla/5.0 (compatible; IntelligenceBot/1.0)" },
+      redirect: "follow",
     })
     if (!res.ok) return null
     return await res.text()
@@ -212,109 +297,452 @@ function extractText(html: string): string {
     .replace(/<svg[\s\S]*?<\/svg>/gi, "")
     .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
     .replace(/\s{2,}/g, " ")
     .trim()
 }
 
 /**
- * Extract company names from img alt attributes on a page.
- * Logo walls on customer/partner/integration pages are structured signals.
+ * Extract company names from img alt/title attributes and SVG aria-labels.
+ * Also handles <picture>/<source> siblings and data-* name attributes.
  */
 function extractLogoAlts(html: string): string[] {
   const alts: string[] = []
   const seen = new Set<string>()
-  for (const m of html.matchAll(/<img[^>]+alt=["']([^"']{2,60})["'][^>]*>/gi)) {
-    const raw = m[1].trim()
-    if (
-      /logo$/i.test(raw) ||
-      (
-        /^[A-Z]/.test(raw) &&
-        !/screenshot|photo|banner|background|graphic|placeholder|illustration|avatar|headshot|portrait|arrow|chevron|star|check|icon|spinner|loader|button|badge/i.test(raw)
-      )
-    ) {
-      const name = raw.replace(/\s+logo\s*$/i, "").trim()
-      const key = name.toLowerCase()
-      if (name.length >= 2 && name.length <= 40 && !seen.has(key)) {
-        seen.add(key)
-        alts.push(name)
-      }
-    }
-    if (alts.length >= 30) break
+
+  const NOISE =
+    /screenshot|photo|banner|background|graphic|placeholder|illustration|avatar|headshot|portrait|arrow|chevron|star|check|icon|spinner|loader|button|badge|menu|close|search|hamburger|wave|shape|blob/i
+
+  function tryAdd(raw: string) {
+    const name = raw.replace(/\s+logo\s*$/i, "").replace(/\s+icon\s*$/i, "").trim()
+    if (!name || name.length < 2 || name.length > 55) return
+    if (NOISE.test(name)) return
+    const key = name.toLowerCase()
+    if (seen.has(key)) return
+    seen.add(key)
+    alts.push(name)
   }
+
+  // <img alt="..." title="...">
+  for (const m of html.matchAll(/<img[^>]+>/gi)) {
+    const tag = m[0]
+    const alt    = tag.match(/\balt=["']([^"']{2,60})["']/i)?.[1]?.trim()
+    const title  = tag.match(/\btitle=["']([^"']{2,60})["']/i)?.[1]?.trim()
+    const ariaLb = tag.match(/\baria-label=["']([^"']{2,60})["']/i)?.[1]?.trim()
+    // Accept: ends with "logo", or title-cased and short
+    for (const v of [alt, title, ariaLb]) {
+      if (!v) continue
+      if (/logo$/i.test(v) || (/^[A-Z]/.test(v) && v.length <= 45 && !NOISE.test(v))) tryAdd(v)
+    }
+    if (alts.length >= 60) break
+  }
+
+  // <svg aria-label="...">
+  for (const m of html.matchAll(/<svg[^>]+>/gi)) {
+    const label = m[0].match(/aria-label=["']([^"']{2,55})["']/i)?.[1]?.trim()
+    if (label) tryAdd(label)
+    if (alts.length >= 60) break
+  }
+
+  // data-name="Company" (common in custom logo-grid components)
+  for (const m of html.matchAll(/\bdata-(?:name|company|partner|customer)=["']([^"']{2,55})["']/gi)) {
+    tryAdd(m[1].trim())
+    if (alts.length >= 60) break
+  }
+
   return alts
 }
 
+/** Pull <h2>/<h3>/<h4> text — much more likely to be company names than prose. */
+function extractHeadings(html: string): string[] {
+  const headings: string[] = []
+  const seen = new Set<string>()
+  for (const m of html.matchAll(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/gi)) {
+    const text = extractText(m[1]).trim()
+    const key  = text.toLowerCase()
+    if (text.length >= 2 && text.length <= 80 && !seen.has(key) && !UI_PHRASES.has(text)) {
+      seen.add(key)
+      headings.push(text)
+    }
+    if (headings.length >= 60) break
+  }
+  return headings
+}
+
+/**
+ * Extract company names from text patterns:
+ *   "integrates with Stripe, Salesforce, and HubSpot"
+ *   "trusted by Airbnb, Netflix"
+ *   "works with Google, Slack"
+ *   "partners with Shopify"
+ *
+ * Returns medium-confidence entities — confirmed by language context.
+ */
+function extractTextPatterns(
+  text: string,
+  sourceUrl: string,
+): ExtractedEntity[] {
+  const entities: ExtractedEntity[] = []
+  const seen = new Set<string>()
+
+  function addList(
+    rawList: string,
+    relType: RelationshipSignalType,
+    entType: EntityType,
+    context: string,
+  ) {
+    // Split on ", ", " and ", " & ", " / " — common list separators
+    const parts = rawList.split(/,\s*|\s+and\s+|\s*&\s*|\s*\/\s*/)
+    for (let raw of parts) {
+      raw = raw.replace(/[.!?;:]$/, "").trim()
+      if (!raw || raw.length < 2 || raw.length > 55) continue
+      if (!/^[A-Z]/.test(raw)) continue
+      if (UI_PHRASES.has(raw)) continue
+      const normalized = normalizeEntityName(raw)
+      if (isWeakName(normalized) || seen.has(normalized)) continue
+      seen.add(normalized)
+      entities.push({
+        entityName:       normalized,
+        entityType:       entType,
+        relationshipType: relType,
+        sourceUrl,
+        sourceContext:    context,
+        confidence:       "medium",
+      })
+    }
+  }
+
+  // Integration / works-with patterns
+  for (const m of text.matchAll(
+    /(?:integrates?\s+with|connects?\s+to|compatible\s+with|sync(?:s)?\s+with|works?\s+with|built\s+for)\s+([A-Z][a-zA-Z0-9\s,&/+]{2,100}?)(?=[.!?\n]|,\s*and\s+more|\s*—|\s*\||\s{3,}|$)/gim,
+  )) {
+    addList(m[1], "uses", "tool", `integrates with: ${m[1].slice(0, 60)}`)
+  }
+
+  // Trusted-by / customer patterns
+  for (const m of text.matchAll(
+    /(?:trusted\s+by|used\s+by|customers?\s+(?:like|include|such\s+as)|teams?\s+at|companies?\s+(?:like|include)|powers?\s+(?:teams?\s+at|companies?\s+like))\s+([A-Z][a-zA-Z0-9\s,&]{2,120}?)(?=[.!?\n]|\s*—|\s*\||\s{3,}|$)/gim,
+  )) {
+    addList(m[1], "customer", "company", `trusted by: ${m[1].slice(0, 60)}`)
+  }
+
+  // Partner patterns
+  for (const m of text.matchAll(
+    /(?:partners?\s+with|partnered\s+with|technology\s+partners?\s+(?:like|include)|in\s+partnership\s+with|official\s+partners?)\s+([A-Z][a-zA-Z0-9\s,&]{2,100}?)(?=[.!?\n]|\s*—|\s*\||\s{3,}|$)/gim,
+  )) {
+    addList(m[1], "partner", "partner", `partner: ${m[1].slice(0, 60)}`)
+  }
+
+  // Powered-by / built-on patterns (tools/infrastructure)
+  for (const m of text.matchAll(
+    /(?:powered\s+by|built\s+on(?:\s+top\s+of)?|runs?\s+on)\s+([A-Z][a-zA-Z0-9\s,&]{2,80}?)(?=[.!?\n]|\s*—|\s*\||\s{3,}|$)/gim,
+  )) {
+    addList(m[1], "uses", "tool", `powered by: ${m[1].slice(0, 60)}`)
+  }
+
+  return entities
+}
+
+/**
+ * Extract company names from <a href> URL slugs.
+ * /customers/stripe → "Stripe" (confidence: high — site owner created this page).
+ */
+function extractLinkedSlugs(
+  html: string,
+  slugMatchers: RegExp[],
+  defaultEntityType: EntityType,
+  defaultRelationshipType: RelationshipSignalType,
+  sourceUrl: string,
+): ExtractedEntity[] {
+  const entities: ExtractedEntity[] = []
+  const seen = new Set<string>()
+
+  for (const m of html.matchAll(/<a[^>]+href=["']([^"'?#]{5,150})["'][^>]*>/gi)) {
+    const href = m[1]
+    for (const matcher of slugMatchers) {
+      const slugMatch = href.match(matcher)
+      if (!slugMatch?.[2]) continue
+
+      let slug = slugMatch[2].toLowerCase()
+      if (SLUG_SKIP.test(slug)) break
+      slug = slug.replace(SLUG_SUFFIX, "")
+
+      const rawName  = slug.split("-").filter(Boolean)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ")
+      const normalized = normalizeEntityName(rawName)
+      if (isWeakName(normalized) || seen.has(normalized)) break
+
+      seen.add(normalized)
+      entities.push({
+        entityName:       normalized,
+        entityType:       defaultEntityType,
+        relationshipType: defaultRelationshipType,
+        sourceUrl,
+        sourceContext:    `URL: ${href}`,
+        confidence:       "high",
+      })
+      break
+    }
+  }
+
+  return entities
+}
+
+/**
+ * Extract company/org names from JSON-LD structured data.
+ */
+function extractJsonLd(
+  html: string,
+  defaultEntityType: EntityType,
+  defaultRelationshipType: RelationshipSignalType,
+  sourceUrl: string,
+): ExtractedEntity[] {
+  const entities: ExtractedEntity[] = []
+  const seen = new Set<string>()
+
+  for (const m of html.matchAll(
+    /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
+  )) {
+    try {
+      const data = JSON.parse(m[1])
+      const nodes: unknown[] = Array.isArray(data) ? data : data?.["@graph"] ? data["@graph"] : [data]
+
+      function visit(node: unknown) {
+        if (!node || typeof node !== "object") return
+        const obj = node as Record<string, unknown>
+        const type = String(obj["@type"] ?? "")
+        if (
+          /Organization|Corporation|LocalBusiness|Brand|SoftwareApplication/i.test(type) &&
+          typeof obj.name === "string" &&
+          obj.name.length >= 2 &&
+          obj.name.length <= 60
+        ) {
+          const normalized = normalizeEntityName(obj.name)
+          if (!isWeakName(normalized) && !seen.has(normalized)) {
+            seen.add(normalized)
+            entities.push({
+              entityName:       normalized,
+              entityType:       defaultEntityType,
+              relationshipType: defaultRelationshipType,
+              sourceUrl,
+              sourceContext:    `JSON-LD ${type}`,
+              confidence:       "medium",
+            })
+          }
+        }
+        for (const val of Object.values(obj)) {
+          if (Array.isArray(val)) val.forEach(visit)
+          else if (val && typeof val === "object") visit(val)
+        }
+      }
+
+      nodes.forEach(visit)
+    } catch { /* malformed JSON-LD */ }
+  }
+
+  return entities
+}
+
 // ---------------------------------------------------------------------------
-// Phase 1: fetch high-signal pages (runs in parallel with analyzeWebsite)
+// Phase 0: Sitemap parsing — best signal on JS-rendered sites
 // ---------------------------------------------------------------------------
 
 /**
- * Fetches /customers, /case-studies, /partners, /integrations in parallel.
- * Also extracts logo alt texts from each page (logo walls = structured company lists).
- * Returns only pages that responded with useful content (≥200 chars).
+ * Parses /sitemap.xml (and sitemap index children) to extract company slugs.
+ * Works on all sites since sitemaps are static XML.
+ *
+ * Looks for URLs matching /customers/slug, /partners/slug, /integrations/slug.
+ */
+export async function fetchSitemapEntities(baseUrl: string): Promise<ExtractedEntity[]> {
+  const entities: ExtractedEntity[] = []
+  const seen     = new Set<string>()
+  const fetched  = new Set<string>()
+
+  function slugsFromXml(xml: string): void {
+    for (const m of xml.matchAll(/<loc>\s*(https?:\/\/[^\s<]+)\s*<\/loc>/gi)) {
+      const url = m[1].trim()
+      for (const cat of PAGE_CATEGORIES) {
+        for (const matcher of cat.slugMatchers) {
+          const slugMatch = url.match(matcher)
+          if (!slugMatch?.[2]) continue
+
+          let slug = slugMatch[2].toLowerCase()
+          if (SLUG_SKIP.test(slug)) break
+          slug = slug.replace(SLUG_SUFFIX, "")
+
+          const rawName    = slug.split("-").filter(Boolean)
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(" ")
+          const normalized = normalizeEntityName(rawName)
+          if (isWeakName(normalized) || seen.has(normalized)) break
+
+          seen.add(normalized)
+          entities.push({
+            entityName:       normalized,
+            entityType:       cat.defaultEntityType,
+            relationshipType: cat.defaultRelationshipType,
+            sourceUrl:        url,
+            sourceContext:    `Sitemap: ${url}`,
+            confidence:       "high",
+          })
+          break
+        }
+      }
+    }
+  }
+
+  async function tryFetchSitemap(url: string): Promise<void> {
+    if (fetched.has(url)) return
+    fetched.add(url)
+    const xml = await fetchPage(url, SITEMAP_TIMEOUT_MS)
+    if (!xml) return
+
+    if (/<sitemapindex/i.test(xml)) {
+      // It's an index — pull child sitemaps that look relevant
+      const childUrls = [...xml.matchAll(/<loc>\s*(https?:\/\/[^\s<]+)\s*<\/loc>/gi)]
+        .map((m) => m[1].trim())
+        .filter((u) => /customer|partner|integrat|case.stud|ecosystem|marketplace/i.test(u))
+        .slice(0, 6)
+
+      await Promise.all(childUrls.map(tryFetchSitemap))
+    } else {
+      slugsFromXml(xml)
+    }
+  }
+
+  // Try robots.txt for a Sitemap: directive first
+  const robots = await fetchPage(`${baseUrl}/robots.txt`, 5_000)
+  const robotsSitemap = robots?.match(/^Sitemap:\s*(https?:\/\/[^\s]+)/mi)?.[1]
+
+  await Promise.all([
+    robotsSitemap ? tryFetchSitemap(robotsSitemap) : Promise.resolve(),
+    tryFetchSitemap(`${baseUrl}/sitemap.xml`),
+    tryFetchSitemap(`${baseUrl}/sitemap_index.xml`),
+  ])
+
+  console.log(`SITEMAP [${baseUrl}]: ${entities.length} slug entities`)
+  return entities
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1: Fetch relationship pages + homepage
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetches the homepage + relationship pages in parallel.
+ * For each category, tries multiple path variants and keeps the richest page.
  */
 export async function fetchRelationshipPages(baseUrl: string): Promise<PageData[]> {
+  const allCategories: PageCategory[] = [
+    // Homepage as a pseudo-category — logo alts and text patterns only
+    {
+      paths: ["/"],
+      label: "Homepage",
+      defaultEntityType: "company",
+      defaultRelationshipType: "customer",
+      slugMatchers: [], // don't extract slugs from homepage links
+    },
+    ...PAGE_CATEGORIES,
+  ]
+
   const results = await Promise.all(
-    PAGES_TO_SCAN.map(async ({ path, label, defaultEntityType, defaultRelationshipType }) => {
-      const url = `${baseUrl}${path}`
-      const html = await fetchPage(url)
-      if (!html || html.length < 200) return null
-      const text = extractText(html).slice(0, 4000)
-      const logoAlts = extractLogoAlts(html)
-      return { url, label, defaultEntityType, defaultRelationshipType, text, logoAlts } satisfies PageData
+    allCategories.map(async (cat) => {
+      const attempts = await Promise.all(
+        cat.paths.map(async (path) => {
+          const url  = `${baseUrl}${path}`
+          const html = await fetchPage(url)
+          if (!html || html.length < MIN_HTML_LENGTH) return null
+          return { html, url }
+        }),
+      )
+
+      const best = attempts
+        .filter((a): a is { html: string; url: string } => a !== null)
+        .sort((a, b) => b.html.length - a.html.length)[0]
+      if (!best) return null
+
+      const text      = extractText(best.html).slice(0, 10_000)
+      const logoAlts  = extractLogoAlts(best.html)
+      const headings  = extractHeadings(best.html)
+
+      // URL slug extraction (empty for homepage — slugs there aren't company names)
+      const slugEntities = cat.slugMatchers.length > 0
+        ? extractLinkedSlugs(
+            best.html,
+            cat.slugMatchers,
+            cat.defaultEntityType,
+            cat.defaultRelationshipType,
+            best.url,
+          )
+        : []
+
+      const jsonLdEntities = extractJsonLd(
+        best.html,
+        cat.defaultEntityType,
+        cat.defaultRelationshipType,
+        best.url,
+      )
+
+      // Merge slug + JSON-LD into slugEntities (slug takes precedence)
+      const seenSlug = new Set(slugEntities.map((e) => e.entityName))
+      for (const e of jsonLdEntities) {
+        if (!seenSlug.has(e.entityName)) {
+          seenSlug.add(e.entityName)
+          slugEntities.push(e)
+        }
+      }
+
+      return {
+        url:                     best.url,
+        label:                   cat.label,
+        defaultEntityType:       cat.defaultEntityType,
+        defaultRelationshipType: cat.defaultRelationshipType,
+        text,
+        logoAlts,
+        headings,
+        slugEntities,
+      } satisfies PageData
     }),
   )
+
   return results.filter((p): p is PageData => p !== null)
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2: extract entities — AI or regex fallback
+// Phase 2A: AI extraction
 // ---------------------------------------------------------------------------
 
-const SYSTEM_PROMPT = `You extract B2B company names from structured sections of company websites for relationship mapping.
+const SYSTEM_PROMPT = `You extract B2B company names from company website content for relationship mapping.
 
-STRICT RULES — no exceptions:
-1. Extract ONLY company/product names from structured lists, logo walls, or dedicated relationship pages.
-2. Do NOT extract from: prose paragraphs, navigation menus, footers, blog text, or generic product copy.
-3. Only extract names you are CERTAIN are real companies or products — never guess or infer.
-4. Each name must be a proper noun (title-cased or a known brand name like "HubSpot", "AWS").
-5. Do NOT include the source website's own company name.
-6. Prefer fewer, higher-confidence entries. Maximum 20 total.
+STRICT RULES:
+1. Extract ONLY real company/product/tool names — proper nouns.
+2. Skip: navigation labels, generic phrases, the source company itself.
+3. Maximum 30 entities. Prefer quality over quantity.
+4. Every name must be a recognised brand (title-cased or a known name like "HubSpot", "AWS").
 
-SOURCE RULES — the page type tells you the relationship:
-- CUSTOMERS or CASE STUDIES page → every named company is a customer
-  entity_type: "company", relationship_type: "customer"
-- PARTNERS page → every named company is a formal partner
-  entity_type: "partner", relationship_type: "partner"
-- INTEGRATIONS page → every named tool or software is an integration
-  entity_type: "tool", relationship_type: "uses"
-- HOMEPAGE LOGO IMAGES → companies in logo walls are likely customers
-  entity_type: "company", relationship_type: "customer"
+HIGH-CONFIDENCE SIGNALS (include all of these):
+- "URL slugs" lines — each slug is a dedicated company page created by the site owner.
+- "Logo images" lines — curated lists of partner/customer logos.
+- "Page headings" lines — structural company names.
 
-Return ONLY valid JSON, no markdown:
-{
-  "entities": [
-    {
-      "name": "Exact company name",
-      "entity_type": "company | partner | tool",
-      "relationship_type": "customer | partner | uses",
-      "sourceUrl": "page URL",
-      "context": "brief phrase (≤12 words) showing where this name appeared",
-      "confidence": "high | medium | low"
-    }
-  ]
-}
+RELATIONSHIP MAPPING:
+- Customers/Case Studies page → relationship_type: "customer", entity_type: "company"
+- Partners/Ecosystem page    → relationship_type: "partner",   entity_type: "partner"
+- Integrations/Marketplace   → relationship_type: "uses",      entity_type: "tool"
+- Homepage logo images       → relationship_type: "customer",  entity_type: "company"
+- "integrates with" text     → relationship_type: "uses",      entity_type: "tool"
+- "trusted by" text          → relationship_type: "customer",  entity_type: "company"
 
-If no structured entity names are found: {"entities":[]}`
+Return ONLY valid JSON (no markdown):
+{"entities":[{"name":"...","entity_type":"company|partner|tool","relationship_type":"customer|partner|uses","sourceUrl":"...","context":"≤12 words","confidence":"high|medium|low"}]}
 
-const VALID_ENTITY_TYPES = new Set<string>(["company", "partner", "tool"])
-const VALID_RELATIONSHIP_TYPES = new Set<string>(["customer", "partner", "uses"])
+If nothing found: {"entities":[]}`
+
+const VALID_ENTITY_TYPES      = new Set(["company", "partner", "tool"])
+const VALID_RELATIONSHIP_TYPES = new Set(["customer", "partner", "uses"])
 
 async function extractWithAI(
   pages: PageData[],
@@ -326,177 +754,247 @@ async function extractWithAI(
 
   const blocks: string[] = []
 
-  // Dedicated relationship pages — primary signal source
   for (const p of pages) {
-    let block = `=== ${p.label.toUpperCase()} PAGE (${p.url}) ===\n${p.text}`
-    if (p.logoAlts.length > 0) {
-      block += `\n\nLogo images on this page: ${p.logoAlts.join(", ")}`
-    }
-    blocks.push(block)
+    const parts = [`=== ${p.label.toUpperCase()} PAGE (${p.url}) ===`, p.text]
+    if (p.logoAlts.length > 0)
+      parts.push(`\nLogo images (high confidence): ${p.logoAlts.slice(0, 50).join(", ")}`)
+    if (p.headings.length > 0)
+      parts.push(`\nPage headings: ${p.headings.slice(0, 40).join(" | ")}`)
+    if (p.slugEntities.length > 0)
+      parts.push(
+        `\nURL slugs — HIGHEST CONFIDENCE (each is a dedicated company page):\n${p.slugEntities.map((e) => `  ${e.entityName} (${e.relationshipType})`).join("\n")}`,
+      )
+    blocks.push(parts.join("\n"))
   }
 
-  // Homepage logo alts — structured signal from homepage logo walls
   if (homepageLogoAlts.length > 0) {
-    blocks.push(`=== HOMEPAGE LOGO IMAGES (possible customers/partners) ===\n${homepageLogoAlts.join(", ")}`)
+    blocks.push(
+      `=== HOMEPAGE LOGO IMAGES (customers/partners) ===\n${homepageLogoAlts.join(", ")}`,
+    )
   }
 
   if (blocks.length === 0) return []
 
   const message = await Promise.race([
     anthropic.messages.create({
-      model: "claude-haiku-4-5",
-      max_tokens: 1000,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: blocks.join("\n\n") }],
+      model:      "claude-haiku-4-5",
+      max_tokens: 2000,
+      system:     SYSTEM_PROMPT,
+      messages:   [{ role: "user", content: blocks.join("\n\n") }],
     }),
     new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Signal extraction timeout")), 15_000)
+      setTimeout(() => reject(new Error("Signal extraction timeout")), 20_000),
     ),
   ])
 
-  const raw = message.content[0].type === "text" ? message.content[0].text : ""
+  const raw     = message.content[0].type === "text" ? message.content[0].text : ""
   const cleaned = raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim()
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) return []
+  const match   = cleaned.match(/\{[\s\S]*\}/)
+  if (!match) return []
 
-  const parsed = JSON.parse(jsonMatch[0]) as {
+  const parsed = JSON.parse(match[0]) as {
     entities: Array<{
-      name: string
-      entity_type: string
-      relationship_type: string
-      sourceUrl: string
-      context: string
-      confidence: string
+      name: string; entity_type: string; relationship_type: string
+      sourceUrl: string; context: string; confidence: string
     }>
   }
 
-  const results: ExtractedEntity[] = []
+  const out: ExtractedEntity[] = []
   for (const e of parsed.entities ?? []) {
-    if (!e.name || e.name.length < 2 || GENERIC_UI_NAMES.has(e.name)) continue
-
+    if (!e.name || e.name.length < 2 || UI_PHRASES.has(e.name)) continue
     const normalized = normalizeEntityName(e.name)
-    if (isWeakGenericEntity(normalized)) continue
+    if (isWeakName(normalized)) continue
 
-    // Only accept the relationship types this extractor cares about
-    const relType = VALID_RELATIONSHIP_TYPES.has(e.relationship_type)
-      ? e.relationship_type as RelationshipSignalType
-      : "customer" as RelationshipSignalType
-
-    const entType = VALID_ENTITY_TYPES.has(e.entity_type)
-      ? e.entity_type as EntityType
-      : "company" as EntityType
-
-    results.push({
-      entityName:     normalized,
-      entityType:     entType,
-      relationshipType: relType,
-      sourceUrl:      e.sourceUrl ?? "",
-      sourceContext:  (e.context ?? "").slice(0, 120),
-      confidence:     (["high", "medium", "low"].includes(e.confidence)
-        ? e.confidence
-        : "medium") as ExtractedEntity["confidence"],
+    out.push({
+      entityName:       normalized,
+      entityType:       VALID_ENTITY_TYPES.has(e.entity_type)
+        ? e.entity_type as EntityType : "company",
+      relationshipType: VALID_RELATIONSHIP_TYPES.has(e.relationship_type)
+        ? e.relationship_type as RelationshipSignalType : "customer",
+      sourceUrl:        e.sourceUrl ?? "",
+      sourceContext:    (e.context ?? "").slice(0, 120),
+      confidence:       ["high", "medium", "low"].includes(e.confidence)
+        ? e.confidence as ExtractedEntity["confidence"] : "medium",
     })
   }
 
-  // Deduplicate by normalized name — keep first occurrence
   const seen = new Set<string>()
-  return results.filter((e) => {
+  return out.filter((e) => {
     if (seen.has(e.entityName)) return false
     seen.add(e.entityName)
     return true
   })
 }
 
-function extractWithRegex(
-  pages: PageData[],
-  homepageLogoAlts: string[],
-): ExtractedEntity[] {
-  const entities: ExtractedEntity[] = []
+// ---------------------------------------------------------------------------
+// Phase 2B: Regex extraction (no API key / fallback)
+// ---------------------------------------------------------------------------
 
-  // Process each dedicated page
-  for (const page of pages) {
-    // Logo alts from this page — high-confidence structured signal
-    for (const alt of page.logoAlts) {
-      const normalized = normalizeEntityName(alt)
-      if (!isWeakGenericEntity(normalized)) {
-        entities.push({
-          entityName:       normalized,
-          entityType:       page.defaultEntityType,
-          relationshipType: page.defaultRelationshipType,
-          sourceUrl:        page.url,
-          sourceContext:    `Logo: ${alt}`,
-          confidence:       "medium",
-        })
-      }
-    }
-
-    // Short, title-cased lines — likely company names in lists
-    const lines = page.text.split(/[\n.]+/).map((l) => l.trim()).filter((l) => l.length > 0)
-    for (const line of lines) {
-      if (
-        line.length >= 2 &&
-        line.length < 40 &&
-        /^[A-Z]/.test(line) &&
-        !GENERIC_UI_NAMES.has(line) &&
-        !/^(The|Our|Your|All|New|See|View|Get|Try|Read|Learn|About|Contact|How|Why|What|When|Schedule|Book|Request)/.test(line)
-      ) {
-        const normalized = normalizeEntityName(line)
-        if (!isWeakGenericEntity(normalized)) {
-          entities.push({
-            entityName:       normalized,
-            entityType:       page.defaultEntityType,
-            relationshipType: page.defaultRelationshipType,
-            sourceUrl:        page.url,
-            sourceContext:    line,
-            confidence:       "low",
-          })
-        }
-      }
-
-      // "How [Company] ..." on case study pages
-      if (page.defaultRelationshipType === "customer") {
-        const m = line.match(
-          /^How\s+([A-Z][a-zA-Z0-9\s]{2,25})\s+(reduced|increased|grew|scaled|built|cut|saved|achieved|improved)/i
-        )
-        if (m) {
-          const normalized = normalizeEntityName(m[1].trim())
-          if (!isWeakGenericEntity(normalized)) {
-            entities.push({
-              entityName:       normalized,
-              entityType:       "company",
-              relationshipType: "customer",
-              sourceUrl:        page.url,
-              sourceContext:    line.slice(0, 80),
-              confidence:       "medium",
-            })
-          }
-        }
-      }
-    }
-  }
-
-  // Homepage logo alts — structured signal
-  for (const alt of homepageLogoAlts) {
-    const normalized = normalizeEntityName(alt)
-    if (!isWeakGenericEntity(normalized)) {
-      entities.push({
-        entityName:       normalized,
-        entityType:       "company",
-        relationshipType: "customer",
-        sourceUrl:        "homepage",
-        sourceContext:    `Logo: ${alt}`,
-        confidence:       "low",
-      })
-    }
-  }
-
-  // Deduplicate by normalized name — logo alts (higher confidence) are pushed first
+function extractWithRegex(pages: PageData[], homepageLogoAlts: string[]): ExtractedEntity[] {
+  const out: ExtractedEntity[] = []
   const seen = new Set<string>()
-  return entities.filter((e) => {
-    if (seen.has(e.entityName)) return false
+
+  function add(e: ExtractedEntity) {
+    if (seen.has(e.entityName)) return
     seen.add(e.entityName)
-    return true
+    out.push(e)
+  }
+
+  // 1. URL slug entities — highest confidence
+  for (const p of pages) for (const e of p.slugEntities) add(e)
+
+  // 2. Logo alts from relationship pages
+  for (const p of pages) {
+    for (const alt of p.logoAlts) {
+      const norm = normalizeEntityName(alt)
+      if (!isWeakName(norm))
+        add({ entityName: norm, entityType: p.defaultEntityType, relationshipType: p.defaultRelationshipType, sourceUrl: p.url, sourceContext: `Logo: ${alt}`, confidence: "high" })
+    }
+  }
+
+  // 3. Text patterns ("integrates with X", "trusted by X")
+  for (const p of pages) {
+    for (const e of extractTextPatterns(p.text, p.url)) add(e)
+  }
+
+  // 4. Headings on relationship pages (skip homepage — too noisy)
+  for (const p of pages) {
+    if (p.label === "Homepage") continue
+    for (const heading of p.headings) {
+      if (UI_PHRASES.has(heading)) continue
+      if (/\b(is|are|was|were|has|have|can|will|lets|helps|enables|powers|allows)\b/i.test(heading)) continue
+      if (/^(How|Why|What|The|Our|Your|All|See|Get|Try|Meet|Discover|Explore|Find)/i.test(heading)) continue
+      const norm = normalizeEntityName(heading)
+      if (!isWeakName(norm) && norm.split(" ").length <= 4)
+        add({ entityName: norm, entityType: p.defaultEntityType, relationshipType: p.defaultRelationshipType, sourceUrl: p.url, sourceContext: `Heading: ${heading}`, confidence: "medium" })
+    }
+  }
+
+  // 5. Homepage logo alts (caller-supplied from gatherSignals)
+  for (const alt of homepageLogoAlts) {
+    const norm = normalizeEntityName(alt)
+    if (!isWeakName(norm))
+      add({ entityName: norm, entityType: "company", relationshipType: "customer", sourceUrl: "homepage", sourceContext: `Logo: ${alt}`, confidence: "medium" })
+  }
+
+  // 6. "How [Company] …" case-study patterns
+  for (const p of pages) {
+    if (p.defaultRelationshipType !== "customer") continue
+    for (const line of p.text.split(/[\n.]+/)) {
+      const m = line.trim().match(
+        /^How\s+([A-Z][a-zA-Z0-9\s]{2,25})\s+(reduced|increased|grew|scaled|built|cut|saved|achieved|improved)/i,
+      )
+      if (m) {
+        const norm = normalizeEntityName(m[1].trim())
+        if (!isWeakName(norm))
+          add({ entityName: norm, entityType: "company", relationshipType: "customer", sourceUrl: p.url, sourceContext: line.trim().slice(0, 80), confidence: "medium" })
+      }
+    }
+  }
+
+  return out
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: Mention-count fallback — fires when entity count < MIN_ENTITY_TARGET
+// ---------------------------------------------------------------------------
+
+/** Common English proper-noun-like words that aren't company names. */
+const NON_COMPANY_WORDS = new Set([
+  "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+  "January", "February", "March", "April", "June", "July", "August",
+  "September", "October", "November", "December",
+  "United", "States", "America", "Europe", "Asia", "Africa",
+  "New", "York", "San", "Francisco", "London", "Berlin", "Tokyo", "Sydney",
+  "North", "South", "East", "West", "Central",
+  "About", "Contact", "Pricing", "Login", "Signup", "Support", "Help",
+  "Learn", "Watch", "Read", "View", "See", "Get", "Try", "Start", "Book",
+  "Request", "Schedule", "Explore", "Discover", "Meet", "Find",
+  "Privacy", "Terms", "Legal", "Cookie",
+])
+
+/**
+ * Scans all collected text for company-like proper nouns mentioned ≥ 2 times.
+ * Used as a last-resort fallback to guarantee MIN_ENTITY_TARGET entities.
+ */
+function detectCompanyMentions(
+  allText: string,
+  knownNames: Set<string>,
+  sourceUrl: string,
+): ExtractedEntity[] {
+  const counts = new Map<string, number>()
+
+  // CamelCase / PascalCase single tokens: "HubSpot", "OpenAI", "SalesForce"
+  for (const m of allText.matchAll(/\b([A-Z][a-z]{1,15}[A-Z][a-zA-Z]{1,15})\b/g)) {
+    const name = m[1]
+    if (NON_COMPANY_WORDS.has(name)) continue
+    counts.set(name, (counts.get(name) ?? 0) + 1)
+  }
+
+  // Title-case pairs: "Acme Corp", "New Relic", "Bright Data"
+  for (const m of allText.matchAll(/\b([A-Z][a-z]{1,20}\s[A-Z][a-z]{1,20})\b/g)) {
+    const name = m[1]
+    const parts = name.split(" ")
+    if (NON_COMPANY_WORDS.has(parts[0]) || NON_COMPANY_WORDS.has(parts[1])) continue
+    counts.set(name, (counts.get(name) ?? 0) + 1)
+  }
+
+  // Single capitalised tokens that look like brands: "Stripe", "Shopify"
+  // (only if they appear ≥ 3 times — higher bar since many false positives)
+  for (const m of allText.matchAll(/\b([A-Z][a-z]{3,18})\b/g)) {
+    const name = m[1]
+    if (NON_COMPANY_WORDS.has(name)) continue
+    counts.set(name, (counts.get(name) ?? 0) + 1)
+  }
+
+  const entities: ExtractedEntity[] = []
+  for (const [name, count] of counts) {
+    // CamelCase: 2+ mentions; Title-case pair: 2+ mentions; single word: 3+ mentions
+    const isCamel = /[A-Z][a-z]+[A-Z]/.test(name)
+    const isPair  = name.includes(" ")
+    const minCount = (isCamel || isPair) ? 2 : 3
+
+    if (count < minCount) continue
+
+    const normalized = normalizeEntityName(name)
+    if (isWeakName(normalized)) continue
+    if (knownNames.has(normalized)) continue
+
+    entities.push({
+      entityName:       normalized,
+      entityType:       "company",
+      relationshipType: "mentioned",
+      sourceUrl,
+      sourceContext:    `Mentioned ${count}× in page content`,
+      confidence:       "low",
+    })
+  }
+
+  // Sort by count desc — most-mentioned first
+  return entities.sort((a, b) => {
+    const countA = parseInt(a.sourceContext.match(/(\d+)×/)?.[1] ?? "0")
+    const countB = parseInt(b.sourceContext.match(/(\d+)×/)?.[1] ?? "0")
+    return countB - countA
   })
+}
+
+// ---------------------------------------------------------------------------
+// Merge helper
+// ---------------------------------------------------------------------------
+
+function mergeWithPriority(
+  high: ExtractedEntity[],
+  rest: ExtractedEntity[],
+): ExtractedEntity[] {
+  const seen = new Set(high.map((e) => e.entityName))
+  const merged = [...high]
+  for (const e of rest) {
+    if (!seen.has(e.entityName)) {
+      seen.add(e.entityName)
+      merged.push(e)
+    }
+  }
+  return merged
 }
 
 // ---------------------------------------------------------------------------
@@ -504,18 +1002,16 @@ function extractWithRegex(
 // ---------------------------------------------------------------------------
 
 /**
- * Extracts named B2B relationship entities from pre-fetched high-signal pages.
+ * Extracts named B2B relationship entities from a client's website.
  *
- * Sources (in priority order):
- *   1. /customers, /case-studies, /partners, /integrations pages (from fetchRelationshipPages)
- *   2. Logo img alt texts from those pages (extracted during Phase 1)
- *   3. Homepage logo alt texts (from signals.extracted.logoAlts — logo walls = structured signal)
+ * Call order:
+ *   1. fetchSitemapEntities  — always, parallel with analysis
+ *   2. Page + logo + pattern extraction (AI or regex)
+ *   3. Mention-count fallback if total < MIN_ENTITY_TARGET
  *
- * Never uses homepage prose — too noisy, too generic.
- *
- * @param baseUrl          Origin of the website (for logging)
+ * @param baseUrl          Origin of the website
  * @param pages            Output of fetchRelationshipPages()
- * @param homepageLogoAlts Logo alt texts from the homepage (signals.extracted.logoAlts)
+ * @param homepageLogoAlts Logo alt texts from the main homepage (from gatherSignals)
  */
 export async function extractRelationshipSignals(
   baseUrl: string,
@@ -524,29 +1020,58 @@ export async function extractRelationshipSignals(
 ): Promise<ExtractedEntity[]> {
   const logoAlts = homepageLogoAlts ?? []
 
-  if (pages.length === 0 && logoAlts.length === 0) {
-    console.log(`SIGNALS [${baseUrl}]: no pages and no logo alts — skipping extraction`)
-    return []
+  // Collect pre-extracted slug entities from all pages (deduped)
+  const slugSeen    = new Set<string>()
+  const allSlugEntities: ExtractedEntity[] = []
+  for (const p of pages) {
+    for (const e of p.slugEntities) {
+      if (!slugSeen.has(e.entityName)) {
+        slugSeen.add(e.entityName)
+        allSlugEntities.push(e)
+      }
+    }
   }
 
+  if (pages.length === 0 && logoAlts.length === 0) {
+    console.log(`SIGNALS [${baseUrl}]: no pages — returning slug entities only (${allSlugEntities.length})`)
+    return allSlugEntities
+  }
+
+  let textEntities: ExtractedEntity[] = []
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY
-
-    const entities = apiKey
+    textEntities = apiKey
       ? await extractWithAI(pages, logoAlts, apiKey)
       : extractWithRegex(pages, logoAlts)
-
-    // Discard entities with no source context — unverifiable
-    const withContext = entities.filter((e) => e.sourceContext.length >= 3)
-
-    console.log(
-      `SIGNALS [${baseUrl}]: ${withContext.length} entities from ${pages.length} pages` +
-      (logoAlts.length > 0 ? ` + ${logoAlts.length} homepage logo alts` : "")
-    )
-
-    return withContext
   } catch (err) {
-    console.error(`SIGNALS [${baseUrl}]: extraction error:`, err)
-    return []
+    console.error(`SIGNALS [${baseUrl}]: text extraction error:`, err)
+    // Fall through — slug entities + fallback will cover us
+    textEntities = extractWithRegex(pages, logoAlts)
   }
+
+  // Slug entities take priority
+  let merged = mergeWithPriority(allSlugEntities, textEntities)
+
+  // Fallback: if we're still below target, scan all text for company mentions
+  if (merged.length < MIN_ENTITY_TARGET) {
+    const knownNames = new Set(merged.map((e) => e.entityName))
+    const allText    = pages.map((p) => `${p.text} ${p.headings.join(" ")} ${p.logoAlts.join(" ")}`).join("\n")
+    const mentions   = detectCompanyMentions(allText, knownNames, baseUrl)
+
+    // Take enough to reach the target (cap fallback additions)
+    const needed  = MIN_ENTITY_TARGET - merged.length
+    merged = mergeWithPriority(merged, mentions.slice(0, needed + 5))
+  }
+
+  // Discard entities with no source context
+  const withContext = merged.filter((e) => e.sourceContext.length >= 3)
+
+  console.log(
+    `SIGNALS [${baseUrl}]: ${withContext.length} entities` +
+    ` (${allSlugEntities.length} slug, ${textEntities.length} text)` +
+    ` from ${pages.length} pages` +
+    (logoAlts.length > 0 ? ` + ${logoAlts.length} homepage logo alts` : ""),
+  )
+
+  return withContext
 }

@@ -13,7 +13,7 @@ import { gatherSignals } from "@/lib/signals"
 import { analyzeWebsite } from "@/lib/ai"
 import { detectChanges, summarizeChanges } from "@/lib/diff"
 import { scoreOpportunity } from "@/lib/scoring"
-import { fetchRelationshipPages, extractRelationshipSignals, type ExtractedEntity } from "@/lib/relationship-signals"
+import { fetchRelationshipPages, fetchSitemapEntities, extractRelationshipSignals, type ExtractedEntity } from "@/lib/relationship-signals"
 import { enrichPublicRelationships, mergeExtractedEntities, capEntities } from "@/lib/enrich-relationships"
 import { extractEnrichmentProspects } from "@/lib/extract-enrichment-prospects"
 import { enrichCompany, convertEnrichmentToEntities } from "@/lib/enrichment"
@@ -100,8 +100,15 @@ export async function POST(req: Request) {
       })
 
     // Start external provider enrichment immediately (Exa/Tavily/mock/none).
-    // Also runs in parallel with gatherSignals — costs ~0 wall-clock time.
     const externalEnrichmentPromise = enrichCompany(client.name, base)
+
+    // Kick off sitemap parsing immediately — static XML, works even on JS-rendered sites.
+    // Finds /customers/slug, /partners/slug, /integrations/slug URLs directly.
+    const sitemapEntitiesPromise = fetchSitemapEntities(base)
+      .catch((err): ExtractedEntity[] => {
+        console.error("Sitemap entity error (non-fatal):", err)
+        return []
+      })
 
     // Gather signals and agency profile in parallel
     const [agencyProfile, signals] = await Promise.all([
@@ -111,12 +118,13 @@ export async function POST(req: Request) {
 
     // Always extract a lightweight client profile and website signals — run even when
     // opportunity score is too low, so warm-paths and the website signal gate still work.
-    const [clientProfile, websiteSignals, relPages, publicEntities, enrichmentResult] = await Promise.all([
+    const [clientProfile, websiteSignals, relPages, publicEntities, enrichmentResult, sitemapEntities] = await Promise.all([
       extractClientProfile(signals),
       extractWebsiteSignals(signals, agencyProfile).catch((): [] => []),
       fetchRelationshipPages(base),
       publicEnrichmentPromise,
       externalEnrichmentPromise,
+      sitemapEntitiesPromise,
     ])
 
     // Attach enrichment result to signals so it's stored and shown in the UI
@@ -141,10 +149,18 @@ export async function POST(req: Request) {
         signals.extracted?.logoAlts,
       )
       const enrichedEntities = convertEnrichmentToEntities(enrichmentResult)
-      const allEntities = capEntities(mergeExtractedEntities(
-        mergeExtractedEntities(pageEntities, publicEntities),
-        enrichedEntities,
-      ))
+      // Merge: sitemap slugs (highest confidence) + page extraction + public RSS + external enrichment
+      const allEntities = capEntities(
+        mergeExtractedEntities(
+          mergeExtractedEntities(
+            mergeExtractedEntities(sitemapEntities, pageEntities),
+            publicEntities,
+          ),
+          enrichedEntities,
+        ),
+        30, // raise cap — sitemap alone can produce many high-quality entities
+      )
+      console.log(`ENTITIES [profile_only]: ${allEntities.length} total (${sitemapEntities.length} sitemap, ${pageEntities.length} page, ${publicEntities.length} public, ${enrichedEntities.length} enrichment)`)
 
       // Extract enrichment prospects
       const enrichmentProspects = extractEnrichmentProspects(enrichmentResult, client.name)
@@ -192,17 +208,25 @@ export async function POST(req: Request) {
       agencyProfile ?? undefined,
     )
 
-    // Extract named entities from the fetched pages (haiku, ~3s) and merge with public enrichment
+    // Extract named entities from the fetched pages (haiku, ~3s) and merge with all sources
     const pageEntities = await extractRelationshipSignals(
       base,
       relPages,
       signals.extracted?.logoAlts,
     )
     const enrichedEntities = convertEnrichmentToEntities(enrichmentResult)
-    const allEntities = capEntities(mergeExtractedEntities(
-      mergeExtractedEntities(pageEntities, publicEntities),
-      enrichedEntities,
-    ))
+    // Merge: sitemap slugs (highest confidence) + page extraction + public RSS + external enrichment
+    const allEntities = capEntities(
+      mergeExtractedEntities(
+        mergeExtractedEntities(
+          mergeExtractedEntities(sitemapEntities, pageEntities),
+          publicEntities,
+        ),
+        enrichedEntities,
+      ),
+      30, // raise cap to accommodate sitemap slug volume
+    )
+    console.log(`ENTITIES [complete]: ${allEntities.length} total (${sitemapEntities.length} sitemap, ${pageEntities.length} page, ${publicEntities.length} public, ${enrichedEntities.length} enrichment)`)
 
     // Extract enrichment prospects
     const enrichmentProspects = extractEnrichmentProspects(enrichmentResult, client.name)
