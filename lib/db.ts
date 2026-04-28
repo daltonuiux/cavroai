@@ -635,6 +635,7 @@ export async function markProspectAdded(
  * Upserts enrichment-sourced prospects for a client.
  * Deletes only enrichment rows (source_signal_type IS NOT NULL) for this client
  * before re-inserting, so AI-generated similar companies are untouched.
+ * Returns the number of rows inserted.
  */
 export async function saveEnrichmentProspects(
   sourceClientId: string,
@@ -647,30 +648,37 @@ export async function saveEnrichmentProspects(
     relationshipPath: string
     sourceSignalType: string
   }>,
-): Promise<void> {
+): Promise<number> {
   // Remove stale enrichment prospects for this client only
-  await db()
+  const { error: delError } = await db()
     .from("prospects")
     .delete()
     .eq("source_client_id", sourceClientId)
     .eq("user_id", userId)
     .not("source_signal_type", "is", null)
 
-  if (prospects.length === 0) return
+  if (delError) throw new Error(`saveEnrichmentProspects (delete): ${delError.message}`)
+
+  if (prospects.length === 0) return 0
 
   const rows = prospects.map((p) => ({
-    source_client_id:  sourceClientId,
-    user_id:           userId,
-    name:              p.name,
-    reason:            p.reason,
-    estimated_fit:     p.estimatedFit,
-    relationship_path: p.relationshipPath,
+    source_client_id:   sourceClientId,
+    user_id:            userId,
+    name:               p.name,
+    reason:             p.reason,
+    estimated_fit:      p.estimatedFit,
+    relationship_path:  p.relationshipPath,
     source_signal_type: p.sourceSignalType,
     source_client_name: sourceClientName,
   }))
 
-  const { error } = await db().from("prospects").insert(rows)
-  if (error) throw new Error(`saveEnrichmentProspects: ${error.message}`)
+  const { data, error } = await db()
+    .from("prospects")
+    .insert(rows)
+    .select("id")
+
+  if (error) throw new Error(`saveEnrichmentProspects (insert): ${error.message}`)
+  return data?.length ?? 0
 }
 
 /**

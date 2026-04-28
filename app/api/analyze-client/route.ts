@@ -148,8 +148,9 @@ export async function POST(req: Request) {
 
       // Extract enrichment prospects
       const enrichmentProspects = extractEnrichmentProspects(enrichmentResult, client.name)
+      console.log("Prospects extracted (profile_only):", enrichmentProspects.length, enrichmentProspects.map((p) => p.name))
 
-      // Persist profile-only result, relationship signals, and enrichment prospects in parallel
+      // Persist profile-only result and relationship signals in parallel
       await Promise.all([
         updateAnalysis(analysisId, {
           status: "profile_only",
@@ -162,10 +163,15 @@ export async function POST(req: Request) {
         saveRelationshipSignals(client.id, userId, allEntities).catch((err) =>
           console.error("Signal save error (non-fatal):", err)
         ),
-        saveEnrichmentProspects(client.id, client.name, userId, enrichmentProspects).catch((err) =>
-          console.error("Enrichment prospect save error (non-fatal):", err)
-        ),
       ])
+
+      // Persist enrichment prospects separately so errors surface clearly
+      try {
+        const count = await saveEnrichmentProspects(client.id, client.name, userId, enrichmentProspects)
+        console.log("Prospects created (profile_only):", count)
+      } catch (err) {
+        console.error("PROSPECT SAVE FAILED (profile_only):", err)
+      }
 
       return NextResponse.json({ status: "profile_only" })
     }
@@ -200,8 +206,9 @@ export async function POST(req: Request) {
 
     // Extract enrichment prospects
     const enrichmentProspects = extractEnrichmentProspects(enrichmentResult, client.name)
+    console.log("Prospects extracted (complete):", enrichmentProspects.length, enrichmentProspects.map((p) => p.name))
 
-    // Persist analysis result, relationship signals, and enrichment prospects in parallel
+    // Persist analysis result and relationship signals in parallel
     await Promise.all([
       updateAnalysis(analysisId, {
         ...result,
@@ -218,10 +225,15 @@ export async function POST(req: Request) {
       saveRelationshipSignals(client.id, userId, allEntities).catch((err) =>
         console.error("Signal save error (non-fatal):", err)
       ),
-      saveEnrichmentProspects(client.id, client.name, userId, enrichmentProspects).catch((err) =>
-        console.error("Enrichment prospect save error (non-fatal):", err)
-      ),
     ])
+
+    // Persist enrichment prospects separately so errors surface clearly
+    try {
+      const count = await saveEnrichmentProspects(client.id, client.name, userId, enrichmentProspects)
+      console.log("Prospects created (complete):", count)
+    } catch (err) {
+      console.error("PROSPECT SAVE FAILED (complete):", err)
+    }
 
     return NextResponse.json({ status: "complete" })
   } catch (err) {
