@@ -269,6 +269,110 @@ const SLUG_SUFFIX  = /-(case-study|success-story|story|overview|testimonial|revi
 const SLUG_SKIP    = /^(blog|news|press|about|team|pricing|contact|login|signup|careers|jobs|support|help|docs|legal|privacy|terms|resources|api|status|integrations|partners|customers|overview|all|new|more|get|try|home|index|404|en|us|uk)$/i
 
 // ---------------------------------------------------------------------------
+// Name cleaning — separates company names from page-title noise
+// ---------------------------------------------------------------------------
+
+/**
+ * Regex that matches page-title separator characters.
+ * Handles: "CompanyX - Section", "CompanyX | Page", "CompanyX — Category"
+ */
+const TITLE_SEP_RE = /\s+[-–—|]\s+/
+
+/**
+ * Words/phrases that identify a string segment as a page section rather than
+ * a company name. Used when splitting on TITLE_SEP_RE.
+ */
+const TITLE_NOISE = new Set([
+  // Navigation / UI labels
+  "welcome", "home", "homepage", "page", "pages",
+  "posts", "post", "articles", "article", "feed", "updates", "announcements",
+  // Social platforms — appear as "Company - LinkedIn" page titles
+  "linkedin", "twitter", "facebook", "instagram", "youtube",
+  "tiktok", "x", "github", "reddit", "glassdoor", "crunchbase",
+  // Generic section names
+  "research", "insights", "research insights", "research and insights",
+  "blog", "media", "press", "press room", "newsroom",
+  "company profile", "profile", "overview", "about",
+  "investors", "investor relations",
+  "documentation", "docs", "help center", "help", "support", "faq",
+  "privacy policy", "privacy", "terms", "terms of service",
+  "cookie policy", "cookies",
+  "careers", "jobs", "join us", "work with us",
+  "contact", "get in touch",
+  // Error states
+  "404", "error", "not found", "page not found",
+])
+
+/** Verbs indicating the string is a sentence, not a company name. */
+const SENTENCE_VERB_RE =
+  /\b(is|are|was|were|has|have|had|do|does|did|will|would|could|should|may|might|can|shall|integrates?|connects?|enables?|helps?|powers?|allows?|provides?|offers?|delivers?|improves?|increases?|reduces?|saves?|grows?|scales?|builds?|streamlines?|automates?|simplifies?|transforms?)\b/i
+
+/** Question/sentence starter words that mean the string is prose, not a name. */
+const SENTENCE_START_RE = /^(how|why|what|when|where|who|the|our|your|all|see|get|try|meet|discover|explore|find|learn|read|watch|book|schedule|request)\b/i
+
+/**
+ * Cleans a raw string into a valid, normalised company name.
+ * Returns null if the string cannot be salvaged into something useful.
+ *
+ * Handles:
+ *   "TrustedStake - LinkedIn"        → "linkedin"  (splits separator, takes valid part)
+ *   "Research & Insights - Acme"     → "acme"      (generic part dropped)
+ *   "Welcome to our platform"        → null         (sentence)
+ *   "Stripe logo"                    → "stripe"     (logo suffix stripped)
+ *   "acme corp"                      → "acme corp"  (normalised, kept)
+ *
+ * @param raw        Raw string candidate
+ * @param clientNorm Pre-normalised client name — never saved as its own entity
+ */
+function cleanName(raw: string, clientNorm = ""): string | null {
+  if (!raw || typeof raw !== "string") return null
+  let s = raw.trim()
+  if (s.length < 2 || s.length > 80) return null
+
+  // Strip logo/icon suffix first (common in alt text)
+  s = s.replace(/\s+logo\s*$/i, "").replace(/\s+icon\s*$/i, "").trim()
+  if (s.length < 2) return null
+
+  // Reject raw URLs
+  if (/^https?:\/\//.test(s)) return null
+  if (/\w\.(com|io|co|net|org|app|dev)\//.test(s)) return null
+
+  // If the string contains a page-title separator, split and try each part.
+  // Return the first part that is a valid company name.
+  if (TITLE_SEP_RE.test(s)) {
+    const parts = s.split(TITLE_SEP_RE).map((p) => p.trim()).filter((p) => p.length >= 2)
+    for (const part of parts) {
+      const result = cleanName(part, clientNorm) // recursive — no separator at this level
+      if (result) return result
+    }
+    return null
+  }
+
+  // Reject sentences — verb-containing phrases or common sentence starters
+  if (SENTENCE_VERB_RE.test(s)) return null
+  if (SENTENCE_START_RE.test(s)) return null
+
+  // Reject multi-word phrases — company names are ≤ 4 words
+  if (s.split(/\s+/).length > 4) return null
+
+  // Normalise
+  const norm = normalizeEntityName(s)
+  if (!norm || norm.length < 2) return null
+
+  // Reject title-noise parts — check both raw and normalised forms
+  const lowerRaw = s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim()
+  if (TITLE_NOISE.has(lowerRaw) || TITLE_NOISE.has(norm)) return null
+
+  // Reject the client's own name
+  if (clientNorm && norm.toLowerCase() === clientNorm) return null
+
+  // Reject generic/weak terms
+  if (isWeakName(norm)) return null
+
+  return norm
+}
+
+// ---------------------------------------------------------------------------
 // HTML utilities
 // ---------------------------------------------------------------------------
 
@@ -383,6 +487,7 @@ function extractHeadings(html: string): string[] {
 function extractTextPatterns(
   text: string,
   sourceUrl: string,
+  clientNorm = "",
 ): ExtractedEntity[] {
   const entities: ExtractedEntity[] = []
   const seen = new Set<string>()
@@ -397,14 +502,11 @@ function extractTextPatterns(
     const parts = rawList.split(/,\s*|\s+and\s+|\s*&\s*|\s*\/\s*/)
     for (let raw of parts) {
       raw = raw.replace(/[.!?;:]$/, "").trim()
-      if (!raw || raw.length < 2 || raw.length > 55) continue
-      if (!/^[A-Z]/.test(raw)) continue
-      if (UI_PHRASES.has(raw)) continue
-      const normalized = normalizeEntityName(raw)
-      if (isWeakName(normalized) || seen.has(normalized)) continue
-      seen.add(normalized)
+      const norm = cleanName(raw, clientNorm)
+      if (!norm || seen.has(norm)) continue
+      seen.add(norm)
       entities.push({
-        entityName:       normalized,
+        entityName:       norm,
         entityType:       entType,
         relationshipType: relType,
         sourceUrl,
@@ -447,7 +549,7 @@ function extractTextPatterns(
 
 /**
  * Extract company names from <a href> URL slugs.
- * /customers/stripe → "Stripe" (confidence: high — site owner created this page).
+ * /customers/stripe → "stripe" (confidence: high — site owner created this page).
  */
 function extractLinkedSlugs(
   html: string,
@@ -455,6 +557,7 @@ function extractLinkedSlugs(
   defaultEntityType: EntityType,
   defaultRelationshipType: RelationshipSignalType,
   sourceUrl: string,
+  clientNorm = "",
 ): ExtractedEntity[] {
   const entities: ExtractedEntity[] = []
   const seen = new Set<string>()
@@ -469,15 +572,17 @@ function extractLinkedSlugs(
       if (SLUG_SKIP.test(slug)) break
       slug = slug.replace(SLUG_SUFFIX, "")
 
-      const rawName  = slug.split("-").filter(Boolean)
+      // Convert kebab slug to title case before cleaning
+      const rawName = slug.split("-").filter(Boolean)
         .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
         .join(" ")
-      const normalized = normalizeEntityName(rawName)
-      if (isWeakName(normalized) || seen.has(normalized)) break
 
-      seen.add(normalized)
+      const norm = cleanName(rawName, clientNorm)
+      if (!norm || seen.has(norm)) break
+
+      seen.add(norm)
       entities.push({
-        entityName:       normalized,
+        entityName:       norm,
         entityType:       defaultEntityType,
         relationshipType: defaultRelationshipType,
         sourceUrl,
@@ -493,12 +598,15 @@ function extractLinkedSlugs(
 
 /**
  * Extract company/org names from JSON-LD structured data.
+ * JSON-LD `name` fields often contain page titles ("Company - Section") —
+ * cleanName() handles separator splitting before saving.
  */
 function extractJsonLd(
   html: string,
   defaultEntityType: EntityType,
   defaultRelationshipType: RelationshipSignalType,
   sourceUrl: string,
+  clientNorm = "",
 ): ExtractedEntity[] {
   const entities: ExtractedEntity[] = []
   const seen = new Set<string>()
@@ -516,15 +624,13 @@ function extractJsonLd(
         const type = String(obj["@type"] ?? "")
         if (
           /Organization|Corporation|LocalBusiness|Brand|SoftwareApplication/i.test(type) &&
-          typeof obj.name === "string" &&
-          obj.name.length >= 2 &&
-          obj.name.length <= 60
+          typeof obj.name === "string"
         ) {
-          const normalized = normalizeEntityName(obj.name)
-          if (!isWeakName(normalized) && !seen.has(normalized)) {
-            seen.add(normalized)
+          const norm = cleanName(obj.name, clientNorm)
+          if (norm && !seen.has(norm)) {
+            seen.add(norm)
             entities.push({
-              entityName:       normalized,
+              entityName:       norm,
               entityType:       defaultEntityType,
               relationshipType: defaultRelationshipType,
               sourceUrl,
@@ -556,7 +662,7 @@ function extractJsonLd(
  *
  * Looks for URLs matching /customers/slug, /partners/slug, /integrations/slug.
  */
-export async function fetchSitemapEntities(baseUrl: string): Promise<ExtractedEntity[]> {
+export async function fetchSitemapEntities(baseUrl: string, clientNorm = ""): Promise<ExtractedEntity[]> {
   const entities: ExtractedEntity[] = []
   const seen     = new Set<string>()
   const fetched  = new Set<string>()
@@ -573,15 +679,16 @@ export async function fetchSitemapEntities(baseUrl: string): Promise<ExtractedEn
           if (SLUG_SKIP.test(slug)) break
           slug = slug.replace(SLUG_SUFFIX, "")
 
-          const rawName    = slug.split("-").filter(Boolean)
+          const rawName = slug.split("-").filter(Boolean)
             .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
             .join(" ")
-          const normalized = normalizeEntityName(rawName)
-          if (isWeakName(normalized) || seen.has(normalized)) break
 
-          seen.add(normalized)
+          const norm = cleanName(rawName, clientNorm)
+          if (!norm || seen.has(norm)) break
+
+          seen.add(norm)
           entities.push({
-            entityName:       normalized,
+            entityName:       norm,
             entityType:       cat.defaultEntityType,
             relationshipType: cat.defaultRelationshipType,
             sourceUrl:        url,
@@ -635,7 +742,7 @@ export async function fetchSitemapEntities(baseUrl: string): Promise<ExtractedEn
  * Fetches the homepage + relationship pages in parallel.
  * For each category, tries multiple path variants and keeps the richest page.
  */
-export async function fetchRelationshipPages(baseUrl: string): Promise<PageData[]> {
+export async function fetchRelationshipPages(baseUrl: string, clientNorm = ""): Promise<PageData[]> {
   const allCategories: PageCategory[] = [
     // Homepage as a pseudo-category — logo alts and text patterns only
     {
@@ -676,6 +783,7 @@ export async function fetchRelationshipPages(baseUrl: string): Promise<PageData[
             cat.defaultEntityType,
             cat.defaultRelationshipType,
             best.url,
+            clientNorm,
           )
         : []
 
@@ -684,6 +792,7 @@ export async function fetchRelationshipPages(baseUrl: string): Promise<PageData[
         cat.defaultEntityType,
         cat.defaultRelationshipType,
         best.url,
+        clientNorm,
       )
 
       // Merge slug + JSON-LD into slugEntities (slug takes precedence)
@@ -748,6 +857,7 @@ async function extractWithAI(
   pages: PageData[],
   homepageLogoAlts: string[],
   apiKey: string,
+  clientNorm = "",
 ): Promise<ExtractedEntity[]> {
   const Anthropic = (await import("@anthropic-ai/sdk")).default
   const anthropic = new Anthropic({ apiKey })
@@ -801,12 +911,13 @@ async function extractWithAI(
 
   const out: ExtractedEntity[] = []
   for (const e of parsed.entities ?? []) {
-    if (!e.name || e.name.length < 2 || UI_PHRASES.has(e.name)) continue
-    const normalized = normalizeEntityName(e.name)
-    if (isWeakName(normalized)) continue
+    if (!e.name) continue
+    // cleanName handles separator patterns and client-name filtering
+    const norm = cleanName(e.name, clientNorm)
+    if (!norm) continue
 
     out.push({
-      entityName:       normalized,
+      entityName:       norm,
       entityType:       VALID_ENTITY_TYPES.has(e.entity_type)
         ? e.entity_type as EntityType : "company",
       relationshipType: VALID_RELATIONSHIP_TYPES.has(e.relationship_type)
@@ -830,7 +941,7 @@ async function extractWithAI(
 // Phase 2B: Regex extraction (no API key / fallback)
 // ---------------------------------------------------------------------------
 
-function extractWithRegex(pages: PageData[], homepageLogoAlts: string[]): ExtractedEntity[] {
+function extractWithRegex(pages: PageData[], homepageLogoAlts: string[], clientNorm = ""): ExtractedEntity[] {
   const out: ExtractedEntity[] = []
   const seen = new Set<string>()
 
@@ -840,40 +951,37 @@ function extractWithRegex(pages: PageData[], homepageLogoAlts: string[]): Extrac
     out.push(e)
   }
 
-  // 1. URL slug entities — highest confidence
+  // 1. URL slug entities — highest confidence (already cleaned by extractLinkedSlugs)
   for (const p of pages) for (const e of p.slugEntities) add(e)
 
   // 2. Logo alts from relationship pages
   for (const p of pages) {
     for (const alt of p.logoAlts) {
-      const norm = normalizeEntityName(alt)
-      if (!isWeakName(norm))
+      const norm = cleanName(alt, clientNorm)
+      if (norm)
         add({ entityName: norm, entityType: p.defaultEntityType, relationshipType: p.defaultRelationshipType, sourceUrl: p.url, sourceContext: `Logo: ${alt}`, confidence: "high" })
     }
   }
 
   // 3. Text patterns ("integrates with X", "trusted by X")
   for (const p of pages) {
-    for (const e of extractTextPatterns(p.text, p.url)) add(e)
+    for (const e of extractTextPatterns(p.text, p.url, clientNorm)) add(e)
   }
 
-  // 4. Headings on relationship pages (skip homepage — too noisy)
+  // 4. Headings on relationship pages — cleanName handles "Company - Section" titles
   for (const p of pages) {
     if (p.label === "Homepage") continue
     for (const heading of p.headings) {
-      if (UI_PHRASES.has(heading)) continue
-      if (/\b(is|are|was|were|has|have|can|will|lets|helps|enables|powers|allows)\b/i.test(heading)) continue
-      if (/^(How|Why|What|The|Our|Your|All|See|Get|Try|Meet|Discover|Explore|Find)/i.test(heading)) continue
-      const norm = normalizeEntityName(heading)
-      if (!isWeakName(norm) && norm.split(" ").length <= 4)
+      const norm = cleanName(heading, clientNorm)
+      if (norm)
         add({ entityName: norm, entityType: p.defaultEntityType, relationshipType: p.defaultRelationshipType, sourceUrl: p.url, sourceContext: `Heading: ${heading}`, confidence: "medium" })
     }
   }
 
   // 5. Homepage logo alts (caller-supplied from gatherSignals)
   for (const alt of homepageLogoAlts) {
-    const norm = normalizeEntityName(alt)
-    if (!isWeakName(norm))
+    const norm = cleanName(alt, clientNorm)
+    if (norm)
       add({ entityName: norm, entityType: "company", relationshipType: "customer", sourceUrl: "homepage", sourceContext: `Logo: ${alt}`, confidence: "medium" })
   }
 
@@ -885,8 +993,8 @@ function extractWithRegex(pages: PageData[], homepageLogoAlts: string[]): Extrac
         /^How\s+([A-Z][a-zA-Z0-9\s]{2,25})\s+(reduced|increased|grew|scaled|built|cut|saved|achieved|improved)/i,
       )
       if (m) {
-        const norm = normalizeEntityName(m[1].trim())
-        if (!isWeakName(norm))
+        const norm = cleanName(m[1].trim(), clientNorm)
+        if (norm)
           add({ entityName: norm, entityType: "company", relationshipType: "customer", sourceUrl: p.url, sourceContext: line.trim().slice(0, 80), confidence: "medium" })
       }
     }
@@ -921,6 +1029,7 @@ function detectCompanyMentions(
   allText: string,
   knownNames: Set<string>,
   sourceUrl: string,
+  clientNorm = "",
 ): ExtractedEntity[] {
   const counts = new Map<string, number>()
 
@@ -956,9 +1065,8 @@ function detectCompanyMentions(
 
     if (count < minCount) continue
 
-    const normalized = normalizeEntityName(name)
-    if (isWeakName(normalized)) continue
-    if (knownNames.has(normalized)) continue
+    const normalized = cleanName(name, clientNorm)
+    if (!normalized || knownNames.has(normalized)) continue
 
     entities.push({
       entityName:       normalized,
@@ -1012,19 +1120,24 @@ function mergeWithPriority(
  * @param baseUrl          Origin of the website
  * @param pages            Output of fetchRelationshipPages()
  * @param homepageLogoAlts Logo alt texts from the main homepage (from gatherSignals)
+ * @param clientName       The client's own name — never saved as an entity
  */
 export async function extractRelationshipSignals(
   baseUrl: string,
   pages: PageData[],
   homepageLogoAlts?: string[],
+  clientName?: string,
 ): Promise<ExtractedEntity[]> {
-  const logoAlts = homepageLogoAlts ?? []
+  const logoAlts   = homepageLogoAlts ?? []
+  const clientNorm = clientName ? normalizeEntityName(clientName) : ""
 
   // Collect pre-extracted slug entities from all pages (deduped)
   const slugSeen    = new Set<string>()
   const allSlugEntities: ExtractedEntity[] = []
   for (const p of pages) {
     for (const e of p.slugEntities) {
+      // Re-filter slug entities with the client norm — they were built before we had it
+      if (clientNorm && e.entityName.toLowerCase() === clientNorm) continue
       if (!slugSeen.has(e.entityName)) {
         slugSeen.add(e.entityName)
         allSlugEntities.push(e)
@@ -1041,12 +1154,11 @@ export async function extractRelationshipSignals(
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY
     textEntities = apiKey
-      ? await extractWithAI(pages, logoAlts, apiKey)
-      : extractWithRegex(pages, logoAlts)
+      ? await extractWithAI(pages, logoAlts, apiKey, clientNorm)
+      : extractWithRegex(pages, logoAlts, clientNorm)
   } catch (err) {
     console.error(`SIGNALS [${baseUrl}]: text extraction error:`, err)
-    // Fall through — slug entities + fallback will cover us
-    textEntities = extractWithRegex(pages, logoAlts)
+    textEntities = extractWithRegex(pages, logoAlts, clientNorm)
   }
 
   // Slug entities take priority
@@ -1056,10 +1168,9 @@ export async function extractRelationshipSignals(
   if (merged.length < MIN_ENTITY_TARGET) {
     const knownNames = new Set(merged.map((e) => e.entityName))
     const allText    = pages.map((p) => `${p.text} ${p.headings.join(" ")} ${p.logoAlts.join(" ")}`).join("\n")
-    const mentions   = detectCompanyMentions(allText, knownNames, baseUrl)
+    const mentions   = detectCompanyMentions(allText, knownNames, baseUrl, clientNorm)
 
-    // Take enough to reach the target (cap fallback additions)
-    const needed  = MIN_ENTITY_TARGET - merged.length
+    const needed = MIN_ENTITY_TARGET - merged.length
     merged = mergeWithPriority(merged, mentions.slice(0, needed + 5))
   }
 

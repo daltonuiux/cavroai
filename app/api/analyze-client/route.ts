@@ -104,7 +104,9 @@ export async function POST(req: Request) {
 
     // Kick off sitemap parsing immediately — static XML, works even on JS-rendered sites.
     // Finds /customers/slug, /partners/slug, /integrations/slug URLs directly.
-    const sitemapEntitiesPromise = fetchSitemapEntities(base)
+    // clientNorm not yet computed here — compute inline for the promise
+    const _clientNormEarly = client.name.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim()
+    const sitemapEntitiesPromise = fetchSitemapEntities(base, _clientNormEarly)
       .catch((err): ExtractedEntity[] => {
         console.error("Sitemap entity error (non-fatal):", err)
         return []
@@ -118,10 +120,13 @@ export async function POST(req: Request) {
 
     // Always extract a lightweight client profile and website signals — run even when
     // opportunity score is too low, so warm-paths and the website signal gate still work.
+    // Normalised client name — used by extraction to skip the client's own name
+    const clientNorm = client.name.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim()
+
     const [clientProfile, websiteSignals, relPages, publicEntities, enrichmentResult, sitemapEntities] = await Promise.all([
       extractClientProfile(signals),
       extractWebsiteSignals(signals, agencyProfile).catch((): [] => []),
-      fetchRelationshipPages(base),
+      fetchRelationshipPages(base, clientNorm),
       publicEnrichmentPromise,
       externalEnrichmentPromise,
       sitemapEntitiesPromise,
@@ -147,6 +152,7 @@ export async function POST(req: Request) {
         base,
         relPages,
         signals.extracted?.logoAlts,
+        client.name,
       )
       const enrichedEntities = convertEnrichmentToEntities(enrichmentResult)
       // Merge: sitemap slugs (highest confidence) + page extraction + public RSS + external enrichment
