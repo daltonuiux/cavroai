@@ -15,7 +15,10 @@
       "Bash(xargs kill *)",
       "Bash(node -e ' *)",
       "Bash(python3)",
-      "Bash(xargs ls *)"
+      "Bash(xargs ls *)",
+      "Bash(mkdir -p '/Users/daltonuiux/dev/ai-intelligence-layer/app/\\(app\\)/clients/[id]')",
+      "Bash(mv '/Users/daltonuiux/dev/ai-intelligence-layer/app/clients/[id]/page.tsx' '/Users/daltonuiux/dev/ai-intelligence-layer/app/\\(app\\)/clients/[id]/page.tsx')",
+      "Bash(rm -rf '/Users/daltonuiux/dev/ai-intelligence-layer/app/clients/[id]')"
     ]
   }
 }
