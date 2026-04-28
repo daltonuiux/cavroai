@@ -29,12 +29,18 @@
 //   CREATE TABLE IF NOT EXISTS prospects (
 //     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 //     source_client_id uuid NOT NULL,
+//     user_id uuid NOT NULL,
 //     name text NOT NULL,
 //     reason text NOT NULL DEFAULT '',
 //     estimated_fit text NOT NULL DEFAULT 'medium',
 //     added_as_client_id uuid,
 //     created_at timestamptz NOT NULL DEFAULT now()
 //   );
+//
+// Enrichment-sourced prospect fields — add if not present:
+//   ALTER TABLE prospects ADD COLUMN IF NOT EXISTS relationship_path text;
+//   ALTER TABLE prospects ADD COLUMN IF NOT EXISTS source_signal_type text;
+//   ALTER TABLE prospects ADD COLUMN IF NOT EXISTS source_client_name text;
 //
 // Evidence fields on analyses:
 //   ALTER TABLE analyses ADD COLUMN IF NOT EXISTS show_opportunity boolean;
@@ -509,6 +515,9 @@ function rowToProspect(row: any): Prospect {
     estimatedFit: (row.estimated_fit ?? "medium") as Prospect["estimatedFit"],
     addedAsClientId: row.added_as_client_id ?? undefined,
     createdAt: row.created_at,
+    relationshipPath:  row.relationship_path  ?? undefined,
+    sourceSignalType:  row.source_signal_type  ?? undefined,
+    sourceClientName:  row.source_client_name  ?? undefined,
   }
 }
 
@@ -620,6 +629,67 @@ export async function markProspectAdded(
     .eq("user_id", userId)
 
   if (error) throw new Error(`markProspectAdded: ${error.message}`)
+}
+
+/**
+ * Upserts enrichment-sourced prospects for a client.
+ * Deletes only enrichment rows (source_signal_type IS NOT NULL) for this client
+ * before re-inserting, so AI-generated similar companies are untouched.
+ */
+export async function saveEnrichmentProspects(
+  sourceClientId: string,
+  sourceClientName: string,
+  userId: string,
+  prospects: Array<{
+    name: string
+    reason: string
+    estimatedFit: string
+    relationshipPath: string
+    sourceSignalType: string
+  }>,
+): Promise<void> {
+  // Remove stale enrichment prospects for this client only
+  await db()
+    .from("prospects")
+    .delete()
+    .eq("source_client_id", sourceClientId)
+    .eq("user_id", userId)
+    .not("source_signal_type", "is", null)
+
+  if (prospects.length === 0) return
+
+  const rows = prospects.map((p) => ({
+    source_client_id:  sourceClientId,
+    user_id:           userId,
+    name:              p.name,
+    reason:            p.reason,
+    estimated_fit:     p.estimatedFit,
+    relationship_path: p.relationshipPath,
+    source_signal_type: p.sourceSignalType,
+    source_client_name: sourceClientName,
+  }))
+
+  const { error } = await db().from("prospects").insert(rows)
+  if (error) throw new Error(`saveEnrichmentProspects: ${error.message}`)
+}
+
+/**
+ * Returns all enrichment-sourced prospects for a user (those with source_signal_type set).
+ * Used by the Opportunities and Warm Paths pages to show discovered companies.
+ */
+export async function getEnrichmentProspectsForUser(
+  userId: string,
+): Promise<Prospect[]> {
+  const { data, error } = await db()
+    .from("prospects")
+    .select("*")
+    .eq("user_id", userId)
+    .not("source_signal_type", "is", null)
+    .order("estimated_fit", { ascending: false })
+    .order("created_at", { ascending: false })
+
+  if (error) throw new Error(`getEnrichmentProspectsForUser: ${error.message}`)
+  return (data ?? []).map(rowToProspect)
 }
 
 // ---------------------------------------------------------------------------

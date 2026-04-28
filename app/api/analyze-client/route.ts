@@ -6,6 +6,7 @@ import {
   updateAnalysis,
   getAgencyProfile,
   saveRelationshipSignals,
+  saveEnrichmentProspects,
   MVP_USER_ID,
 } from "@/lib/db"
 import { gatherSignals } from "@/lib/signals"
@@ -14,6 +15,7 @@ import { detectChanges, summarizeChanges } from "@/lib/diff"
 import { scoreOpportunity } from "@/lib/scoring"
 import { fetchRelationshipPages, extractRelationshipSignals, type ExtractedEntity } from "@/lib/relationship-signals"
 import { enrichPublicRelationships, mergeExtractedEntities, capEntities } from "@/lib/enrich-relationships"
+import { extractEnrichmentProspects } from "@/lib/extract-enrichment-prospects"
 import { enrichCompany, convertEnrichmentToEntities } from "@/lib/enrichment"
 import { extractClientProfile } from "@/lib/client-profile"
 import { extractWebsiteSignals } from "@/lib/website-signals"
@@ -144,7 +146,10 @@ export async function POST(req: Request) {
         enrichedEntities,
       ))
 
-      // Persist profile-only result and relationship signals in parallel
+      // Extract enrichment prospects
+      const enrichmentProspects = extractEnrichmentProspects(enrichmentResult, client.name)
+
+      // Persist profile-only result, relationship signals, and enrichment prospects in parallel
       await Promise.all([
         updateAnalysis(analysisId, {
           status: "profile_only",
@@ -156,6 +161,9 @@ export async function POST(req: Request) {
         }),
         saveRelationshipSignals(client.id, userId, allEntities).catch((err) =>
           console.error("Signal save error (non-fatal):", err)
+        ),
+        saveEnrichmentProspects(client.id, client.name, userId, enrichmentProspects).catch((err) =>
+          console.error("Enrichment prospect save error (non-fatal):", err)
         ),
       ])
 
@@ -190,7 +198,10 @@ export async function POST(req: Request) {
       enrichedEntities,
     ))
 
-    // Persist analysis result and relationship signals in parallel
+    // Extract enrichment prospects
+    const enrichmentProspects = extractEnrichmentProspects(enrichmentResult, client.name)
+
+    // Persist analysis result, relationship signals, and enrichment prospects in parallel
     await Promise.all([
       updateAnalysis(analysisId, {
         ...result,
@@ -206,6 +217,9 @@ export async function POST(req: Request) {
       }),
       saveRelationshipSignals(client.id, userId, allEntities).catch((err) =>
         console.error("Signal save error (non-fatal):", err)
+      ),
+      saveEnrichmentProspects(client.id, client.name, userId, enrichmentProspects).catch((err) =>
+        console.error("Enrichment prospect save error (non-fatal):", err)
       ),
     ])
 

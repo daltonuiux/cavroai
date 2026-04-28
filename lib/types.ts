@@ -303,6 +303,13 @@ export interface Prospect {
   /** Set once the user adds this prospect as a tracked client. */
   addedAsClientId?: string
   createdAt: string
+  // Enrichment-sourced path fields — set when the prospect came from enrichment signals
+  /** "You → Meshed → Asteroid" */
+  relationshipPath?: string
+  /** "customer" | "partner" — which enrichment signal surfaced this prospect */
+  sourceSignalType?: string
+  /** Denormalized source client name for display without a join */
+  sourceClientName?: string
 }
 
 export interface WebsiteSignals {
