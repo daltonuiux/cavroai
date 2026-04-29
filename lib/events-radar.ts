@@ -353,68 +353,109 @@ function computeScore(attendees: EventAttendee[], signals: EventSignalSummary[])
 // Narrative generation
 // ---------------------------------------------------------------------------
 
+/**
+ * Produces a single, punchy "Why attend" line in the form:
+ *   [observation] — [implication]
+ *
+ * Priority waterfall — first matching condition wins.
+ * Each branch returns immediately so the function always yields one sentence.
+ */
 function buildWhyAttend(
-  attendees:   EventAttendee[],
-  signals:     EventSignalSummary[],
-  _eventName:  string,
+  attendees:  EventAttendee[],
+  signals:    EventSignalSummary[],
+  _eventName: string,
 ): string {
   const warmPeople  = attendees.filter((a) => attendeeWarmth(a) === "warm")
   const emailPeople = attendees.filter((a) => attendeeWarmth(a) === "email")
   const speakers    = attendees.filter((a) => a.role === "speaker")
-  const topSignal   = signals[0]
+
+  const sm          = new Map(signals.map((s) => [s.type, s.count]))
+  const launchCount = sm.get("launching")      ?? 0
+  const fundraCount = sm.get("fundraising")    ?? 0
+  const buyingCount = (sm.get("recommendation") ?? 0) + (sm.get("pain") ?? 0)
+  const hiringCount = sm.get("hiring")         ?? 0
 
   const firstName = (a: EventAttendee) =>
     a.name?.split(" ")[0] ?? a.email.split("@")[0]
 
-  // ── Part 1: signal or attendance density ────────────────────────────────────
-  let opening: string
+  // 1. Speaker you already know (most specific possible signal)
+  const knownSpeaker = speakers.find(
+    (s) => warmPeople.includes(s) || emailPeople.includes(s),
+  )
+  if (knownSpeaker) {
+    return `${firstName(knownSpeaker)} is speaking and you already know them — low-friction entry into the room.`
+  }
 
+  // 2. Multiple speakers from your network
   if (speakers.length >= 2) {
     const names = speakers.slice(0, 2).map(firstName).join(" and ")
-    opening = `${names} are speaking — your network has a direct line into the room.`
-  } else if (speakers.length === 1) {
-    opening = `${firstName(speakers[0])} is speaking — a natural anchor for the event and an easy conversation starter.`
-  } else if (topSignal && topSignal.count >= 2) {
-    if (topSignal.type === "launching" || topSignal.type === "fundraising") {
-      opening = `${topSignal.count} of your contacts attending are ${SIGNAL_LABELS[topSignal.type]?.toLowerCase() ?? topSignal.type} — high receptivity for new partnerships right now.`
-    } else if (topSignal.type === "recommendation" || topSignal.type === "pain") {
-      opening = `${topSignal.count} attending contacts have expressed an active need for support — a direct signal this is worth your time.`
-    } else {
-      opening = `${topSignal.count} contacts here are ${SIGNAL_LABELS[topSignal.type]?.toLowerCase() ?? topSignal.type} — strong momentum in this part of your network.`
-    }
-  } else if (attendees.length >= 4) {
-    opening = `${attendees.length} people from your network are going — one of the highest concentrations in your radar.`
-  } else {
-    const count = attendees.length
-    opening = `${count} ${count === 1 ? "contact" : "contacts"} from your network ${count === 1 ? "is" : "are"} attending.`
+    return `${names} are speaking — your network has direct access into the room.`
+  }
+  if (speakers.length === 1) {
+    return `${firstName(speakers[0])} is speaking — a natural anchor and easy conversation starter.`
   }
 
-  // ── Part 2: relationship angle ───────────────────────────────────────────────
-  let relationship: string
+  // 3. Known relationship + strong signal (highest ROI combination)
+  if (warmPeople.length >= 1 && launchCount >= 2) {
+    return `You know ${warmPeople.length === 1 ? firstName(warmPeople[0]) : `${warmPeople.length} attendees`} and multiple companies are launching here — warm conversations in a high-signal environment.`
+  }
+  if (warmPeople.length >= 1 && fundraCount >= 2) {
+    return `You know ${warmPeople.length === 1 ? firstName(warmPeople[0]) : `${warmPeople.length} attendees`} and several are fundraising — well-timed for a natural reconnect.`
+  }
 
+  // 4. Direct buying / agency signal
+  if (buyingCount >= 2) {
+    return `${buyingCount} attendees have posted looking for agency support — expressed need, not ambient activity.`
+  }
+  if (buyingCount === 1) {
+    return `One attendee has posted looking for agency support — a direct signal worth acting on.`
+  }
+
+  // 5. Launch signal (high receptivity moment)
+  if (launchCount >= 3) {
+    return `${launchCount} companies in your network are launching here — high-signal environment for new partnerships.`
+  }
+  if (launchCount >= 2) {
+    return `Several companies are launching here — high-signal environment for new partnerships.`
+  }
+
+  // 6. Fundraising signal
+  if (fundraCount >= 2) {
+    return `${fundraCount} contacts are fundraising — post-raise spend decisions tend to accelerate fast.`
+  }
+
+  // 7. Strong existing relationships (warm)
   if (warmPeople.length >= 3) {
-    relationship = `You've already met ${warmPeople.length} of them — showing up turns warm into warm-in-person.`
-  } else if (warmPeople.length === 2) {
-    const names = warmPeople.map(firstName).join(" and ")
-    relationship = `You know ${names} personally — natural anchors that make working the room far easier.`
-  } else if (warmPeople.length === 1 && emailPeople.length >= 1) {
-    relationship = `You've met ${firstName(warmPeople[0])} and have email history with ${emailPeople.length} other${emailPeople.length > 1 ? "s" : ""} — well-positioned to make real connections here.`
-  } else if (warmPeople.length === 1) {
-    relationship = `You know ${firstName(warmPeople[0])} personally — a solid anchor for the event.`
-  } else if (emailPeople.length >= 2) {
-    relationship = `You have email history with ${emailPeople.length} of them — warm enough to pick up the conversation in person.`
-  } else if (emailPeople.length === 1) {
-    relationship = `You've exchanged emails with ${firstName(emailPeople[0])} — a low-friction starting point.`
-  } else {
-    relationship = `These are loose connections, but a shared event creates exactly the context needed for genuine first introductions.`
+    return `You've already met ${warmPeople.length} attendees — easy entry point for warm reconnects.`
+  }
+  if (warmPeople.length === 2) {
+    return `You already know ${warmPeople.map(firstName).join(" and ")} — a natural foundation for working the room.`
+  }
+  if (warmPeople.length === 1) {
+    return `You know ${firstName(warmPeople[0])} personally — an easy anchor for the event.`
   }
 
-  // ── Part 3: closing action prompt ────────────────────────────────────────────
-  const action = attendees.length >= 3
-    ? "Strong networking ROI relative to the time investment."
-    : "Worth a look — the right small event often beats a crowded conference."
+  // 8. Email relationships
+  if (emailPeople.length >= 2) {
+    return `You have email history with ${emailPeople.length} attendees — warm enough to pick up in person.`
+  }
+  if (emailPeople.length === 1) {
+    return `You've emailed ${firstName(emailPeople[0])} before — a low-friction starting point.`
+  }
 
-  return [opening, relationship, action].join(" ")
+  // 9. Hiring signal
+  if (hiringCount >= 2) {
+    return `${hiringCount} companies here are actively hiring — growth phase, more budget, more decisions.`
+  }
+
+  // 10. High attendance density
+  if (attendees.length >= 4) {
+    return `${attendees.length} people from your network are going — strong concentration relative to your radar.`
+  }
+
+  // Fallback
+  const n = attendees.length
+  return `${n} ${n === 1 ? "contact" : "contacts"} from your network ${n === 1 ? "is" : "are"} attending — worth showing up.`
 }
 
 // ---------------------------------------------------------------------------
