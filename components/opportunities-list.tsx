@@ -676,11 +676,16 @@ function SignalBadge({ signal }: { signal: string }) {
 }
 
 const TWITTER_SIGNAL_LABELS: Record<string, string> = {
-  launching:   "Launching",
-  hiring:      "Hiring",
-  building:    "Building",
-  fundraising: "Fundraising",
-  announcing:  "Announcing",
+  recommendation: "Looking for help",
+  pain:           "Expressed need",
+  launching:      "Launching",
+  fundraising:    "Fundraising",
+  hiring:         "Hiring",
+  growth:         "Growing",
+  partnership:    "New partnership",
+  expansion:      "Expanding",
+  announcing:     "Announcing",
+  building:       "Building",
 }
 
 
@@ -815,19 +820,29 @@ function CompanyOpportunityCard({ row }: { row: CompanyOpportunityRow }) {
 // ---------------------------------------------------------------------------
 
 const PUBLIC_SIGNAL_COLOURS: Record<string, string> = {
-  fundraising: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
-  launching:   "bg-sky-500/10 text-sky-600 dark:text-sky-400",
-  announcing:  "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-  hiring:      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  building:    "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  recommendation: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+  pain:           "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+  fundraising:    "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+  launching:      "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+  hiring:         "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  growth:         "bg-teal-500/10 text-teal-600 dark:text-teal-400",
+  partnership:    "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
+  expansion:      "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400",
+  announcing:     "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  building:       "bg-foreground/[0.05] text-foreground/50",
 }
 
 const PUBLIC_SIGNAL_LABELS: Record<string, string> = {
-  fundraising: "Fundraising",
-  launching:   "Launching",
-  announcing:  "Announcing",
-  hiring:      "Hiring",
-  building:    "Building",
+  recommendation: "Looking for help",
+  pain:           "Expressed need",
+  fundraising:    "Fundraising",
+  launching:      "Launching",
+  hiring:         "Hiring",
+  growth:         "Growing",
+  partnership:    "New partnership",
+  expansion:      "Expanding",
+  announcing:     "Announcing",
+  building:       "Building",
 }
 
 function PublicSignalBadge({ signal }: { signal: string }) {

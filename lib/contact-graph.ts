@@ -392,17 +392,44 @@ export function classifyOpportunityType(
 
 /** Signals extracted from recent tweets. */
 export type TwitterSignal =
-  | "launching"
-  | "hiring"
-  | "building"
-  | "fundraising"
-  | "announcing"
-  | "growth"
-  | "recommendation"   // direct buying signal: "any good design agencies?"
-  | "pain"             // expressed frustration / need: "struggling with our UX"
+  | "launching"        // product/feature launch — highest commercial receptivity
+  | "fundraising"      // closed or closing a round — capital = spend decisions
+  | "recommendation"   // "any good design agencies?" — explicit ask
+  | "pain"             // "struggling with our UX" — expressed need
+  | "hiring"           // team growth — adjacent budget, especially design/PM roles
+  | "growth"           // milestone traction with numbers (10k users, $1M ARR)
+  | "partnership"      // partner deal, integration, collab — expansion phase
+  | "expansion"        // new market, vertical, or geography
+  | "announcing"       // vague "big news" — no specific intent yet
+  | "building"         // generic in-progress work — lowest intent
 
 /** Signal confidence tier. */
 export type SignalConfidence = "high" | "medium" | "low"
+
+/**
+ * Three-tier intent strength for opportunity gating.
+ *
+ *   HIGH   — strong enough to create an opportunity on its own.
+ *            These signals indicate the company is actively in motion.
+ *   MEDIUM — meaningful but requires context: a relationship (warm/strong)
+ *            or at least one other signal stacked.
+ *   LOW    — never creates an opportunity alone.  Only adds weight when a
+ *            HIGH or MEDIUM signal is also present.
+ */
+export const SIGNAL_TIER: Record<TwitterSignal, "high" | "medium" | "low"> = {
+  recommendation: "high",    // explicit ask for what you offer
+  pain:           "high",    // expressed problem = immediate need
+  launching:      "high",    // product launch = peak buying moment
+  fundraising:    "high",    // capital raised = willingness to spend
+
+  hiring:         "medium",  // growth phase — adjacent budget
+  growth:         "medium",  // milestone traction — receptive moment
+  partnership:    "medium",  // expansion phase — new vendor decisions
+  expansion:      "medium",  // new market/vertical — new needs
+
+  announcing:     "low",     // vague "big news" — no specific intent
+  building:       "low",     // generic in-progress work — lowest signal
+}
 
 /**
  * A single detected intent signal with evidence.
@@ -415,6 +442,19 @@ export interface RichSignal {
   matchedText: string
   /** The tweet text where the match was found (truncated to 280 chars). */
   tweetText:   string
+  /**
+   * Metric mentions extracted from the tweet text.
+   * Examples: "$5M raised", "10k users", "crossed 1M downloads".
+   * Up to 3 entries. Present when numbers were found in the tweet.
+   */
+  contextNumbers?: string[]
+  /**
+   * Urgency level inferred from time-marker words.
+   *   "now"       — "launching today", "live now", "just shipped"
+   *   "this-week" — "this week", "in 3 days", "by Friday"
+   *   "soon"      — "coming soon", "this month"
+   */
+  urgencyLevel?: "now" | "this-week" | "soon"
 }
 
 /**
@@ -847,6 +887,8 @@ const TWITTER_SIGNAL_STRENGTH: Record<TwitterSignal, number> = {
   launching:      3.0,
   hiring:         2.5,
   growth:         2.0,
+  partnership:    2.0,  // expansion phase — new vendor decisions likely
+  expansion:      1.8,  // new market entry — new needs emerging
   announcing:     1.5,
   building:       1.0,
 }
@@ -987,7 +1029,9 @@ const ACTION_SIGNAL_WEIGHTS: Record<string, number> = {
   launching:      4.5,   // highest commercial receptivity moment
   fundraising:    4.0,   // capital = willingness to spend
   hiring:         3.0,   // growth phase, adjacent budget
-  growth:         2.0,
+  growth:         2.5,   // milestone traction — growth budget follows
+  partnership:    2.5,   // partner deal = expansion spend decisions
+  expansion:      2.0,   // new market entry — new vendors needed
   announcing:     1.5,
   building:       1.0,
   // Email signals
@@ -1847,17 +1891,21 @@ const MAX_PUBLIC_SIGNAL_RESULTS = 10
 
 /** Intent priority for picking the "primary" signal on a public-signal card. */
 const SIGNAL_PRIORITY_PUBLIC: TwitterSignal[] = [
-  "recommendation", "fundraising", "pain", "launching", "announcing", "hiring", "growth", "building",
+  "recommendation", "pain", "fundraising", "launching",
+  "hiring", "growth", "partnership", "expansion",
+  "announcing", "building",
 ]
 
 const PUBLIC_SIGNAL_DESCRIPTIONS: Record<TwitterSignal, string> = {
   recommendation: "actively looking for agency or service support",
-  fundraising:    "closing a funding round",
   pain:           "experiencing a problem that needs solving",
+  fundraising:    "closing a funding round — capital ready to deploy",
   launching:      "about to launch publicly",
+  hiring:         "scaling their team — adjacent budget likely",
+  growth:         "hitting a growth milestone with traction numbers",
+  partnership:    "landing a partner deal — entering an expansion phase",
+  expansion:      "moving into a new market or vertical",
   announcing:     "about to make a major announcement",
-  hiring:         "expanding their team",
-  growth:         "showing strong growth and traction",
   building:       "actively building something new",
 }
 
@@ -2127,6 +2175,25 @@ export function buildPublicSignalOpportunities(
         debugLog?.push(makeDropDebug("no relationship + weak signal"))
         continue
       }
+    }
+
+    // ── Gate 5: Signal tier ────────────────────────────────────────────────
+    // HIGH tier signals (recommendation, pain, launching, fundraising) can
+    // create opportunities alone.  MEDIUM tier signals (hiring, growth,
+    // partnership, expansion) already required relationship or stacking via
+    // Gate 4, so they pass here.  LOW tier signals (announcing, building)
+    // never justify surfacing an opportunity — even a warm relationship plus
+    // a "building" tweet is noise, not buyer intent.
+    const highestTier = allSignals.reduce<"high" | "medium" | "low">((best, s) => {
+      const t = SIGNAL_TIER[s] ?? "low"
+      if (t === "high")                       return "high"
+      if (t === "medium" && best !== "high")  return "medium"
+      return best
+    }, "low")
+
+    if (highestTier === "low") {
+      debugLog?.push(makeDropDebug("low signal tier — no actionable intent detected"))
+      continue
     }
 
     // ── Evidence ───────────────────────────────────────────────────────────

@@ -90,9 +90,10 @@ const SIGNAL_PATTERNS: SignalPattern[] = [
   { type: "launching", confidence: "low",    pattern: /\b(release|new (?:product|tool|app)|v\d+\.\d+|new version|update(?:d)?|live(?: soon)?)\b/i },
 
   // ── hiring ─────────────────────────────────────────────────────────────────
-  { type: "hiring", confidence: "high",   pattern: /\b(we(?:'re| are) hiring|now hiring|open role|open position|job opening|apply now|looking for (?:a |an )?(?:engineer|dev(?:eloper)?|designer|marketer|head of|vp of|director of|cto|ceo|pm|product manager)|we(?:'re| are) looking for|come work with us|join our team|join the team)\b/i },
-  { type: "hiring", confidence: "medium", pattern: /\b(join(?:ing)? (?:our|the) (?:team|crew|company)|team(?:'s| is) growing|growing (?:our|the) team|welcoming .{1,30} to the team|new hire|just hired|new (?:team )?member|join us|we(?:'re| are) growing(?: our team)?|open roles|hiring manager)\b/i },
-  { type: "hiring", confidence: "low",    pattern: /\b(hiring|headcount|team expansion|talent acquisition|recruiting|careers?)\b/i },
+  // High confidence = role types adjacent to agency services (design, product, marketing)
+  { type: "hiring", confidence: "high",   pattern: /\b(we(?:'re| are) hiring|now hiring|open role|open position|job opening|apply now|looking for (?:a |an )?(?:designer|design lead|ux designer|ui designer|product designer|brand designer|head of design|head of product|head of marketing|marketing lead|product manager|pm|vp of (?:design|product|marketing)|director of (?:design|product|marketing))|come work with us)\b/i },
+  { type: "hiring", confidence: "medium", pattern: /\b(we(?:'re| are) looking for|join our team|join the team|join(?:ing)? (?:our|the) (?:team|crew|company)|team(?:'s| is) growing|growing (?:our|the) team|welcoming .{1,30} to the team|new hire|just hired|open roles|we(?:'re| are) growing(?: our team)?|hiring manager)\b/i },
+  { type: "hiring", confidence: "low",    pattern: /\b(hiring|headcount|team expansion|talent acquisition|recruiting|careers?|new (?:team )?member)\b/i },
 
   // ── fundraising ────────────────────────────────────────────────────────────
   { type: "fundraising", confidence: "high",   pattern: /\b(we(?:'ve| have) raised|we raised|closed (?:our|a) (?:round|raise|funding)|series [a-d]\b|seed round|pre-?seed(?: round)?|backed by|new funding|just closed|announced (?:our|a) (?:raise|round)|funding announced)\b/i },
@@ -124,13 +125,55 @@ const SIGNAL_PATTERNS: SignalPattern[] = [
   { type: "pain", confidence: "high",   pattern: /\b(struggling (?:with|to)|so frustrated (?:with|by)|can(?:'t| not) (?:find|afford|scale|ship|keep up)|falling behind|completely overwhelmed|our (?:design|product|site|app|onboarding|UX|UI) (?:is|was) (?:broken|terrible|awful|a mess|embarrassing)|we (?:really need|desperately need|badly need)|this is (?:killing|hurting) us|we(?:'re| are) losing (?:users?|customers?|revenue|deals?))\b/i },
   { type: "pain", confidence: "medium", pattern: /\b(need help (?:with|on)|wish (?:we had|we could|I had)|really wish|could use (?:a|some|help with)|anyone (?:dealt with|solved|fixed)|how do (?:you|people|teams) (?:handle|deal with|solve)|any (?:tips|advice) on|is it just me or|anyone else (?:dealing|struggling|finding it hard))\b/i },
   { type: "pain", confidence: "low",    pattern: /\b(challenge|pain point|problem|issue|difficult|hard to|frustrating)\b/i },
+
+  // ── partnership ────────────────────────────────────────────────────────────
+  // Partner deals, integrations, collabs — signals expansion-phase spend decisions
+  { type: "partnership", confidence: "high",   pattern: /\b(excited to (?:announce|partner|collaborate|work with)|partnering with|we(?:'ve| have) partnered with|partnership (?:with|announced)|strategic (?:partner(?:ship)?|alliance|collaboration)|integration (?:with|launch(?:ed)?|announced)|integrating with|officially (?:partnered|integrated|working with)|new (?:partner(?:ship)?|integration|collaboration))\b/i },
+  { type: "partnership", confidence: "medium", pattern: /\b(partner(?:ing|ship)?|collaborat(?:ing|ion|e)|work(?:ing)? (?:together|with) (?:on|alongside)|teaming up with|collab(?: with)?|ecosystem (?:partner|play)|channel partner|reseller|white[- ]?label|joint (?:venture|offering|launch)|built (?:on|with|for) .{3,30})\b/i },
+  { type: "partnership", confidence: "low",    pattern: /\b(partner|integration|collaborate|alliance|ecosystem|resell)\b/i },
+
+  // ── expansion ─────────────────────────────────────────────────────────────
+  // New market / vertical / geography — signals new vendor and services needs
+  { type: "expansion", confidence: "high",   pattern: /\b(expanding (?:into|to)|entering (?:the )?(?:[a-z]+ )?market|launching in (?:new )?(?:[a-z]+ )?(?:markets?|countries?|regions?|cities?)|going (?:global|international|nationwide)|new (?:market|vertical|geography|region|country|territory)|we(?:'re| are) now (?:in|available in|live in)|opening (?:a )?(?:new )?(?:office|hub) in)\b/i },
+  { type: "expansion", confidence: "medium", pattern: /\b(scaling (?:to|into|across)|grow(?:ing)? (?:internationally|globally|across)|multi[- ]?(?:region|market|country|vertical)|enterprise (?:tier|plan|offering)|upmarket|moving (?:upmarket|enterprise)|international (?:expansion|growth|launch)|new (?:segment|audience|customer base))\b/i },
+  { type: "expansion", confidence: "low",    pattern: /\b(expand(?:ing)?|international|global|scale|new market|new vertical|new region)\b/i },
 ]
 
 const CONFIDENCE_RANK: Record<SignalConfidence, number> = { high: 2, medium: 1, low: 0 }
 
 const SIGNAL_PRIORITY: TwitterSignal[] = [
-  "recommendation", "fundraising", "pain", "launching", "announcing", "hiring", "growth", "building",
+  "recommendation", "pain", "fundraising", "launching",
+  "hiring", "growth", "partnership", "expansion",
+  "announcing", "building",
 ]
+
+// ---------------------------------------------------------------------------
+// Context extraction helpers
+// ---------------------------------------------------------------------------
+
+/** Extract numeric metrics from tweet text, e.g. "$5M raised", "10k users". */
+function extractMetricContext(text: string): string[] {
+  const metrics: string[] = []
+  // Currency amounts: $5M, $500K, $2.5B
+  const moneyRe = /\$[\d.,]+[kmb]?(?:\s+(?:raised|mrr|arr|revenue|funding|valuation))?/gi
+  for (const m of text.matchAll(moneyRe)) metrics.push(m[0].trim())
+  // User / customer counts: 10k users, 1M downloads, 500 paying customers
+  const countRe = /\b(\d+(?:\.\d+)?[km+]?)\s+(?:users?|customers?|subscribers?|downloads?|signups?|clients?|paying)/gi
+  for (const m of text.matchAll(countRe)) metrics.push(m[0].trim())
+  // Multipliers: 10x growth, 3x revenue
+  const multRe = /\b(\d+)x\s+(?:growth|revenue|mrr|arr|increase|users?)/gi
+  for (const m of text.matchAll(multRe)) metrics.push(m[0].trim())
+  // De-duplicate, cap at 3
+  return [...new Set(metrics)].slice(0, 3)
+}
+
+/** Extract urgency level from tweet text. */
+function extractUrgencyLevel(text: string): RichSignal["urgencyLevel"] {
+  if (/\b(today|right now|launching now|live now|just (?:launched|shipped|went live)|this morning|tonight)\b/i.test(text)) return "now"
+  if (/\b(this week|by (?:friday|end of week|eow)|launching (?:this|next) week|shipping (?:this|next) week|days? away)\b/i.test(text)) return "this-week"
+  if (/\b(soon|coming (?:soon|up)|next (?:week|month)|shortly|in the (?:coming|next) (?:days?|weeks?)|dropping soon)\b/i.test(text)) return "soon"
+  return undefined
+}
 
 export function extractSignalsFromTweets(tweets: string[]): {
   richSignals:  RichSignal[]
@@ -146,7 +189,16 @@ export function extractSignalsFromTweets(tweets: string[]): {
       if (!match) continue
       const existing = best.get(type)
       if (!existing || CONFIDENCE_RANK[confidence] > CONFIDENCE_RANK[existing.confidence]) {
-        best.set(type, { type, confidence, matchedText: match[0].trim(), tweetText })
+        const contextNumbers = extractMetricContext(rawText)
+        const urgencyLevel   = extractUrgencyLevel(rawText)
+        best.set(type, {
+          type,
+          confidence,
+          matchedText:    match[0].trim(),
+          tweetText,
+          ...(contextNumbers.length > 0 && { contextNumbers }),
+          ...(urgencyLevel            && { urgencyLevel }),
+        })
       }
     }
   }

@@ -380,6 +380,8 @@ const SIGNAL_LABELS: Record<string, string> = {
   fundraising:    "Fundraising",
   announcing:     "Announcing",
   growth:         "Growing",
+  partnership:    "New partnership",
+  expansion:      "Expanding",
   recommendation: "Looking for help",
   pain:           "Expressed need",
 }
