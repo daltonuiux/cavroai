@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { RefreshCw, CheckCircle, AlertCircle } from "lucide-react"
+import { RefreshCw, CheckCircle, AlertCircle, Clock } from "lucide-react"
 
 interface Props {
   connected:     boolean
@@ -22,6 +22,57 @@ function formatRelativeTime(iso: string): string {
   return "just now"
 }
 
+// ── Sync result shapes ─────────────────────────────────────────────────────
+
+type SyncSuccess = {
+  kind:                "success"
+  handlesVerified:     number
+  companyMatchesFound: number
+  skippedByCache:      number
+  tweetsChecked:       number
+  signalsFound:        number
+  savedCount:          number
+  partial:             boolean
+}
+
+type SyncCached = {
+  kind:              "cached"
+  syncedMinutesAgo:  number
+  nextSyncInMinutes: number
+}
+
+type SyncError = {
+  kind:         "error"
+  message:      string
+  /** Distinguishes rate-limit vs auth vs generic errors for targeted UI copy. */
+  errorType:    "rate_limit" | "quota" | "auth" | "generic"
+  retryAfterSeconds?: number
+}
+
+type SyncResultState = SyncSuccess | SyncCached | SyncError
+
+// ── API response type ──────────────────────────────────────────────────────
+
+interface SyncApiResponse {
+  status?:             string
+  error?:              string
+  message?:            string
+  // success fields
+  handlesVerified?:     number
+  companyMatchesFound?: number
+  skippedByCache?:      number
+  tweetsChecked?:       number
+  signalsFound?:        number
+  savedCount?:          number
+  partial?:             boolean
+  // cached fields
+  syncedMinutesAgo?:    number
+  nextSyncInMinutes?:   number
+  // rate-limit fields
+  rateLimitType?:       string
+  retryAfterSeconds?:   number
+}
+
 export function XConnectButton({
   connected,
   xUsername,
@@ -29,53 +80,79 @@ export function XConnectButton({
   syncedAt,
   justConnected,
 }: Props) {
-  const [syncing,     setSyncing]     = useState(false)
-  const [syncResult,  setSyncResult]  = useState<{
-    handlesVerified:     number
-    companyMatchesFound: number
-    tweetsChecked:       number
-    signalsFound:        number
-    savedCount:          number
-    error?:              string
-  } | null>(null)
-  const [lastSyncedAt, setLastSyncedAt] = useState(syncedAt)
+  const [syncing,       setSyncing]       = useState(false)
+  const [syncResult,    setSyncResult]    = useState<SyncResultState | null>(null)
+  const [lastSyncedAt,  setLastSyncedAt]  = useState(syncedAt)
   const [disconnecting, setDisconnecting] = useState(false)
   const [isConnected,   setIsConnected]   = useState(connected)
   const [currentUsername, setCurrentUsername] = useState(xUsername)
   const [currentName,     setCurrentName]     = useState(xName)
 
-  // Auto-trigger sync after fresh OAuth
+  // Auto-trigger a normal (non-forced) sync after fresh OAuth.
+  // justConnected means syncedAt was null, so the cooldown never fires.
   if (justConnected && isConnected && !syncing && !syncResult) {
-    void runSync()
+    void runSync(false)
   }
 
-  async function runSync() {
+  async function runSync(force = true) {
     setSyncing(true)
     setSyncResult(null)
     try {
-      const res  = await fetch("/api/sync/x", { method: "POST" })
-      const data = await res.json() as {
-        handlesVerified?:     number
-        companyMatchesFound?: number
-        tweetsChecked?:       number
-        signalsFound?:        number
-        savedCount?:          number
-        error?:               string
-      }
-      if (!res.ok || data.error) {
-        setSyncResult({ handlesVerified: 0, companyMatchesFound: 0, tweetsChecked: 0, signalsFound: 0, savedCount: 0, error: data.error ?? "Sync failed" })
-      } else {
+      const res  = await fetch("/api/sync/x", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ force }),
+      })
+      const data = await res.json() as SyncApiResponse
+
+      // ── Cooldown / cached response ────────────────────────────────────────
+      if (data.status === "cached") {
         setSyncResult({
-          handlesVerified:     data.handlesVerified     ?? 0,
-          companyMatchesFound: data.companyMatchesFound ?? 0,
-          tweetsChecked:       data.tweetsChecked       ?? 0,
-          signalsFound:        data.signalsFound        ?? 0,
-          savedCount:          data.savedCount          ?? 0,
+          kind:              "cached",
+          syncedMinutesAgo:  data.syncedMinutesAgo  ?? 0,
+          nextSyncInMinutes: data.nextSyncInMinutes  ?? 720,
         })
-        setLastSyncedAt(new Date().toISOString())
+        return
       }
+
+      // ── Rate-limit / quota / auth errors ──────────────────────────────────
+      if (res.status === 429 || data.status === "rate_limited") {
+        const rtype = data.rateLimitType
+        setSyncResult({
+          kind:       "error",
+          message:    data.error ?? "X API limit reached.",
+          errorType:  rtype === "quota" ? "quota"
+                    : rtype === "auth"  ? "auth"
+                    : "rate_limit",
+          retryAfterSeconds: data.retryAfterSeconds,
+        })
+        return
+      }
+
+      // ── Generic errors ────────────────────────────────────────────────────
+      if (!res.ok || data.error) {
+        setSyncResult({
+          kind:      "error",
+          message:   data.error ?? "Sync failed — please try again.",
+          errorType: "generic",
+        })
+        return
+      }
+
+      // ── Success ───────────────────────────────────────────────────────────
+      setSyncResult({
+        kind:                "success",
+        handlesVerified:     data.handlesVerified     ?? 0,
+        companyMatchesFound: data.companyMatchesFound ?? 0,
+        skippedByCache:      data.skippedByCache      ?? 0,
+        tweetsChecked:       data.tweetsChecked       ?? 0,
+        signalsFound:        data.signalsFound        ?? 0,
+        savedCount:          data.savedCount          ?? 0,
+        partial:             data.partial             ?? false,
+      })
+      setLastSyncedAt(new Date().toISOString())
     } catch {
-      setSyncResult({ handlesVerified: 0, companyMatchesFound: 0, tweetsChecked: 0, signalsFound: 0, savedCount: 0, error: "Network error" })
+      setSyncResult({ kind: "error", message: "Network error — please try again.", errorType: "generic" })
     } finally {
       setSyncing(false)
     }
@@ -151,43 +228,16 @@ export function XConnectButton({
           )}
 
           {/* Sync status */}
-          {syncing ? (
-            <div className="mt-2 flex items-center gap-1.5 text-[12px] text-muted-foreground">
-              <RefreshCw className="size-3 animate-spin" />
-              <span>Syncing X signals (this may take 30–60 seconds)…</span>
-            </div>
-          ) : syncResult ? (
-            syncResult.error ? (
-              <div className="mt-2 flex items-center gap-1.5 text-[12px] text-destructive">
-                <AlertCircle className="size-3" />
-                <span>{syncResult.error}</span>
-              </div>
-            ) : (
-              <div className="mt-2 flex items-center gap-1.5 text-[12px] text-emerald-600 dark:text-emerald-400">
-                <CheckCircle className="size-3" />
-                <span>
-                  Synced — {syncResult.handlesVerified} personal
-                  {syncResult.companyMatchesFound > 0 ? `, ${syncResult.companyMatchesFound} company` : ""} accounts matched,{" "}
-                  {syncResult.tweetsChecked} tweets checked,{" "}
-                  {syncResult.signalsFound} intent signals found.{" "}
-                  <a href="/opportunities" className="underline underline-offset-2">
-                    View opportunities →
-                  </a>
-                </span>
-              </div>
-            )
-          ) : lastSyncedAt ? (
-            <p className="mt-1 text-[12px] text-muted-foreground">
-              Last synced {formatRelativeTime(lastSyncedAt)}
-            </p>
-          ) : (
-            <p className="mt-1 text-[12px] text-muted-foreground">Not synced yet</p>
-          )}
+          <SyncStatus
+            syncing={syncing}
+            syncResult={syncResult}
+            lastSyncedAt={lastSyncedAt}
+          />
 
           {/* Actions */}
           <div className="mt-3 flex items-center gap-3">
             <button
-              onClick={runSync}
+              onClick={() => void runSync(true)}
               disabled={syncing}
               className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-[12px] font-medium text-foreground hover:bg-foreground/[0.04] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
@@ -210,13 +260,114 @@ export function XConnectButton({
 }
 
 // ---------------------------------------------------------------------------
+// SyncStatus sub-component
+// ---------------------------------------------------------------------------
+
+function SyncStatus({
+  syncing,
+  syncResult,
+  lastSyncedAt,
+}: {
+  syncing:      boolean
+  syncResult:   SyncResultState | null
+  lastSyncedAt: string | null
+}) {
+  if (syncing) {
+    return (
+      <div className="mt-2 flex items-center gap-1.5 text-[12px] text-muted-foreground">
+        <RefreshCw className="size-3 animate-spin" />
+        <span>Syncing X signals (this may take 30–60 seconds)…</span>
+      </div>
+    )
+  }
+
+  if (!syncResult) {
+    return lastSyncedAt ? (
+      <p className="mt-1 text-[12px] text-muted-foreground">
+        Last synced {formatRelativeTime(lastSyncedAt)}
+      </p>
+    ) : (
+      <p className="mt-1 text-[12px] text-muted-foreground">Not synced yet</p>
+    )
+  }
+
+  // ── Cached ──────────────────────────────────────────────────────────────────
+  if (syncResult.kind === "cached") {
+    return (
+      <div className="mt-2 flex items-center gap-1.5 text-[12px] text-muted-foreground">
+        <Clock className="size-3 shrink-0" />
+        <span>
+          Synced {syncResult.syncedMinutesAgo}m ago — already up to date.
+          {" "}Use <strong>Sync Now</strong> to force a refresh.
+        </span>
+      </div>
+    )
+  }
+
+  // ── Errors ──────────────────────────────────────────────────────────────────
+  if (syncResult.kind === "error") {
+    const retryMin = syncResult.retryAfterSeconds
+      ? Math.ceil(syncResult.retryAfterSeconds / 60)
+      : null
+
+    return (
+      <div className="mt-2 space-y-0.5">
+        <div className="flex items-start gap-1.5 text-[12px] text-destructive">
+          <AlertCircle className="mt-px size-3 shrink-0" />
+          <span>{syncResult.message}</span>
+        </div>
+        {retryMin && (
+          <p className="pl-[18px] text-[11px] text-muted-foreground">
+            Your existing signals are preserved. Try again in ~{retryMin} minute{retryMin !== 1 ? "s" : ""}.
+          </p>
+        )}
+        {syncResult.errorType === "auth" && (
+          <p className="pl-[18px] text-[11px] text-muted-foreground">
+            <a href="/api/auth/x/connect" className="underline underline-offset-2">
+              Reconnect your X account →
+            </a>
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  // ── Success ──────────────────────────────────────────────────────────────────
+  const r = syncResult
+  const accountsSummary = [
+    r.handlesVerified     > 0 ? `${r.handlesVerified} personal`              : null,
+    r.companyMatchesFound > 0 ? `${r.companyMatchesFound} company`           : null,
+    r.skippedByCache      > 0 ? `${r.skippedByCache} served from cache`      : null,
+  ].filter(Boolean).join(", ")
+
+  return (
+    <div className="mt-2 space-y-0.5">
+      <div className="flex items-start gap-1.5 text-[12px] text-emerald-600 dark:text-emerald-400">
+        <CheckCircle className="mt-px size-3 shrink-0" />
+        <span>
+          {accountsSummary ? `${accountsSummary} — ` : ""}
+          {r.tweetsChecked} tweets checked, {r.signalsFound} intent signals found.
+          {" "}
+          <a href="/opportunities" className="underline underline-offset-2">
+            View opportunities →
+          </a>
+        </span>
+      </div>
+      {r.partial && (
+        <p className="pl-[18px] text-[11px] text-muted-foreground">
+          Sync budget reached — some accounts were skipped. Run again to continue.
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
 
 function Dot() {
-  return (
-    <span className="inline-block size-1 shrink-0 rounded-full bg-muted-foreground/40" />
-  )
+  return <span className="inline-block size-1 shrink-0 rounded-full bg-muted-foreground/40" />
 }
 
 function XIcon({ light = false }: { light?: boolean }) {
