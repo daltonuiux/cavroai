@@ -42,6 +42,30 @@ const MIN_WARM_PATH_SCORE = 1.5
 const MAX_OPPORTUNITY_RESULTS = 5
 
 // ---------------------------------------------------------------------------
+// Twitter enrichment types
+// ---------------------------------------------------------------------------
+
+/** Signals extracted from recent tweets. */
+export type TwitterSignal = "launching" | "hiring" | "building" | "fundraising" | "announcing"
+
+/**
+ * Twitter/X data attached to a contact after enrichment.
+ * Stored as JSONB in the contacts.twitter_data column.
+ */
+export interface ContactTwitterData {
+  handle:       string
+  bio:          string | null
+  /** Intent signals detected in recent tweets. */
+  signals:      TwitterSignal[]
+  /** Hashtag topics extracted from recent tweets. */
+  topics:       string[]
+  /** Up to 5 tweet texts that matched a signal. */
+  tweetSamples: string[]
+  enrichedAt:   string           // ISO
+  confidence:   "high" | "medium"
+}
+
+// ---------------------------------------------------------------------------
 // DB row types (mirrors the Supabase tables)
 // ---------------------------------------------------------------------------
 
@@ -59,6 +83,8 @@ export interface Contact {
   firstInteraction: string | null  // ISO
   interactionScore: number
   createdAt:        string
+  /** Present when the contact has been enriched via the Twitter layer. */
+  twitterData?:     ContactTwitterData | null
 }
 
 export interface ContactInteraction {
@@ -117,7 +143,7 @@ export interface ContactOpportunityRow {
   /** Up to 3 unique subject lines as signal evidence. */
   subjects:         string[]
   mostRecent:       string  // ISO
-  /** Aggregated score across all contacts at this company. */
+  /** Aggregated score across all contacts at this company (boosted by Twitter signals). */
   interactionScore: number
   /** Who you know here and how well. */
   whyThisPerson:    string
@@ -125,6 +151,10 @@ export interface ContactOpportunityRow {
   whyNow:           string
   /** Business implication — why to act. */
   whyItMatters:     string
+  /** Twitter handle of the top contact, if enriched. */
+  twitterHandle?:   string
+  /** Intent signals from the top contact's recent tweets. */
+  twitterSignals?:  TwitterSignal[]
 }
 
 // ---------------------------------------------------------------------------
@@ -178,19 +208,130 @@ function narrativeWhyThisPerson(
   return `${handle}${multi} — ${relationship}.`
 }
 
-function narrativeWhyNow(signals: string[], daysSince: number): string {
-  const PHRASES: Record<string, string> = {
-    agency:  "they're actively looking for agency or consulting support",
-    budget:  "there's a budget or proposal conversation open",
-    project: "a new project is kicking off",
-    launch:  "they just launched or announced something new",
-    hiring:  "they're growing the team",
+interface WhyNowContext {
+  sent:           number
+  received:       number
+  meetings:       number
+  daysSince:      number
+  emailSignals:   string[]
+  twitterSignals: TwitterSignal[]
+}
+
+/**
+ * Generates a 1–2 sentence "Why now" recommendation that combines:
+ *   - Relationship context (recency, depth, meetings)
+ *   - Email-derived signals (hiring, launch, project, budget, agency)
+ *   - Twitter-derived signals (building, launching, fundraising, etc.)
+ *
+ * Output format: "[relationship], and [signal] — [timing closure]."
+ * Examples:
+ *   "You've met and spoken recently, and they're looking for agency support — ideal time to reconnect."
+ *   "You've spoken this week, and they're launching something new, confirmed via Twitter — reach out now."
+ *   "You have a strong email history, and they're hiring while actively building — multiple signals align."
+ */
+function narrativeWhyNow(ctx: WhyNowContext): string {
+  const { sent, received, meetings, daysSince, emailSignals, twitterSignals } = ctx
+  const totalEmails    = sent + received
+  const isVeryRecent   = daysSince <= 7
+  const isRecent       = daysSince <= 30
+  const hasMeetings    = meetings > 0
+  const hasTwitter     = twitterSignals.length > 0
+  const totalSignals   = emailSignals.length + twitterSignals.length
+
+  // ── Part 1: Relationship context ──────────────────────────────────────────
+
+  let relationship: string
+  if (hasMeetings && isVeryRecent) {
+    relationship = meetings >= 2
+      ? "You've met multiple times and been in touch this week"
+      : "You've met and been in touch this week"
+  } else if (hasMeetings && isRecent) {
+    relationship = "You've met and spoken recently"
+  } else if (hasMeetings) {
+    relationship = "You've met before and have a shared history"
+  } else if (totalEmails > 20 && isRecent) {
+    relationship = "You have a strong email relationship and spoke recently"
+  } else if (totalEmails > 10 && isRecent) {
+    relationship = "You've been in regular email contact recently"
+  } else if (isVeryRecent) {
+    relationship = "You've spoken this week"
+  } else if (isRecent) {
+    relationship = "You've spoken in the last month"
+  } else if (totalEmails > 10) {
+    relationship = "You have a solid email history together"
+  } else {
+    relationship = "You've been in contact before"
   }
-  const primary = SIGNAL_PRIORITY.find((s) => signals.includes(s)) ?? signals[0]
-  const phrase = PHRASES[primary ?? ""] ?? "there's an active signal"
-  const when = daysSince === 0 ? "today" : daysSince === 1 ? "yesterday" : `${daysSince}d ago`
-  const sentence = phrase.charAt(0).toUpperCase() + phrase.slice(1)
-  return `${sentence} — detected ${when}.`
+
+  // ── Part 2: Signal phrase ──────────────────────────────────────────────────
+
+  const EMAIL_PHRASES: Record<string, string> = {
+    agency:  "they're looking for agency or consulting support",
+    budget:  "there's budget or proposal activity",
+    project: "a new project is kicking off",
+    launch:  "they're launching something new",
+    hiring:  "they're actively hiring",
+  }
+
+  const TWITTER_PHRASES: Record<string, string> = {
+    building:    "actively building something new",
+    launching:   "publicly launching",
+    fundraising: "closing a funding round",
+    hiring:      "expanding the team",
+    announcing:  "about to make a big announcement",
+  }
+
+  // Email → Twitter overlap (same underlying intent from two sources)
+  const SIGNAL_OVERLAP: Record<string, TwitterSignal[]> = {
+    launch:  ["launching", "announcing"],
+    hiring:  ["hiring"],
+    agency:  ["building"],
+    project: ["building", "launching"],
+    budget:  ["fundraising"],
+  }
+
+  const emailPrimary   = SIGNAL_PRIORITY.find((s) => emailSignals.includes(s))
+  const twitterPrimary = twitterSignals[0]
+
+  let signalPhrase: string
+
+  if (emailPrimary && twitterPrimary) {
+    const emailPhrase = EMAIL_PHRASES[emailPrimary] ?? "there's an active signal"
+    const overlaps    = SIGNAL_OVERLAP[emailPrimary]?.includes(twitterPrimary) ?? false
+    if (overlaps) {
+      // Same intent confirmed by both channels — stronger statement
+      signalPhrase = `${emailPhrase}, confirmed via Twitter`
+    } else {
+      // Distinct signals from both channels — mention both
+      const twitterPhrase = TWITTER_PHRASES[twitterPrimary] ?? "active on Twitter"
+      signalPhrase = `${emailPhrase} while ${twitterPhrase}`
+    }
+  } else if (emailPrimary) {
+    signalPhrase = EMAIL_PHRASES[emailPrimary] ?? "there's an active signal"
+  } else if (twitterPrimary) {
+    signalPhrase = TWITTER_PHRASES[twitterPrimary] ?? "there's signal activity on Twitter"
+  } else {
+    signalPhrase = "there's an active signal"
+  }
+
+  // ── Part 3: Timing closure ────────────────────────────────────────────────
+
+  let closure: string
+  if (totalSignals >= 3) {
+    closure = "multiple signals align right now"
+  } else if (isVeryRecent && hasTwitter) {
+    closure = "reach out now"
+  } else if (isVeryRecent) {
+    closure = "ideal moment to reconnect"
+  } else if (isRecent && hasTwitter) {
+    closure = "high relevance right now"
+  } else if (isRecent) {
+    closure = "good time to reconnect"
+  } else {
+    closure = "worth reaching out"
+  }
+
+  return `${relationship}, and ${signalPhrase} — ${closure}.`
 }
 
 function narrativeOpportunityWhyItMatters(signals: string[]): string {
@@ -433,11 +574,22 @@ export function buildContactOpportunities(
     const topContact = sortedContacts[0]
     if (!topContact) continue
 
-    const companyScore = sortedContacts.reduce((n, c) => n + c.interactionScore, 0)
-    const signalList   = [...signals]
-    const daysSince    = Math.floor(
+    const baseScore   = sortedContacts.reduce((n, c) => n + c.interactionScore, 0)
+    const signalList  = [...signals]
+    const daysSince   = Math.floor(
       (Date.now() - new Date(mostRecent).getTime()) / (1000 * 60 * 60 * 24),
     )
+
+    // Twitter enrichment — use top contact's data if available
+    const topTwitter     = topContact.twitterData ?? null
+    const twitterSignals = (topTwitter?.signals ?? []) as TwitterSignal[]
+
+    // Boost score: Twitter corroboration + recency + multi-signal
+    const twitterBoost = twitterSignals.length > 0 ? 1.3 : 1.0
+    const recencyBoost = daysSince <= 14 ? 1.2 : daysSince <= 30 ? 1.1 : 1.0
+    const totalSignals = signalList.length + twitterSignals.length
+    const multiBoost   = totalSignals >= 3 ? 1.15 : totalSignals >= 2 ? 1.05 : 1.0
+    const companyScore = Math.round(baseScore * twitterBoost * recencyBoost * multiBoost * 100) / 100
 
     rows.push({
       domain,
@@ -461,8 +613,17 @@ export function buildContactOpportunities(
         topContact.meetingCount,
         sortedContacts.length,
       ),
-      whyNow:           narrativeWhyNow(signalList, daysSince),
+      whyNow:           narrativeWhyNow({
+        sent:           topContact.sentCount,
+        received:       topContact.receivedCount,
+        meetings:       topContact.meetingCount,
+        daysSince,
+        emailSignals:   signalList,
+        twitterSignals,
+      }),
       whyItMatters:     narrativeOpportunityWhyItMatters(signalList),
+      twitterHandle:    topTwitter?.handle,
+      twitterSignals:   twitterSignals.length > 0 ? twitterSignals : undefined,
     })
   }
 

@@ -27,11 +27,15 @@
 //     last_interaction timestamptz,
 //     first_interaction timestamptz,
 //     interaction_score numeric NOT NULL DEFAULT 0,
+//     twitter_data jsonb,
 //     created_at timestamptz NOT NULL DEFAULT now(),
 //     UNIQUE (user_id, email)
 //   );
 //   CREATE INDEX IF NOT EXISTS idx_contacts_user ON contacts(user_id);
 //   CREATE INDEX IF NOT EXISTS idx_contacts_domain ON contacts(user_id, domain);
+//
+// Migration — add twitter_data column to existing contacts table:
+//   ALTER TABLE contacts ADD COLUMN IF NOT EXISTS twitter_data jsonb;
 //
 // Contact interactions with opportunity signals:
 //   CREATE TABLE IF NOT EXISTS contact_interactions (
@@ -1039,6 +1043,7 @@ function rowToContact(row: any): Contact {
     firstInteraction: row.first_interaction ?? null,
     interactionScore: Number(row.interaction_score ?? 0),
     createdAt:        row.created_at,
+    twitterData:      row.twitter_data ?? null,
   }
 }
 
@@ -1144,4 +1149,51 @@ export async function getContactInteractionsForUser(userId: string): Promise<Con
 
   if (error) throw new Error(`getContactInteractionsForUser: ${error.message}`)
   return (data ?? []).map(rowToContactInteraction)
+}
+
+// ---------------------------------------------------------------------------
+// Twitter enrichment
+// ---------------------------------------------------------------------------
+
+import type { ContactTwitterData } from "./contact-graph"
+import { TWITTER_ENRICH_THRESHOLD } from "./twitter-enrich"
+
+/**
+ * Returns contacts that qualify for Twitter enrichment:
+ *   - interaction_score >= threshold
+ *   - name is not null (required for username guessing)
+ *   - twitter_data is null (not yet enriched)
+ *
+ * Sorted by interaction_score desc so the highest-value contacts are enriched first.
+ */
+export async function getContactsForEnrichment(userId: string): Promise<Contact[]> {
+  const { data, error } = await db()
+    .from("contacts")
+    .select("*")
+    .eq("user_id", userId)
+    .gte("interaction_score", TWITTER_ENRICH_THRESHOLD)
+    .not("name", "is", null)
+    .is("twitter_data", null)
+    .order("interaction_score", { ascending: false })
+
+  if (error) throw new Error(`getContactsForEnrichment: ${error.message}`)
+  return (data ?? []).map(rowToContact)
+}
+
+/**
+ * Persists Twitter enrichment data for a single contact.
+ * Only updates the twitter_data column — leaves interaction counts untouched.
+ */
+export async function saveContactTwitterData(
+  userId:      string,
+  email:       string,
+  twitterData: ContactTwitterData,
+): Promise<void> {
+  const { error } = await db()
+    .from("contacts")
+    .update({ twitter_data: twitterData })
+    .eq("user_id", userId)
+    .eq("email", email)
+
+  if (error) throw new Error(`saveContactTwitterData(${email}): ${error.message}`)
 }

@@ -461,6 +461,40 @@ function SignalBadge({ signal }: { signal: string }) {
   )
 }
 
+const TWITTER_SIGNAL_LABELS: Record<string, string> = {
+  launching:   "Launching",
+  hiring:      "Hiring",
+  building:    "Building",
+  fundraising: "Fundraising",
+  announcing:  "Announcing",
+}
+
+function TwitterBadge({ handle, signals }: { handle: string; signals?: string[] }) {
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <a
+        href={`https://x.com/${handle}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1 rounded px-1.5 py-px text-[10px] font-semibold bg-foreground/[0.06] text-foreground/60 hover:text-foreground transition-colors"
+      >
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+        </svg>
+        @{handle}
+      </a>
+      {signals?.map((s) => (
+        <span
+          key={s}
+          className="rounded px-1.5 py-px text-[10px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400"
+        >
+          {TWITTER_SIGNAL_LABELS[s] ?? s}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 function ContactOpportunityCard({ row }: { row: ContactOpportunityRow }) {
   const [showContacts, setShowContacts] = useState(false)
 
@@ -482,23 +516,24 @@ function ContactOpportunityCard({ row }: { row: ContactOpportunityRow }) {
         </div>
       </div>
 
-      {/* Three-part narrative */}
-      <div className="grid grid-cols-[64px_1fr] gap-x-3 gap-y-1.5 border-t border-border pt-3">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/35 pt-px">
-          Who
-        </span>
-        <p className="text-[12px] leading-snug text-foreground/70">{row.whyThisPerson}</p>
-
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/35 pt-px">
-          Why now
-        </span>
-        <p className="text-[12px] leading-snug text-foreground/70">{row.whyNow}</p>
-
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/35 pt-px">
-          So what
-        </span>
-        <p className="text-[12px] leading-snug text-foreground/70">{row.whyItMatters}</p>
+      {/* Why now — lead statement */}
+      <div className="border-t border-border pt-3 flex flex-col gap-2">
+        <p className="text-[13px] leading-snug font-medium text-foreground/85">{row.whyNow}</p>
+        <div className="flex flex-col gap-0.5">
+          <p className="text-[11px] leading-snug text-muted-foreground/55">{row.whyThisPerson}</p>
+          <p className="text-[11px] leading-snug text-muted-foreground/45">{row.whyItMatters}</p>
+        </div>
       </div>
+
+      {/* Twitter enrichment — handle + tweet signals */}
+      {row.twitterHandle && (
+        <div className="border-t border-border pt-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/35 mb-1.5">
+            Twitter signals
+          </p>
+          <TwitterBadge handle={row.twitterHandle} signals={row.twitterSignals} />
+        </div>
+      )}
 
       {/* Signal evidence — top subject line */}
       {row.subjects[0] && (
