@@ -190,6 +190,8 @@ export async function POST() {
     return b.finalScore - a.finalScore || b.baseScore - a.baseScore
   })
 
+  const totalOpportunities = opportunities.length + publicSignalOpportunities.length
+
   return NextResponse.json({
     status:  "ok",
     durationMs,
@@ -203,21 +205,24 @@ export async function POST() {
       deleteReasons,
     },
 
-    // ── Opportunity counts (top-level for quick scan) ────────────────────────
-    totalContacts:           freshContacts.length,
-    contactsWithX:           contactsWithXData.length,
-    contactsWithSignals:     contactsWithXSignals.length,
-    opportunitiesCreated:    opportunities.length + publicSignalOpportunities.length,
-    emailOpportunitiesFound: opportunities.length,
-    xOpportunitiesFound:     publicSignalOpportunities.length,
-    droppedDueToScore:       xDroppedByScore.length,
-    droppedDueToICP:         xDroppedByICP.length,
+    // ── Opportunity counts ────────────────────────────────────────────────────
+    // opportunitiesFound is the canonical field read by the frontend summary.
+    opportunitiesFound:               totalOpportunities,
+    opportunitiesCreated:             totalOpportunities,   // alias
+    emailOpportunitiesFound:          opportunities.length,
+    publicSignalOpportunitiesCreated: publicSignalOpportunities.length,
+    xOpportunitiesFound:              publicSignalOpportunities.length,
+    droppedDueToScore:                xDroppedByScore.length,
+    droppedDueToICP:                  xDroppedByICP.length,
 
-    // ── X signal detail (per contact) ────────────────────────────────────────
+    // ── X signal stats + per-contact detail ──────────────────────────────────
     xStats: {
-      contactsWithXData:       contactsWithXData.length,
-      contactsWithXSignals:    contactsWithXSignals.length,
+      contactsWithX:           contactsWithXData.length,
+      contactsWithSignals:     contactsWithXSignals.length,
       contactsWithRichSignals: contactsWithRichSignals.length,
+      signalsLoaded:           contactsWithXSignals.reduce(
+        (n, c) => n + (c.twitterData?.signals?.length ?? 0), 0,
+      ),
       signalDetail: contactsWithXSignals.slice(0, 50).map((c) => ({
         email:       c.email,
         domain:      c.domain,

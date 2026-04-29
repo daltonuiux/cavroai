@@ -473,37 +473,67 @@ export function OpportunitiesPage({
 // Rebuild intelligence button + company opportunity card
 // ---------------------------------------------------------------------------
 
+// ── Rebuild result state ──────────────────────────────────────────────────────
+
+interface RebuildXDebugEntry {
+  company:     string
+  domain:      string
+  signals:     string[]
+  baseScore:   number
+  signalScore: number
+  finalScore:  number
+  fitTier:     string
+  icpBypassed: boolean
+  included:    boolean
+  skipReason:  string | null
+}
+
+interface RebuildResult {
+  cleanse:                          { deleted: number; kept: number }
+  opportunitiesFound:               number
+  emailOpportunitiesFound:          number
+  publicSignalOpportunitiesCreated: number
+  droppedDueToScore:                number
+  droppedDueToICP:                  number
+  durationMs:                       number
+  xStats?: {
+    contactsWithX:       number
+    contactsWithSignals: number
+    signalsLoaded:       number
+  }
+  xDebug?: RebuildXDebugEntry[]
+}
+
 function RebuildButton() {
   const router                      = useRouter()
   const [isPending, startTransition] = useTransition()
   const [state, setState]           = useState<"idle" | "running" | "done" | "error">("idle")
-  const [summary, setSummary]       = useState<string | null>(null)
+  const [result, setResult]         = useState<RebuildResult | null>(null)
+  const [showDebug, setShowDebug]   = useState(false)
 
   async function handleRebuild() {
     setState("running")
-    setSummary(null)
+    setResult(null)
+    setShowDebug(false)
     try {
       const res  = await fetch("/api/intelligence/rebuild", { method: "POST" })
-      const data = await res.json().catch(() => ({}))
+      const data = await res.json().catch(() => ({})) as RebuildResult & { error?: string }
       if (!res.ok) throw new Error(data.error ?? "Rebuild failed")
 
-      const { cleanse, opportunitiesFound, durationMs } = data
-      setSummary(
-        `Removed ${cleanse.deleted} stale contact${cleanse.deleted === 1 ? "" : "s"}, ` +
-        `kept ${cleanse.kept}, ` +
-        `found ${opportunitiesFound} opportunit${opportunitiesFound === 1 ? "y" : "ies"} ` +
-        `(${durationMs}ms)`,
-      )
+      setResult(data)
       setState("done")
-      // Reload page data with fresh server state
+      // Reload page data with fresh server state so X opportunities appear
       startTransition(() => router.refresh())
     } catch (err) {
-      setSummary(err instanceof Error ? err.message : "Unknown error")
+      setResult(null)
       setState("error")
+      // Store error string in a way we can display it
+      setResult({ cleanse: { deleted: 0, kept: 0 }, opportunitiesFound: 0, emailOpportunitiesFound: 0, publicSignalOpportunitiesCreated: 0, droppedDueToScore: 0, droppedDueToICP: 0, durationMs: 0, _error: err instanceof Error ? err.message : "Unknown error" } as unknown as RebuildResult)
     }
   }
 
   const isRunning = state === "running" || isPending
+  const errorMsg  = state === "error" ? (result as unknown as { _error?: string })?._error ?? "Rebuild failed" : null
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -527,10 +557,69 @@ function RebuildButton() {
           </>
         )}
       </button>
-      {summary && (
-        <p className={`text-[11px] ${state === "error" ? "text-destructive/70" : "text-muted-foreground/50"}`}>
-          {summary}
-        </p>
+
+      {/* Error */}
+      {state === "error" && errorMsg && (
+        <p className="text-[11px] text-destructive/70">{errorMsg}</p>
+      )}
+
+      {/* Success summary */}
+      {state === "done" && result && (
+        <div className="space-y-1">
+          {/* One-liner */}
+          <p className="text-[11px] text-muted-foreground/50">
+            Removed {result.cleanse.deleted} stale contact{result.cleanse.deleted === 1 ? "" : "s"},
+            {" "}kept {result.cleanse.kept},{" "}
+            found <span className="font-medium text-foreground/60">{result.opportunitiesFound}</span> opportunit{result.opportunitiesFound === 1 ? "y" : "ies"}
+            {" "}({result.durationMs}ms)
+          </p>
+
+          {/* X signal breakdown */}
+          <div className="text-[10px] text-muted-foreground/40 space-y-0.5 pl-0.5">
+            {result.xStats && (
+              <>
+                <p>· {result.xStats.contactsWithX} contacts with X data · {result.xStats.contactsWithSignals} with intent signals · {result.xStats.signalsLoaded} signals loaded</p>
+              </>
+            )}
+            <p>
+              · {result.emailOpportunitiesFound} email-based · {result.publicSignalOpportunitiesCreated} X-signal
+              {(result.droppedDueToScore > 0 || result.droppedDueToICP > 0) && (
+                <> · {result.droppedDueToScore} dropped (score) · {result.droppedDueToICP} dropped (ICP)</>
+              )}
+            </p>
+          </div>
+
+          {/* Per-domain X debug toggle */}
+          {result.xDebug && result.xDebug.length > 0 && (
+            <div>
+              <button
+                onClick={() => setShowDebug((v) => !v)}
+                className="text-[10px] text-muted-foreground/35 hover:text-foreground/50 underline underline-offset-2 transition-colors"
+              >
+                {showDebug ? "Hide" : "Show"} X signal trace ({result.xDebug.length} domain{result.xDebug.length === 1 ? "" : "s"})
+              </button>
+
+              {showDebug && (
+                <ul className="mt-1.5 space-y-1 text-[10px] font-mono text-muted-foreground/40">
+                  {result.xDebug.map((e) => (
+                    <li key={e.domain} className={`flex flex-col gap-0.5 rounded px-2 py-1.5 ${e.included ? "bg-emerald-500/5" : "bg-foreground/[0.02]"}`}>
+                      <span>
+                        <span className={e.included ? "text-emerald-600 dark:text-emerald-400" : "text-destructive/60"}>
+                          {e.included ? "✓" : "✗"}
+                        </span>
+                        {" "}<span className="font-semibold text-foreground/50">{e.company}</span>
+                        {" "}<span className="text-muted-foreground/30">({e.domain})</span>
+                      </span>
+                      <span>signals=[{e.signals.join(", ")}] base={e.baseScore.toFixed(1)} sig={e.signalScore.toFixed(2)} score={e.finalScore.toFixed(2)} fit={e.fitTier}{e.icpBypassed ? " (bypassed)" : ""}</span>
+                      {e.skipReason && <span className="text-destructive/50">→ {e.skipReason}</span>}
+                      {e.included && <span className="text-emerald-600/50 dark:text-emerald-400/50">→ included as opportunity</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   )
