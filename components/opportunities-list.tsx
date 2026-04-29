@@ -397,7 +397,7 @@ export function OpportunitiesPage({
       {contactOpportunities.length > 0 && (
         <div className="flex flex-col gap-2">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 px-0.5">
-            From your network — real signals from Gmail and Calendar
+            People you should message this week
           </p>
           {contactOpportunities.map((row) => (
             <ContactOpportunityCard key={`${row.domain}|${row.contactEmail}`} row={row} />
@@ -445,87 +445,96 @@ export function OpportunitiesPage({
 // Contact opportunity card
 // ---------------------------------------------------------------------------
 
+const SIGNAL_COLOURS: Record<string, string> = {
+  hiring:  "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+  launch:  "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+  project: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  budget:  "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  agency:  "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+}
+
+function SignalBadge({ signal }: { signal: string }) {
+  return (
+    <span className={`rounded px-1.5 py-px text-[10px] font-semibold ${SIGNAL_COLOURS[signal] ?? "bg-foreground/[0.04] text-foreground/40"}`}>
+      {signalLabels([signal])}
+    </span>
+  )
+}
+
 function ContactOpportunityCard({ row }: { row: ContactOpportunityRow }) {
-  const [open, setOpen] = useState(false)
-
-  const signalBadge = (signal: string) => {
-    const colours: Record<string, string> = {
-      hiring:  "bg-violet-500/10 text-violet-600 dark:text-violet-400",
-      launch:  "bg-sky-500/10 text-sky-600 dark:text-sky-400",
-      project: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-      budget:  "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-      agency:  "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-    }
-    return (
-      <span
-        key={signal}
-        className={`rounded px-1.5 py-px text-[10px] font-semibold ${colours[signal] ?? "bg-foreground/[0.04] text-foreground/40"}`}
-      >
-        {signalLabels([signal])}
-      </span>
-    )
-  }
-
-  const contactLabel = row.contactName
-    ? `${row.contactName} (${row.contactEmail})`
-    : row.contactEmail
+  const [showContacts, setShowContacts] = useState(false)
 
   const daysSince = Math.floor(
     (Date.now() - new Date(row.mostRecent).getTime()) / (1000 * 60 * 60 * 24),
   )
-  const recencyLabel = daysSince === 0 ? "today"
-    : daysSince === 1 ? "yesterday"
-    : `${daysSince}d ago`
+  const recencyLabel = daysSince === 0 ? "today" : daysSince === 1 ? "yesterday" : `${daysSince}d ago`
 
   return (
-    <div className="rounded-lg border border-border bg-card px-4 py-3.5">
-      <div className="flex items-start justify-between gap-4">
+    <div className="card-cavro rounded-md px-4 py-3.5 flex flex-col gap-3">
+      {/* Header — company + signals + recency */}
+      <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
             <span className="text-[13px] font-semibold text-foreground">{row.companyName}</span>
-            {row.signals.map(signalBadge)}
+            {row.signals.map((s) => <SignalBadge key={s} signal={s} />)}
           </div>
+          <p className="text-[11px] text-muted-foreground/45">{recencyLabel}</p>
+        </div>
+      </div>
 
-          <p className="mt-1 text-[12px] text-muted-foreground">
-            Via {contactLabel}
-            <span className="mx-1.5 text-muted-foreground/30">·</span>
-            <span className="text-muted-foreground/60">{recencyLabel}</span>
+      {/* Three-part narrative */}
+      <div className="grid grid-cols-[64px_1fr] gap-x-3 gap-y-1.5 border-t border-border pt-3">
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/35 pt-px">
+          Who
+        </span>
+        <p className="text-[12px] leading-snug text-foreground/70">{row.whyThisPerson}</p>
+
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/35 pt-px">
+          Why now
+        </span>
+        <p className="text-[12px] leading-snug text-foreground/70">{row.whyNow}</p>
+
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/35 pt-px">
+          So what
+        </span>
+        <p className="text-[12px] leading-snug text-foreground/70">{row.whyItMatters}</p>
+      </div>
+
+      {/* Signal evidence — top subject line */}
+      {row.subjects[0] && (
+        <div className="rounded-md bg-foreground/[0.03] border border-border/60 px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/35 mb-1">
+            Detected in
           </p>
+          <p className="text-[11px] text-muted-foreground/55 italic truncate">
+            &ldquo;{row.subjects[0]}&rdquo;
+          </p>
+        </div>
+      )}
 
-          {/* Most recent subject */}
-          {row.subjects[0] && (
-            <p className="mt-1.5 text-[11px] text-muted-foreground/60 italic truncate">
-              &ldquo;{row.subjects[0]}&rdquo;
-            </p>
-          )}
-
-          {/* Expand subjects */}
-          {row.subjects.length > 1 && (
-            <button
-              onClick={() => setOpen(!open)}
-              className="mt-1 text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors"
-            >
-              {open ? "Hide" : `+${row.subjects.length - 1} more subject${row.subjects.length > 2 ? "s" : ""}`}
-            </button>
-          )}
-
-          {open && (
-            <ul className="mt-1 space-y-0.5">
-              {row.subjects.slice(1).map((s, i) => (
-                <li key={i} className="text-[11px] text-muted-foreground/50 italic truncate">
-                  &ldquo;{s}&rdquo;
+      {/* Multiple contacts — expandable */}
+      {row.allContacts.length > 1 && (
+        <div className="border-t border-border pt-2">
+          <button
+            onClick={() => setShowContacts(!showContacts)}
+            className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors"
+          >
+            {showContacts
+              ? "Hide contacts"
+              : `${row.allContacts.length} contacts at this company`}
+          </button>
+          {showContacts && (
+            <ul className="mt-2 space-y-1">
+              {row.allContacts.map((c) => (
+                <li key={c.email} className="flex items-center gap-2 text-[11px]">
+                  <span className="text-foreground/65">{c.name ?? c.email}</span>
+                  {c.name && <span className="text-muted-foreground/35">{c.email}</span>}
                 </li>
               ))}
             </ul>
           )}
         </div>
-
-        <div className="shrink-0 text-right">
-          <span className="text-[11px] text-muted-foreground/40">
-            score {row.interactionScore.toFixed(1)}
-          </span>
-        </div>
-      </div>
+      )}
     </div>
   )
 }

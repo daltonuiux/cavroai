@@ -38,6 +38,67 @@ const FREE_EMAIL_DOMAINS = new Set([
   "zoho.com", "yandex.com", "mail.com",
 ])
 
+/**
+ * Local-part patterns that identify automated/transactional senders.
+ * Tested against the part of the email address before the @.
+ */
+const NO_REPLY_RE = /^(no[._-]?reply|do[._-]?not[._-]?reply|dont[._-]?reply|donotreply|notifications?|newsletters?|mailer(-daemon)?|bounce[sd]?|auto[._-]?mailer|autoresponder|alerts?|digest|campaigns?|updates|postmaster|hostmaster|webmaster|unsubscribe|opt[._-]?out|feedback[._-]?noreply|support[._-]?noreply|hello|hi|info|news|marketing|automated|system|daemon|noti)$/i
+
+/**
+ * Domains that emit only automated/platform notifications — not real contacts.
+ * Individual company contacts (e.g. john@stripe.com) are kept;
+ * this list targets pure notification-routing infrastructure.
+ */
+const NOTIFICATION_DOMAINS = new Set([
+  // Social / professional networks
+  "linkedin.com", "bounce.linkedin.com", "email.linkedin.com",
+  "twitter.com", "x.com", "t.co",
+  "facebook.com", "facebookmail.com",
+  "instagram.com",
+  "pinterest.com",
+  "tiktok.com",
+  // Design platforms
+  "dribbble.com",
+  "behance.net",
+  // Dev platforms (notification emails, not employee contacts)
+  "github.com",
+  "gitlab.com",
+  // Publishing / newsletter platforms
+  "medium.com",
+  "substack.com",
+  "beehiiv.com",
+  "convertkit.com",
+  "kit.com",
+  // Email marketing / transactional infra
+  "mailchimp.com", "list-manage.com",
+  "sendgrid.net", "sendgrid.com",
+  "mailgun.org",
+  "amazonses.com",
+  "sparkpostmail.com",
+  "klaviyo.com",
+  "mandrillapp.com",
+  "mailerlite.com",
+  "constantcontact.com",
+  // Survey / form tools
+  "surveymonkey.com",
+  "typeform.com",
+])
+
+/**
+ * Returns true if this email address should be excluded from the contact graph.
+ * Covers: free providers, notification-only platforms, and automated sender patterns.
+ */
+function shouldSkipContact(email: string, userDomain: string): boolean {
+  const domain = domainFromEmail(email)
+  if (!domain || !domain.includes(".")) return true
+  if (FREE_EMAIL_DOMAINS.has(domain)) return true
+  if (NOTIFICATION_DOMAINS.has(domain)) return true
+  if (domain === userDomain) return true
+  const localPart = email.split("@")[0] ?? ""
+  if (NO_REPLY_RE.test(localPart)) return true
+  return false
+}
+
 // ---------------------------------------------------------------------------
 // Opportunity signal detection
 // ---------------------------------------------------------------------------
@@ -395,8 +456,7 @@ export async function syncGoogleData(
       ]
 
       for (const addr of toAddrs) {
-        const domain = domainFromEmail(addr.email)
-        if (!domain || FREE_EMAIL_DOMAINS.has(domain) || domain === userDomain) continue
+        if (shouldSkipContact(addr.email, userDomain)) continue
         touchContact(contactMap, addr, when, "sent")
 
         const signals = detectOpportunitySignals(subject)
@@ -444,8 +504,7 @@ export async function syncGoogleData(
       const from    = parseAddressHeader(headers["From"] ?? "")
 
       for (const addr of from) {
-        const domain = domainFromEmail(addr.email)
-        if (!domain || FREE_EMAIL_DOMAINS.has(domain) || domain === userDomain) continue
+        if (shouldSkipContact(addr.email, userDomain)) continue
         touchContact(contactMap, addr, when, "received")
 
         const signals = detectOpportunitySignals(subject)
@@ -479,13 +538,11 @@ export async function syncGoogleData(
 
     for (const attendee of event.attendees ?? []) {
       if (attendee.self) continue
-      const domain = domainFromEmail(attendee.email)
-      if (!domain || FREE_EMAIL_DOMAINS.has(domain) || domain === userDomain) continue
-
       const addr: ParsedAddress = {
         email: attendee.email.toLowerCase(),
         name:  attendee.displayName ?? null,
       }
+      if (shouldSkipContact(addr.email, userDomain)) continue
       touchContact(contactMap, addr, when, "meeting")
 
       const signals = detectOpportunitySignals(title)

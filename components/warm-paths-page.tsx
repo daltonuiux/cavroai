@@ -535,7 +535,7 @@ export function WarmPathsPage({
       {contactPaths.length > 0 && (
         <div className="flex flex-col gap-2">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 px-0.5">
-            From your network — real relationships via Google
+            Warm intros from your real network
           </p>
           {contactPaths.map((row) => (
             <ContactWarmPathCard key={row.domain} row={row} />
@@ -575,79 +575,95 @@ export function WarmPathsPage({
 // Contact warm path card
 // ---------------------------------------------------------------------------
 
+function RelationshipStrengthBadge({ strength }: { strength: "strong" | "medium" | "weak" }) {
+  if (strength === "strong")
+    return (
+      <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+        Strong relationship
+      </span>
+    )
+  if (strength === "medium")
+    return (
+      <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400">
+        Good relationship
+      </span>
+    )
+  return (
+    <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-foreground/[0.04] text-foreground/40">
+      Some overlap
+    </span>
+  )
+}
+
 function ContactWarmPathCard({ row }: { row: ContactWarmPathRow }) {
   const [open, setOpen] = useState(false)
   const topContact = row.topContact
+  const strength = row.relationshipStrength ?? "weak"
+
+  const contactSummary = row.contacts.length === 1
+    ? (topContact?.name ?? topContact?.email ?? "1 contact")
+    : `${row.contacts.length} contacts`
+
+  const clientNames = row.matchingClients.map((c) => c.name).join(", ")
 
   return (
-    <div className="rounded-lg border border-border bg-card px-4 py-3.5">
-      <div className="flex items-start justify-between gap-4">
+    <div className="card-cavro rounded-md px-4 py-3.5 flex flex-col gap-3">
+      {/* Header */}
+      <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
-          {/* Header */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
             <span className="text-[13px] font-semibold text-foreground">{row.companyName}</span>
-            <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-violet-500/10 text-violet-600 dark:text-violet-400">
-              Your Network
-            </span>
+            <RelationshipStrengthBadge strength={strength} />
           </div>
-
-          {/* Contact + path */}
-          <p className="mt-1 text-[12px] text-muted-foreground">
-            {row.contacts.length === 1
-              ? `You know ${topContact?.name ?? topContact?.email ?? "1 person"} here`
-              : `You know ${row.contacts.length} people here`}
-            {row.matchingClients.length > 0 && (
+          <p className="text-[12px] text-muted-foreground/60">
+            {contactSummary}
+            {clientNames && (
               <>
-                {" · Connected to "}
-                {row.matchingClients.map((c, i) => (
-                  <span key={c.id}>
-                    {i > 0 && ", "}
-                    <span className="font-medium text-foreground/80">{c.name}</span>
-                    {" "}
-                    <span className="text-muted-foreground/60">({c.relationshipType})</span>
-                  </span>
-                ))}
+                <span className="mx-1.5 text-muted-foreground/25">·</span>
+                <span>connected to {clientNames}</span>
               </>
             )}
           </p>
-
-          {/* Suggested ask */}
-          <p className="mt-2 text-[11px] text-muted-foreground/70 italic">
-            {row.suggestedAsk}
-          </p>
-        </div>
-
-        {/* Score */}
-        <div className="shrink-0 text-right">
-          <span className="text-[11px] font-semibold text-muted-foreground/50">
-            score {Math.round(row.totalScore)}
-          </span>
         </div>
       </div>
 
-      {/* Expand to show all contacts */}
-      {row.contacts.length > 1 && (
-        <button
-          onClick={() => setOpen(!open)}
-          className="mt-2 text-[11px] text-muted-foreground/50 hover:text-foreground transition-colors"
-        >
-          {open ? "Hide contacts" : `Show all ${row.contacts.length} contacts`}
-        </button>
-      )}
+      {/* Why it matters */}
+      <p className="text-[12px] leading-relaxed text-foreground/65 border-t border-border pt-3">
+        {row.whyItMatters}
+      </p>
 
-      {open && (
-        <div className="mt-2 space-y-1 border-t border-border pt-2">
-          {row.contacts.map((c) => (
-            <div key={c.email} className="flex items-center gap-2 text-[11px]">
-              <span className="text-foreground/70">{c.name ?? c.email}</span>
-              {c.name && (
-                <span className="text-muted-foreground/40">{c.email}</span>
-              )}
-              <span className="ml-auto text-muted-foreground/40">
-                score {c.interactionScore.toFixed(1)}
-              </span>
-            </div>
-          ))}
+      {/* Suggested ask */}
+      <div className="rounded-md border border-foreground/[0.06] bg-foreground/[0.025] px-3 py-2.5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/35 mb-1.5">
+              Suggested ask
+            </p>
+            <p className="text-[11px] leading-relaxed text-foreground/70">{row.suggestedAsk}</p>
+          </div>
+          <CopyButton text={row.suggestedAsk} />
+        </div>
+      </div>
+
+      {/* Expand contacts */}
+      {row.contacts.length > 1 && (
+        <div className="border-t border-border pt-2">
+          <button
+            onClick={() => setOpen(!open)}
+            className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors"
+          >
+            {open ? "Hide contacts" : `Show all ${row.contacts.length} contacts`}
+          </button>
+          {open && (
+            <ul className="mt-2 space-y-1">
+              {row.contacts.map((c) => (
+                <div key={c.email} className="flex items-center gap-2 text-[11px]">
+                  <span className="text-foreground/65">{c.name ?? c.email}</span>
+                  {c.name && <span className="text-muted-foreground/35">{c.email}</span>}
+                </div>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </div>
