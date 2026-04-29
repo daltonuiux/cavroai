@@ -737,7 +737,9 @@ function CompanyOpportunityCard({ row }: { row: CompanyOpportunityRow }) {
       </div>
 
       {/* Action reason — primary verdict line */}
-      <div className="border-t border-border pt-3 flex flex-col gap-2">
+      <div className="border-t border-border pt-3 flex flex-col gap-1.5">
+        {/* Relationship context — scannable label for the "[context]" clause */}
+        <p className="text-[11px] text-muted-foreground/45 leading-none">{row.relationshipContext}</p>
         <p className="text-[13px] leading-snug font-semibold text-foreground/90">{row.actionReason}</p>
 
         {/* Why now — fuller context, slightly muted */}
@@ -1040,7 +1042,9 @@ function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
       )}
 
       {/* Action reason — primary verdict line */}
-      <div className="border-t border-border pt-3 flex flex-col gap-2">
+      <div className="border-t border-border pt-3 flex flex-col gap-1.5">
+        {/* Relationship context — scannable label for the "[context]" clause */}
+        <p className="text-[11px] text-muted-foreground/45 leading-none">{row.relationshipContext}</p>
         <p className="text-[13px] leading-snug font-semibold text-foreground/90">{row.actionReason}</p>
 
         {/* Why now — fuller context, slightly muted */}

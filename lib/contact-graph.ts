@@ -532,6 +532,84 @@ export function computeRelationshipStrength(params: {
 }
 
 /**
+ * Derives a plain-English relationship context phrase from the contact cluster.
+ *
+ * Returned as the `relationshipContext` field on opportunity rows and used as
+ * the opening "[context]" clause of every `actionReason` string.  The phrase is
+ * always honest — it does NOT soften one-sided or stale relationships.
+ *
+ * Resolution order (first match wins — most specific / most positive first):
+ *   1. Very recent ≤7d — with qualifier (back-and-forth, who initiated, met)
+ *   2. Recent ≤14d
+ *   3. This month ≤30d
+ *   4. Thread depth (older but substantive)
+ *   5. One-sided detection (honest signal)
+ *   6. Stale / cold fallback
+ */
+export function deriveRelationshipContext(
+  contacts: Pick<
+    Contact,
+    "lastInteraction" | "whoInitiates" | "threadCount" | "sentCount" | "receivedCount" | "meetingCount"
+  >[],
+): string {
+  if (!contacts.length) return "Cold contact — no history"
+
+  const top          = contacts[0]
+  const totalSent    = contacts.reduce((n, c) => n + c.sentCount,    0)
+  const totalRecv    = contacts.reduce((n, c) => n + c.receivedCount, 0)
+  const totalEmails  = totalSent + totalRecv
+  const hasMeetings  = contacts.some((c) => c.meetingCount > 0)
+  const totalThreads = contacts.reduce((n, c) => n + (c.threadCount ?? 0), 0)
+
+  const daysSince    = top.lastInteraction
+    ? (Date.now() - new Date(top.lastInteraction).getTime()) / 86_400_000
+    : 999
+
+  const whoInitiates = top.whoInitiates
+
+  // One-sidedness — only meaningful with ≥4 emails
+  const isOneSidedOut      = totalEmails >= 4 && totalRecv === 0
+  const isHeavilySentBiased = totalEmails >= 4 && totalSent / totalEmails >= 0.85
+  const isHeavilyRecvBiased = totalEmails >= 4 && totalRecv / totalEmails >= 0.85
+
+  // ── Very recent (≤7d) ────────────────────────────────────────────────────
+  if (hasMeetings  && daysSince <= 7) return "You met recently — still in the window"
+  if (daysSince <= 7 && totalThreads >= 3) return "Active back-and-forth this week"
+  if (daysSince <= 7 && whoInitiates === "them") return "They reached out to you recently"
+  if (daysSince <= 7 && whoInitiates === "user") return "You reached out recently"
+  if (daysSince <= 7) return "You spoke this week"
+
+  // ── Recent (≤14d) ────────────────────────────────────────────────────────
+  if (hasMeetings  && daysSince <= 14) return "You've met and spoken recently"
+  if (daysSince <= 14 && totalThreads >= 3) return "You had a back-and-forth recently"
+  if (daysSince <= 14 && whoInitiates === "them") return "They've been in touch recently"
+  if (daysSince <= 14) return "You spoke recently"
+
+  // ── This month (≤30d) ────────────────────────────────────────────────────
+  if (hasMeetings  && daysSince <= 30) return "You've met — active this month"
+  if (daysSince <= 30 && totalThreads >= 3) return "You had a back-and-forth this month"
+  if (daysSince <= 30) return "You've been in contact this month"
+
+  // ── Thread depth / conversation quality (older but substantive) ──────────
+  if (totalThreads >= 5 && daysSince <= 90) return "You have an established back-and-forth"
+  if (totalThreads >= 3 && daysSince <= 90) return "You've had a real conversation"
+  if (hasMeetings        && daysSince <= 90) return "You've met before"
+
+  // ── One-sided signals ────────────────────────────────────────────────────
+  if (isOneSidedOut      && daysSince > 60) return "You've emailed them — no reply yet"
+  if (isHeavilySentBiased && daysSince > 60) return "Mostly one-way — you email more than they reply"
+  if (isHeavilyRecvBiased && daysSince > 60) return "They've emailed you — you haven't followed up"
+
+  // ── Stale ────────────────────────────────────────────────────────────────
+  if (hasMeetings       && daysSince > 90) return "You've met before — last contact was a while ago"
+  if (totalEmails > 0   && daysSince > 90) return "Last contact was over 3 months ago"
+
+  // ── Cold ─────────────────────────────────────────────────────────────────
+  if (totalEmails > 0) return "Minimal email history"
+  return "Cold contact — no history"
+}
+
+/**
  * Twitter/X data attached to a contact after enrichment.
  * Stored as JSONB in the contacts.twitter_data column.
  *
@@ -648,6 +726,14 @@ export interface CompanyOpportunityRow {
    * Replaces whyNow as the primary display line.
    */
   actionReason:       string
+  /**
+   * Plain-English relationship context phrase — the "[context]" clause of
+   * actionReason, exposed separately so the UI can highlight it.
+   *
+   * Examples: "You spoke this week", "You had a back-and-forth recently",
+   *           "Cold contact — no history"
+   */
+  relationshipContext: string
   /** 1–2 sentence company-cluster "why now" narrative. */
   whyNow:             string
   /** All qualifying contacts sorted by score desc. */
@@ -721,6 +807,11 @@ export interface PublicSignalOpportunityRow {
    * Replaces whyNow as the primary display line.
    */
   actionReason: string
+  /**
+   * Plain-English relationship context phrase — the "[context]" clause of
+   * actionReason, exposed separately so the UI can highlight it.
+   */
+  relationshipContext: string
   fitTier:    "high" | "medium"
   /** 1–2 sentence "why now" narrative. */
   whyNow:     string
@@ -1054,6 +1145,15 @@ interface ActionScoreInput {
   fitTier:             "high" | "medium"
   /** Pre-computed relationship tier — used as the primary relationship signal. */
   relationshipStrength: RelationshipStrength
+  // ── Relationship depth signals (new) ──────────────────────────────────────
+  /** Total unique Gmail threads across the contact cluster. */
+  threadCount:   number
+  /** Who tends to initiate conversations — from the top contact. */
+  whoInitiates:  "user" | "them" | "mixed" | null
+  /** Total emails sent by the user across the cluster. */
+  sentCount:     number
+  /** Total emails received from contacts across the cluster. */
+  receivedCount: number
 }
 
 /**
@@ -1081,12 +1181,12 @@ function computeActionScore(input: ActionScoreInput): {
   const {
     hasMeetings, totalEmails, contactCount, recentInteractions, daysSince,
     emailSignals, twitterSignals, buyerLikelihood, fitTier, relationshipStrength,
+    threadCount, whoInitiates, sentCount, receivedCount,
   } = input
 
-  // ── 1. Relationship score (0–65, DOMINANT) ───────────────────────────────────
-  // relationshipStrength is the primary driver — it already encodes meeting history,
-  // email frequency, and recency into a single tier.  hasMeetings adds a further
-  // boost when we know a face-to-face meeting occurred.
+  // ── 1. Relationship score (DOMINANT — up to ~125 with bonuses) ──────────────
+  // relationshipStrength is the primary tier signal; hasMeetings, thread depth,
+  // who initiates, and recency bonuses/penalties refine it.
   let relScore: number
   if      (hasMeetings && relationshipStrength === "strong") relScore = 62
   else if (hasMeetings || relationshipStrength === "strong") relScore = 50
@@ -1100,6 +1200,33 @@ function computeActionScore(input: ActionScoreInput): {
   // Recent-interaction bonus (conversations currently in motion)
   if      (recentInteractions >= 3) relScore += 5
   else if (recentInteractions >= 1) relScore += 2
+
+  // ── Thread depth bonus (back-and-forth = genuine two-way relationship) ───────
+  if      (threadCount >= 5) relScore += 10
+  else if (threadCount >= 3) relScore += 6
+  else if (threadCount >= 2) relScore += 3
+
+  // ── Who initiates bonus (user-maintained relationship = stronger ownership) ──
+  if      (whoInitiates === "user")  relScore += 5
+  else if (whoInitiates === "mixed") relScore += 2
+
+  // ── Recent contact bonus (14-day window = peak receptivity, on top of mult) ──
+  if (daysSince <= 14 && totalEmails > 0) relScore += 8
+
+  // ── Stale relationship penalty (>90d contact gap without a meeting) ──────────
+  if      (daysSince > 90 && !hasMeetings) relScore -= 12
+  else if (daysSince > 90)                 relScore -= 6
+
+  // ── One-sided interaction penalty ────────────────────────────────────────────
+  // A heavily one-sided exchange (user emails but gets no replies, or vice versa)
+  // indicates a weaker real-world relationship than raw email counts suggest.
+  const totalSR  = sentCount + receivedCount
+  const sentFrac = totalSR > 0 ? sentCount / totalSR : 0.5
+  if      (totalSR >= 4 && receivedCount === 0)  relScore -= 15  // pure cold outreach, zero replies
+  else if (totalSR >= 4 && sentFrac >= 0.85)     relScore -= 8   // heavily sent-biased
+  else if (totalSR >= 4 && sentFrac <= 0.15)     relScore -= 5   // they email, user never engages
+
+  relScore = Math.max(0, relScore)
 
   // ── 2. Signal score (0–20) ───────────────────────────────────────────────────
   const allSignals = [...new Set([...twitterSignals, ...emailSignals])]
@@ -1155,171 +1282,117 @@ function computeActionScore(input: ActionScoreInput): {
 // ---------------------------------------------------------------------------
 
 interface ContactActionReasonCtx {
-  hasMeetings:      boolean
-  daysSince:        number
-  totalEmails:      number
-  emailSignals:     string[]
-  twitterSignals:   TwitterSignal[]
-  signalCount:      number
-  contactCount:     number
+  hasMeetings:        boolean
+  daysSince:          number
+  totalEmails:        number
+  emailSignals:       string[]
+  twitterSignals:     TwitterSignal[]
+  signalCount:        number
+  contactCount:       number
   recentInteractions: number
+  /** Pre-computed relationship context phrase — used as the "[context]" clause. */
+  relationshipContext: string
 }
 
 /**
- * Generates a short, punchy "[context] — [implication]" verdict for a
- * contact-based opportunity.  Priority waterfall — first match wins.
+ * Generates a "[context] — [implication]" verdict for a contact-based
+ * opportunity.  `relationshipContext` is always the opening clause; the
+ * signal-driven implication follows after the em-dash.
  *
  * Examples:
- *   "You spoke this week and they're launching — high response likelihood."
- *   "Warm contact + actively looking for help — act now."
- *   "Multiple signals but no relationship — lower priority."
+ *   "You spoke this week — they're launching. Ideal timing."
+ *   "Active back-and-forth recently — they're looking for help. Act now."
+ *   "Cold contact — no history — direct buying signal. Cold outreach worth it."
  */
 function buildContactActionReason(ctx: ContactActionReasonCtx): string {
   const {
-    hasMeetings, daysSince, totalEmails, emailSignals, twitterSignals,
-    signalCount, contactCount, recentInteractions,
+    daysSince, totalEmails, emailSignals, twitterSignals,
+    signalCount, contactCount, recentInteractions, relationshipContext,
   } = ctx
 
+  const rel          = relationshipContext
   const isVeryRecent = daysSince <= 7
   const isRecent     = daysSince <= 30
-  const hasEmail     = totalEmails > 0
   const allSigs      = [...new Set([...twitterSignals, ...emailSignals])]
 
-  const hasBuying    = allSigs.some((s) => ["recommendation", "pain", "agency", "budget"].includes(s))
-  const hasLaunching = allSigs.some((s) => ["launching", "launch"].includes(s))
-  const hasFund      = allSigs.includes("fundraising")
-  const hasHiring    = allSigs.includes("hiring")
+  const hasBuying     = allSigs.some((s) => ["recommendation", "pain", "agency", "budget"].includes(s))
+  const hasLaunching  = allSigs.some((s) => ["launching", "launch"].includes(s))
+  const hasFund       = allSigs.includes("fundraising")
+  const hasHiring     = allSigs.includes("hiring")
+  const hasPartnership = allSigs.includes("partnership")
+  const hasExpansion   = allSigs.includes("expansion")
 
-  // ── Met + very recent ─────────────────────────────────────────────────────────
-  if (hasMeetings && isVeryRecent && hasBuying) {
-    return "You spoke this week and they're actively looking for support — act now."
-  }
-  if (hasMeetings && isVeryRecent && hasLaunching) {
-    return "You met this week and they're launching — high response likelihood."
-  }
-  if (hasMeetings && isVeryRecent) {
-    return `Spoke this week and ${signalCount >= 2 ? "multiple signals are active" : "there's an active signal"} — ideal timing.`
-  }
+  // ── Buying / pain signals (highest intent) ───────────────────────────────────
+  if (hasBuying && isVeryRecent) return `${rel} — they're actively looking for support. Act now.`
+  if (hasBuying)                 return `${rel} — they're looking for help. Well-positioned to reach out.`
 
-  // ── Met + any signal ─────────────────────────────────────────────────────────
-  if (hasMeetings && hasBuying) {
-    return "Warm contact actively looking for help — strong timing regardless of recency."
-  }
-  if (hasMeetings && hasLaunching) {
-    return "Warm contact + launching product — high response likelihood."
-  }
-  if (hasMeetings && hasFund) {
-    return "You've met and they're fundraising — post-raise is a receptive window."
-  }
-  if (hasMeetings && signalCount >= 2) {
-    return `Warm relationship and ${signalCount} active signals — worth prioritising.`
-  }
-  if (hasMeetings) {
-    return "You've met before and there's active signal — reach out while it's fresh."
-  }
+  // ── Launching ────────────────────────────────────────────────────────────────
+  if (hasLaunching && isVeryRecent) return `${rel} — they're launching this week. Ideal timing.`
+  if (hasLaunching)                 return `${rel} — they're launching. Good window to start a conversation.`
 
-  // ── Strong email history + recent + strong signal ────────────────────────────
-  if (hasEmail && isVeryRecent && hasBuying) {
-    return "You're in their inbox and they're looking for help — reach out now."
-  }
-  if (hasEmail && isVeryRecent && hasLaunching) {
-    return "Recent email contact and they're launching — timely moment to reach out."
-  }
-  if (hasEmail && isRecent && signalCount >= 2) {
-    return "Multiple signals with recent email history — worth prioritising."
-  }
+  // ── Fundraising ──────────────────────────────────────────────────────────────
+  if (hasFund) return `${rel} — fundraising signals new spend decisions ahead.`
 
-  // ── Email history + signal ────────────────────────────────────────────────────
-  if (hasEmail && hasBuying) {
-    return "They're looking for support and you have history — warm outreach."
-  }
-  if (hasEmail && hasLaunching) {
-    return "Email history + launching — good window to reconnect."
-  }
-  if (hasEmail && signalCount >= 3) {
-    return `${signalCount} signals with existing email history — strong combination.`
-  }
+  // ── Partnership / Expansion ──────────────────────────────────────────────────
+  if (hasPartnership) return `${rel} — they're in a partner deal phase. New service needs likely.`
+  if (hasExpansion)   return `${rel} — entering a new market. New vendor decisions ahead.`
 
-  // ── Multiple contacts ─────────────────────────────────────────────────────────
+  // ── Multi-signal ─────────────────────────────────────────────────────────────
+  if (signalCount >= 3) return `${rel} — ${signalCount} active signals. High-activity period.`
+  if (signalCount >= 2) return `${rel} — multiple active signals. Worth prioritising.`
+
+  // ── Hiring ───────────────────────────────────────────────────────────────────
+  if (hasHiring && isVeryRecent) return `${rel} — actively hiring this week. Growth phase.`
+  if (hasHiring)                 return `${rel} — scaling their team. Adjacent budget likely.`
+
+  // ── Multiple contacts ────────────────────────────────────────────────────────
   if (contactCount >= 2 && recentInteractions >= 2) {
-    return `${contactCount} active contacts here with overlapping signals — broader reach.`
+    return `${rel} — ${contactCount} contacts active. Broader reach across the company.`
   }
 
-  // ── Strong signal, cold ───────────────────────────────────────────────────────
-  if (hasBuying) {
-    return "Direct buying signal but no prior relationship — cold outreach if the signal is specific."
-  }
-  if (hasLaunching && signalCount >= 2) {
-    return "Multiple signals but no relationship — lower priority than warm contacts."
-  }
-  if (hasHiring && isVeryRecent) {
-    return "Actively hiring this week — growth phase, but relationship is cold."
-  }
-
-  return `Active signal in your network — ${isRecent ? "reach out while it's fresh" : "worth monitoring"}.`
+  // ── Generic ──────────────────────────────────────────────────────────────────
+  if (isVeryRecent) return `${rel} — act while the conversation is fresh.`
+  if (isRecent)     return `${rel} — active signal. Worth reaching out soon.`
+  return `${rel} — active signal in your network.`
 }
 
 interface PublicSignalActionReasonCtx {
-  primarySignal:   TwitterSignal
-  signals:         TwitterSignal[]
-  hasMeetings:     boolean
-  hasEmailHistory: boolean
-  daysSince:       number
+  primarySignal:       TwitterSignal
+  signals:             TwitterSignal[]
+  hasMeetings:         boolean
+  hasEmailHistory:     boolean
+  daysSince:           number
+  /** Pre-computed relationship context phrase — used as the "[context]" clause. */
+  relationshipContext: string
 }
 
 /**
- * Generates a one-line verdict for a public-signal (X/Twitter) opportunity.
+ * Generates a "[context] — [implication]" verdict for a public-signal
+ * (X/Twitter) opportunity.  `relationshipContext` is always the opening clause.
  */
 function buildPublicSignalActionReason(ctx: PublicSignalActionReasonCtx): string {
-  const { primarySignal, signals, hasMeetings, hasEmailHistory, daysSince } = ctx
+  const { primarySignal, signals, daysSince, relationshipContext } = ctx
 
+  const rel          = relationshipContext
   const isVeryRecent = daysSince <= 7
-  const isRecent     = daysSince <= 30
   const signalCount  = signals.length
 
-  const hasBuying    = signals.some((s) => ["recommendation", "pain"].includes(s))
-  const hasLaunching = signals.includes("launching")
-  const hasFund      = signals.includes("fundraising")
+  const hasBuying     = signals.some((s) => ["recommendation", "pain"].includes(s))
+  const hasLaunching  = signals.includes("launching")
+  const hasFund       = signals.includes("fundraising")
+  const hasPartnership = signals.includes("partnership")
+  const hasExpansion   = signals.includes("expansion")
 
-  if (hasMeetings && hasBuying) {
-    return "Warm contact actively looking for support — reconnect now."
-  }
-  if (hasMeetings && hasLaunching && isRecent) {
-    return "You've met and they're launching — warm conversation while momentum is high."
-  }
-  if (hasMeetings && isVeryRecent) {
-    return "Recent contact with active X signal — well-positioned to reach out."
-  }
-  if (hasMeetings) {
-    return `Warm contact + ${primarySignal} signal — outreach will land well.`
-  }
-
-  if (hasEmailHistory && hasBuying) {
-    return "You're in their inbox and they're looking for help — reach out while the need is fresh."
-  }
-  if (hasEmailHistory && hasLaunching) {
-    return "Email history + launching publicly — a well-timed note will land."
-  }
-  if (hasEmailHistory && signalCount >= 2) {
-    return `${signalCount} signals with an existing contact — better positioned than cold.`
-  }
-
-  if (hasBuying && isVeryRecent) {
-    return "Active buying signal this week — cold outreach justified by explicit need."
-  }
-  if (hasBuying) {
-    return "Direct buying signal but no relationship — cold outreach worth considering."
-  }
-  if (hasLaunching && hasFund) {
-    return "Launching and fundraising simultaneously — high activity, but no relationship yet."
-  }
-  if (signalCount >= 3) {
-    return `${signalCount} converging signals — high activity but no prior contact.`
-  }
-  if (signalCount >= 2) {
-    return "Multiple signals but no relationship — lower priority than warm contacts."
-  }
-  return `${primarySignal} signal with no prior relationship — monitor for entry point.`
+  if (hasBuying && isVeryRecent) return `${rel} — active buying signal this week. Act now.`
+  if (hasBuying)                 return `${rel} — they're looking for help. Reach out while the need is fresh.`
+  if (hasLaunching && isVeryRecent) return `${rel} — launching this week. Well-timed note.`
+  if (hasLaunching)                 return `${rel} — they're launching. Good conversation starter.`
+  if (hasFund)                      return `${rel} — fundraising signals new spend decisions.`
+  if (hasPartnership)               return `${rel} — partner deal phase. New service needs likely.`
+  if (hasExpansion)                 return `${rel} — new market entry. Vendor decisions ahead.`
+  if (signalCount >= 3) return `${rel} — ${signalCount} converging signals. High-activity period.`
+  if (signalCount >= 2) return `${rel} — multiple signals active.`
+  return `${rel} — ${primarySignal} signal detected.`
 }
 
 // ---------------------------------------------------------------------------
@@ -1794,6 +1867,13 @@ export function buildContactOpportunities(
         lastInteraction: topContact.lastInteraction,
       })
 
+    // ── Relationship context ──────────────────────────────────────────────────
+    const totalThreadsC  = sortedContacts.reduce((n, c) => n + (c.threadCount ?? 0), 0)
+    const totalSentC     = sortedContacts.reduce((n, c) => n + c.sentCount,    0)
+    const totalRecvC     = sortedContacts.reduce((n, c) => n + c.receivedCount, 0)
+    const whoInitC       = topContact.whoInitiates ?? null
+    const relCtx         = deriveRelationshipContext(sortedContacts)
+
     const { actionScore, breakdown: actionBreakdown } = computeActionScore({
       hasMeetings,
       totalEmails,
@@ -1805,28 +1885,34 @@ export function buildContactOpportunities(
       buyerLikelihood:     buyerClass.buyerLikelihood,
       fitTier:             fitTier as "high" | "medium",
       relationshipStrength: topRelStrength,
+      threadCount:          totalThreadsC,
+      whoInitiates:         whoInitC,
+      sentCount:            totalSentC,
+      receivedCount:        totalRecvC,
     })
 
     const actionReason = buildContactActionReason({
       hasMeetings,
       daysSince,
       totalEmails,
-      emailSignals:     emailSignalList,
+      emailSignals:        emailSignalList,
       twitterSignals,
-      signalCount:      allSignals.length,
+      signalCount:         allSignals.length,
       contactCount,
       recentInteractions,
+      relationshipContext: relCtx,
     })
 
     rows.push({
-      company:            topContact.companyName,
-      domain:             topContact.domain,
+      company:             topContact.companyName,
+      domain:              topContact.domain,
       contactCount,
       recentInteractions,
-      signals:            allSignals,
-      score:              finalScore,
+      signals:             allSignals,
+      score:               finalScore,
       actionScore,
       actionReason,
+      relationshipContext: relCtx,
       whyNow:             narrativeCompanyWhyNow({
         contactCount,
         recentInteractions,
@@ -2284,6 +2370,13 @@ export function buildPublicSignalOpportunities(
       return latest ? Math.floor((Date.now() - latest) / 86_400_000) : 999
     })()
 
+    // ── Relationship context ──────────────────────────────────────────────────
+    const totalThreadsP  = sortedContacts.reduce((n, c) => n + (c.threadCount ?? 0), 0)
+    const totalSentP     = sortedContacts.reduce((n, c) => n + c.sentCount,    0)
+    const totalRecvP     = sortedContacts.reduce((n, c) => n + c.receivedCount, 0)
+    const whoInitP       = sortedContacts[0]?.whoInitiates ?? null
+    const relCtxP        = deriveRelationshipContext(sortedContacts)
+
     const { actionScore, breakdown: actionBreakdown } = computeActionScore({
       hasMeetings,
       totalEmails:         emailCount,
@@ -2295,14 +2388,19 @@ export function buildPublicSignalOpportunities(
       buyerLikelihood:     buyerClass.buyerLikelihood,
       fitTier:             effectiveFit as "high" | "medium",
       relationshipStrength: pubRelStrength,
+      threadCount:          totalThreadsP,
+      whoInitiates:         whoInitP,
+      sentCount:            totalSentP,
+      receivedCount:        totalRecvP,
     })
 
     const actionReason = buildPublicSignalActionReason({
       primarySignal,
-      signals:         allSignals,
+      signals:             allSignals,
       hasMeetings,
       hasEmailHistory,
-      daysSince:       pubDaysSince,
+      daysSince:           pubDaysSince,
+      relationshipContext: relCtxP,
     })
 
     rows.push({
@@ -2315,6 +2413,7 @@ export function buildPublicSignalOpportunities(
       score:        finalScore,
       actionScore,
       actionReason,
+      relationshipContext: relCtxP,
       fitTier:      effectiveFit as "high" | "medium",
       whyNow:       narrativePublicSignalWhyNow({
         signal:          primarySignal,
