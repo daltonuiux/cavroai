@@ -167,7 +167,7 @@ function PrimaryButton({
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
 
-export function AddClientModal() {
+export function AddClientModal({ variant = "primary" }: { variant?: "primary" | "secondary" }) {
   const [open, setOpen] = useState(false)
   const [screen, setScreen] = useState<Screen>("method")
   const [isPending, startTransition] = useTransition()
@@ -392,10 +392,14 @@ export function AddClientModal() {
       {/* Trigger */}
       <button
         onClick={handleOpen}
-        className="btn-cavro-primary border flex items-center gap-1.5 rounded-md px-3 text-[13px] font-medium text-white transition-colors"
+        className={
+          variant === "secondary"
+            ? "flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+            : "btn-cavro-primary border flex items-center gap-1.5 rounded-md px-3 text-[13px] font-medium text-white transition-colors"
+        }
       >
-        <Plus className="size-[13px]" strokeWidth={2.5} />
-        Add Client
+        <Plus className="size-[12px]" strokeWidth={2.5} />
+        Add client
       </button>
 
       {open && (

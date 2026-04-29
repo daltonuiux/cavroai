@@ -18,6 +18,10 @@ export interface ClientTableRow {
   createdAt: string
   analysisStatus?: string
   lastAnalyzedAt?: string
+  // Intelligence indicators
+  hasXData?: boolean
+  hasSignals?: boolean
+  usedInOpportunities?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -36,39 +40,72 @@ function formatDate(iso: string): string {
   })
 }
 
-const RELATIONSHIP_LABEL: Record<string, string> = {
-  current_client: "Current",
-  past_client:    "Past",
-  warm:           "Warm",
-  cold:           "Cold",
+// ---------------------------------------------------------------------------
+// Relationship badge
+// ---------------------------------------------------------------------------
+
+const RELATIONSHIP_CONFIG: Record<string, { label: string; className: string }> = {
+  current_client: { label: "Current client", className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
+  past_client:    { label: "Past client",    className: "bg-foreground/[0.06] text-foreground/50" },
+  warm:           { label: "Warm lead",      className: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
+  cold:           { label: "Cold",           className: "bg-foreground/[0.04] text-foreground/35" },
+}
+
+function RelationshipBadge({ type }: { type?: string }) {
+  if (!type) return <span className="text-muted-foreground/30">—</span>
+  const cfg = RELATIONSHIP_CONFIG[type]
+  if (!cfg) return <span className="text-[12px] text-muted-foreground/50">{type}</span>
+  return (
+    <span className={`inline-flex rounded px-1.5 py-px text-[11px] font-medium ${cfg.className}`}>
+      {cfg.label}
+    </span>
+  )
 }
 
 // ---------------------------------------------------------------------------
-// Status badge
+// Analysis / signal status
 // ---------------------------------------------------------------------------
 
-function StatusBadge({ status, scanning }: { status?: string; scanning: boolean }) {
+function SignalStatusBadge({ status, scanning }: { status?: string; scanning: boolean }) {
   if (scanning) {
     return (
-      <span className="inline-flex items-center gap-1 rounded px-1.5 py-px text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400">
+      <span className="inline-flex items-center gap-1 rounded px-1.5 py-px text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400">
         <Loader2 className="size-2.5 animate-spin" />
-        Scanning
+        Scanning…
       </span>
     )
   }
   switch (status) {
     case "complete":
-      return <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">Complete</span>
+      return (
+        <span className="inline-flex items-center gap-1 rounded px-1.5 py-px text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+          Signals found
+        </span>
+      )
     case "profile_only":
-      return <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400">Profile only</span>
+      return (
+        <span className="inline-flex items-center gap-1 rounded px-1.5 py-px text-[10px] font-medium bg-sky-500/10 text-sky-600 dark:text-sky-400">
+          Profile only
+        </span>
+      )
     case "insufficient_data":
-      return <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-foreground/[0.04] text-foreground/35">Low data</span>
+      return (
+        <span className="rounded px-1.5 py-px text-[10px] font-medium bg-foreground/[0.04] text-foreground/35">
+          Low data
+        </span>
+      )
     case "error":
-      return <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-destructive/10 text-destructive">Error</span>
+      return <span className="rounded px-1.5 py-px text-[10px] font-medium bg-destructive/10 text-destructive">Error</span>
     case "pending":
-      return <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400">Pending</span>
+      return (
+        <span className="rounded px-1.5 py-px text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400">
+          Pending
+        </span>
+      )
     default:
-      return <span className="text-[12px] text-muted-foreground/35">—</span>
+      return (
+        <span className="text-[11px] text-muted-foreground/30">No signals yet</span>
+      )
   }
 }
 
@@ -127,7 +164,7 @@ function DeleteModal({
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3.5">
-          <p className="text-[14px] font-semibold text-foreground">Delete client?</p>
+          <p className="text-[14px] font-semibold text-foreground">Remove from network?</p>
           <button
             onClick={onClose}
             disabled={deleting}
@@ -167,7 +204,7 @@ function DeleteModal({
             className="flex items-center gap-1.5 rounded-md bg-destructive px-3 py-1.5 text-[12px] font-semibold text-white transition-opacity hover:opacity-85 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {deleting && <Loader2 className="size-3 animate-spin" />}
-            {deleting ? "Deleting…" : "Delete client"}
+            {deleting ? "Removing…" : "Remove"}
           </button>
         </div>
       </div>
@@ -185,9 +222,6 @@ function ScanAllButton({ rows }: { rows: ClientTableRow[] }) {
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null)
 
   async function handleScanAll() {
-    console.log("SCAN ALL CLIENTS CLICKED")
-    console.log("CLIENTS TO SCAN:", rows.length)
-
     setScanning(true)
     setProgress({ current: 0, total: rows.length })
 
@@ -214,7 +248,7 @@ function ScanAllButton({ rows }: { rows: ClientTableRow[] }) {
     <button
       onClick={handleScanAll}
       disabled={scanning || rows.length === 0}
-      className="btn-cavro-secondary border flex items-center gap-1.5 rounded-md px-3 text-[13px] font-medium text-zinc-900 dark:text-zinc-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      className="flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-[12px] font-semibold text-background transition-opacity hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed"
     >
       {scanning ? (
         <>
@@ -266,7 +300,7 @@ export function ClientsTable({ rows: initialRows }: { rows: ClientTableRow[] }) 
       <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-border py-20 text-center">
         <p className="text-[13px] font-medium text-foreground">No clients yet</p>
         <p className="mt-1 text-[12px] text-muted-foreground">
-          Start with 5–10 clients you know well.
+          Start with 5–10 companies you know well — current clients, past clients, warm leads.
         </p>
       </div>
     )
@@ -275,29 +309,30 @@ export function ClientsTable({ rows: initialRows }: { rows: ClientTableRow[] }) 
   return (
     <>
       <div className="flex flex-col gap-3">
-        {/* Scan all */}
-        <div className="flex items-center justify-end">
+        {/* Actions bar */}
+        <div className="flex items-center justify-between">
+          <p className="text-[12px] text-muted-foreground">
+            {rows.length} {rows.length === 1 ? "company" : "companies"}
+          </p>
           <ScanAllButton rows={rows} />
         </div>
 
         {/* Table */}
         <div className="overflow-hidden rounded-md border border-border">
-          <table className="w-full min-w-[640px] border-collapse text-left">
+          <table className="w-full min-w-[600px] border-collapse text-left">
             <thead>
               <tr className="border-b border-border bg-foreground/[0.02]">
-                <Th>Client</Th>
-                <Th>Website</Th>
+                <Th>Company</Th>
                 <Th>Relationship</Th>
-                <Th>Services</Th>
+                <Th>Signals</Th>
                 <Th>Last scanned</Th>
-                <Th>Status</Th>
                 <Th sr>Actions</Th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {rows.map((row) => {
                 const isScanning = scanningId === row.id
-                const dateLabel = row.lastAnalyzedAt
+                const dateLabel  = row.lastAnalyzedAt
                   ? formatDate(row.lastAnalyzedAt)
                   : formatDate(row.createdAt)
                 const dateSuffix = row.lastAnalyzedAt ? "" : " *"
@@ -307,61 +342,65 @@ export function ClientsTable({ rows: initialRows }: { rows: ClientTableRow[] }) 
                     key={row.id}
                     className={`group transition-colors hover:bg-muted/30 ${isScanning ? "opacity-60" : ""}`}
                   >
-                    {/* Client name */}
+                    {/* Company */}
                     <Td>
-                      <Link
-                        href={`/clients/${row.id}`}
-                        className="font-semibold text-foreground hover:underline underline-offset-2"
-                      >
-                        {row.name}
-                      </Link>
-                    </Td>
-
-                    {/* Website */}
-                    <Td>
-                      <a
-                        href={row.websiteUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors group/url"
-                      >
-                        <span className="truncate max-w-[160px]">{cleanUrl(row.websiteUrl)}</span>
-                        <ExternalLink className="size-3 shrink-0 opacity-0 group-hover/url:opacity-60 transition-opacity" />
-                      </a>
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Link
+                            href={`/clients/${row.id}`}
+                            className="font-semibold text-foreground hover:underline underline-offset-2 truncate"
+                          >
+                            {row.name}
+                          </Link>
+                          {row.usedInOpportunities && (
+                            <span className="shrink-0 rounded px-1 py-px text-[9px] font-semibold uppercase tracking-wide bg-violet-500/10 text-violet-600 dark:text-violet-400">
+                              In opportunities
+                            </span>
+                          )}
+                        </div>
+                        <a
+                          href={row.websiteUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-1 text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors group/url w-fit"
+                        >
+                          <span className="truncate max-w-[180px]">{cleanUrl(row.websiteUrl)}</span>
+                          <ExternalLink className="size-2.5 shrink-0 opacity-0 group-hover/url:opacity-70 transition-opacity" />
+                        </a>
+                      </div>
                     </Td>
 
                     {/* Relationship */}
                     <Td>
-                      {row.relationshipType
-                        ? RELATIONSHIP_LABEL[row.relationshipType] ?? row.relationshipType
-                        : <span className="text-muted-foreground/35">—</span>
-                      }
+                      <RelationshipBadge type={row.relationshipType} />
                     </Td>
 
-                    {/* Services */}
+                    {/* Signals */}
                     <Td>
-                      {row.services && row.services.length > 0
-                        ? <span className="truncate max-w-[140px] block">{row.services.join(", ")}</span>
-                        : <span className="text-muted-foreground/35">—</span>
-                      }
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <SignalStatusBadge status={row.analysisStatus} scanning={isScanning} />
+                        {row.hasXData && (
+                          <span className="rounded px-1.5 py-px text-[10px] font-medium bg-sky-500/10 text-sky-600 dark:text-sky-400">
+                            X data
+                          </span>
+                        )}
+                      </div>
                     </Td>
 
                     {/* Last scanned */}
                     <Td>
-                      <span className="text-muted-foreground">
+                      <span className="text-muted-foreground/60">
                         {dateLabel}
                         {dateSuffix && (
-                          <span className="text-muted-foreground/35" title="Created date (not yet scanned)">
+                          <span
+                            className="text-muted-foreground/30"
+                            title="Added date — not yet scanned"
+                          >
                             {dateSuffix}
                           </span>
                         )}
                       </span>
-                    </Td>
-
-                    {/* Status */}
-                    <Td>
-                      <StatusBadge status={row.analysisStatus} scanning={isScanning} />
                     </Td>
 
                     {/* Actions */}
@@ -388,7 +427,7 @@ export function ClientsTable({ rows: initialRows }: { rows: ClientTableRow[] }) 
                         {/* Delete */}
                         <button
                           onClick={() => setPendingDelete(row)}
-                          title="Delete client"
+                          title="Remove"
                           className="opacity-0 group-hover:opacity-100 rounded p-1 text-muted-foreground/40 hover:text-destructive transition-all"
                         >
                           <Trash2 className="size-3.5" strokeWidth={1.75} />
@@ -403,9 +442,11 @@ export function ClientsTable({ rows: initialRows }: { rows: ClientTableRow[] }) 
         </div>
 
         {/* Legend */}
-        <p className="text-[11px] text-muted-foreground/35 px-0.5">
-          * Date shown is added date — client has not been scanned yet.
-        </p>
+        {rows.some((r) => !r.lastAnalyzedAt) && (
+          <p className="text-[11px] text-muted-foreground/30 px-0.5">
+            * Date shown is added date — not yet scanned.
+          </p>
+        )}
       </div>
 
       {/* Delete confirmation modal */}
@@ -443,5 +484,5 @@ function Td({ children }: { children: React.ReactNode }) {
   )
 }
 
-// Re-export for the page header
+// Re-export for potential external use
 export { ScanAllButton }
