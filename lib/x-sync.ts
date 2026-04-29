@@ -113,12 +113,23 @@ const SIGNAL_PATTERNS: SignalPattern[] = [
   { type: "growth", confidence: "high",   pattern: /\b(\d+[km+]?\s+(?:users?|customers?|subscribers?|downloads?|signups?|clients?)|crossed \d+[km+]?|hit \d+[km+]?|reached \d+[km+]?\s+(?:users?|customers?)|(\d+)x (?:growth|increase|revenue|mrr)|profitable|ramen profitable|default alive|\$[\d.,]+[km]?\s+(?:mrr|arr)|zero to .{3,20}in)\b/i },
   { type: "growth", confidence: "medium", pattern: /\b(traction|mrr|arr|annual (?:revenue|recurring)|retention|churn|product[- ]?market[- ]?fit|pmf|milestone|growing (?:fast|quickly|rapidly)|momentum|adoption|user growth|customer (?:growth|success)|paying customers?|revenue milestone|referral|organic growth|waitlist grew|inbound)\b/i },
   { type: "growth", confidence: "low",    pattern: /\b(customers?|users?|growing|scale|scaling|growth|traction|downloads?)\b/i },
+
+  // ── recommendation (direct buying signal) ──────────────────────────────────
+  // "anyone know a good design agency?" is the clearest possible commercial signal
+  { type: "recommendation", confidence: "high",   pattern: /\b(looking for (?:a |an )?(?:designer|design agency|ux designer|ui designer|product designer|development agency|dev agency|engineer|freelancer|agency|consultant|studio)|any (?:good |great )?(?:designers?|developers?|agencies?|consultants?|studios?) (?:you|anyone)|recommend (?:a |an )?(?:good )?(?:designer|agency|developer|consultant|studio)|anyone (?:know|have|recommend) (?:a |an )?(?:good )?(?:designer|agency|developer)|can anyone suggest|who (?:do you|would you) recommend for|referral for (?:a |an )?(?:designer|developer|agency))\b/i },
+  { type: "recommendation", confidence: "medium", pattern: /\b(looking for (?:help with|someone to|a team to)|need (?:a |an )?(?:designer|developer|agency|freelancer)|does anyone know|any recommendations?|can you recommend|suggestions? for (?:a |an )?|who (?:should|would) I (?:hire|contact|reach out to)|DM me if you|send me (?:your|any))\b/i },
+  { type: "recommendation", confidence: "low",    pattern: /\b(recommend|suggestion|referral|hire|outsource|agency|freelance)\b/i },
+
+  // ── pain / frustration (creates urgency around being the solution) ──────────
+  { type: "pain", confidence: "high",   pattern: /\b(struggling (?:with|to)|so frustrated (?:with|by)|can(?:'t| not) (?:find|afford|scale|ship|keep up)|falling behind|completely overwhelmed|our (?:design|product|site|app|onboarding|UX|UI) (?:is|was) (?:broken|terrible|awful|a mess|embarrassing)|we (?:really need|desperately need|badly need)|this is (?:killing|hurting) us|we(?:'re| are) losing (?:users?|customers?|revenue|deals?))\b/i },
+  { type: "pain", confidence: "medium", pattern: /\b(need help (?:with|on)|wish (?:we had|we could|I had)|really wish|could use (?:a|some|help with)|anyone (?:dealt with|solved|fixed)|how do (?:you|people|teams) (?:handle|deal with|solve)|any (?:tips|advice) on|is it just me or|anyone else (?:dealing|struggling|finding it hard))\b/i },
+  { type: "pain", confidence: "low",    pattern: /\b(challenge|pain point|problem|issue|difficult|hard to|frustrating)\b/i },
 ]
 
 const CONFIDENCE_RANK: Record<SignalConfidence, number> = { high: 2, medium: 1, low: 0 }
 
 const SIGNAL_PRIORITY: TwitterSignal[] = [
-  "fundraising", "launching", "announcing", "hiring", "growth", "building",
+  "recommendation", "fundraising", "pain", "launching", "announcing", "hiring", "growth", "building",
 ]
 
 export function extractSignalsFromTweets(tweets: string[]): {

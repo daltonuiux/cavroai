@@ -159,7 +159,15 @@ export function isTargetCompany(
 // ---------------------------------------------------------------------------
 
 /** Signals extracted from recent tweets. */
-export type TwitterSignal = "launching" | "hiring" | "building" | "fundraising" | "announcing" | "growth"
+export type TwitterSignal =
+  | "launching"
+  | "hiring"
+  | "building"
+  | "fundraising"
+  | "announcing"
+  | "growth"
+  | "recommendation"   // direct buying signal: "any good design agencies?"
+  | "pain"             // expressed frustration / need: "struggling with our UX"
 
 /** Signal confidence tier. */
 export type SignalConfidence = "high" | "medium" | "low"
@@ -175,6 +183,27 @@ export interface RichSignal {
   matchedText: string
   /** The tweet text where the match was found (truncated to 280 chars). */
   tweetText:   string
+}
+
+/**
+ * Concrete evidence for one signal — tweet or email subject snippet.
+ * Used to generate grounded "why now" narratives and debug output.
+ */
+export interface SignalEvidence {
+  signal:     string              // TwitterSignal or email signal key
+  snippet:    string              // tweet text (truncated) or subject line
+  confidence: "high" | "medium"
+  source:     "twitter" | "email"
+}
+
+/** Score component breakdown — attached to every opportunity for debug/display. */
+export interface ScoreBreakdown {
+  baseScore:         number   // Σ contact.interactionScore
+  signalScore:       number   // strength-weighted twitter + email signals
+  relationshipScore: number   // meeting/email depth bonus
+  recencyMult:       number
+  fitMult:           number
+  total:             number
 }
 
 /**
@@ -314,6 +343,10 @@ export interface CompanyOpportunityRow {
    * "low" companies never reach this point — they are excluded in the pipeline.
    */
   fitTier:            "high" | "medium"
+  /** Top evidence snippets (tweets / email subjects) that triggered signals. */
+  signalEvidence:     SignalEvidence[]
+  /** Full score component breakdown for debug/display. */
+  scoreBreakdown:     ScoreBreakdown
 }
 
 /** @deprecated Use CompanyOpportunityRow */
@@ -363,27 +396,34 @@ export interface PublicSignalOpportunityRow {
     hasMeetings:     boolean
     emailCount:      number
   }
-  topics: string[]
+  topics:         string[]
+  /** Best tweet snippet per signal type — powers "why now" narrative. */
+  signalEvidence: SignalEvidence[]
+  scoreBreakdown: ScoreBreakdown
 }
 
 /** Per-company debug record emitted by buildContactOpportunitiesWithDebug. */
 export interface OpportunityDebugEntry {
   /** Company display name. */
-  company:         string
-  domain:          string
-  contactCount:    number
+  company:          string
+  domain:           string
+  contactCount:     number
   /** Sum of contact interaction scores before any multipliers. */
-  baseScore:       number
-  emailSignals:    string[]
-  twitterSignals:  string[]
+  baseScore:        number
+  emailSignals:     string[]
+  twitterSignals:   string[]
   /** Result of scoreCompanyFit. */
-  fitDecision:     "high" | "medium" | "low"
-  /** Why the company was rejected (fitDecision === "low"), or null. */
-  rejectionReason: string | null
+  fitDecision:      "high" | "medium" | "low"
+  /** Why the company was rejected, or null if included. */
+  rejectionReason:  string | null
+  /** Full score breakdown. */
+  scoreBreakdown:   ScoreBreakdown
   /** Final score after all boosts + fit multiplier, or 0 if excluded. */
-  finalScore:      number
+  finalScore:       number
   /** Whether this company appears in the output. */
-  included:        boolean
+  included:         boolean
+  /** True when excluded solely because score < MIN_OPPORTUNITY_SCORE. */
+  belowThreshold:   boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -391,11 +431,20 @@ export interface OpportunityDebugEntry {
 // ---------------------------------------------------------------------------
 
 const SIGNAL_LABELS: Record<string, string> = {
+  // Email signals
   hiring:  "Hiring",
   launch:  "New Launch",
   project: "New Project",
   budget:  "Budget / Proposal",
   agency:  "Agency Need",
+  // Twitter / X signals
+  recommendation: "Buying Signal",
+  pain:           "Expressed Need",
+  fundraising:    "Fundraising",
+  launching:      "Launching",
+  announcing:     "Announcing",
+  growth:         "Growing",
+  building:       "Building",
 }
 
 /** Signal priority for sorting — higher intent first. */
@@ -425,12 +474,14 @@ const EMAIL_PHRASES: Record<string, string> = {
 }
 
 const TWITTER_PHRASES: Record<string, string> = {
-  building:    "actively building something new",
-  launching:   "publicly launching",
-  fundraising: "closing a funding round",
-  hiring:      "expanding the team",
-  announcing:  "about to make a big announcement",
-  growth:      "showing strong growth and traction",
+  building:       "actively building something new",
+  launching:      "publicly launching",
+  fundraising:    "closing a funding round",
+  hiring:         "expanding the team",
+  announcing:     "about to make a big announcement",
+  growth:         "showing strong growth and traction",
+  recommendation: "actively looking for agency or service support",
+  pain:           "experiencing a challenge that needs solving",
 }
 
 /** When email and Twitter signals point at the same underlying intent. */
@@ -440,6 +491,128 @@ const SIGNAL_OVERLAP: Record<string, TwitterSignal[]> = {
   agency:  ["building"],
   project: ["building", "launching"],
   budget:  ["fundraising"],
+}
+
+// ---------------------------------------------------------------------------
+// Signal-strength scoring tables
+// ---------------------------------------------------------------------------
+
+/**
+ * Base intent strength per signal type (1–4 scale).
+ * Weights reflect commercial relevance to an agency / service provider:
+ *   recommendation → someone is actively asking for what you offer (highest)
+ *   pain           → expressed problem = immediate solution need
+ *   fundraising    → capital = willingness to spend on tools and services
+ *   launching      → product pressure = execution support needed now
+ *   hiring         → growth = teams often bring in agencies alongside new hires
+ *   growth         → momentum = receptive to investment in quality
+ *   announcing     → visible activity = good moment for outreach
+ *   building       → active = relevant but least time-sensitive
+ */
+const TWITTER_SIGNAL_STRENGTH: Record<TwitterSignal, number> = {
+  recommendation: 4.0,
+  pain:           3.5,
+  fundraising:    3.5,
+  launching:      3.0,
+  hiring:         2.5,
+  growth:         2.0,
+  announcing:     1.5,
+  building:       1.0,
+}
+
+/** Email-signal strength — higher because email signals are from direct interactions. */
+const EMAIL_SIGNAL_STRENGTH: Record<string, number> = {
+  agency:  4.0,
+  budget:  3.5,
+  project: 2.5,
+  launch:  2.5,
+  hiring:  2.0,
+}
+
+/** Per-confidence level multiplier for Twitter richSignals. */
+const SIGNAL_CONFIDENCE_MULT: Record<string, number> = { high: 1.0, medium: 0.75, low: 0.3 }
+
+/** Minimum score for an opportunity to appear in output. */
+const MIN_OPPORTUNITY_SCORE = 5.0
+
+// ---------------------------------------------------------------------------
+// Signal-evidence helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Collects the best SignalEvidence from Twitter richSignals across contacts.
+ * One evidence entry per signal type (highest confidence wins).
+ */
+function collectTwitterEvidence(contacts: Contact[]): SignalEvidence[] {
+  const best = new Map<string, SignalEvidence>()
+  const confRank: Record<string, number> = { high: 2, medium: 1, low: 0 }
+
+  for (const c of contacts) {
+    for (const r of c.twitterData?.richSignals ?? []) {
+      if (r.confidence === "low") continue
+      const existing = best.get(r.type)
+      if (!existing || confRank[r.confidence] > confRank[existing.confidence]) {
+        best.set(r.type, {
+          signal:     r.type,
+          snippet:    r.tweetText.slice(0, 200),
+          confidence: r.confidence as "high" | "medium",
+          source:     "twitter",
+        })
+      }
+    }
+  }
+
+  return [...best.values()]
+}
+
+/**
+ * Computes the weighted signal score from Twitter richSignals + email signals.
+ * Capped at 12 to prevent degenerate over-scoring.
+ */
+function computeSignalScore(
+  contacts:     Contact[],
+  emailSignals: string[],
+): number {
+  // Best richSignal per type (deduplicated)
+  const bestRich = new Map<string, number>()
+  for (const c of contacts) {
+    for (const r of c.twitterData?.richSignals ?? []) {
+      const str  = TWITTER_SIGNAL_STRENGTH[r.type as TwitterSignal] ?? 0.5
+      const conf = SIGNAL_CONFIDENCE_MULT[r.confidence] ?? 0
+      const pts  = str * conf
+      if ((bestRich.get(r.type) ?? 0) < pts) bestRich.set(r.type, pts)
+    }
+  }
+  let score = [...bestRich.values()].reduce((n, v) => n + v, 0)
+
+  // Email signals (capped per signal to avoid double-counting with twitter)
+  for (const s of emailSignals) {
+    score += EMAIL_SIGNAL_STRENGTH[s] ?? 1.0
+  }
+
+  return Math.min(score, 12)
+}
+
+/**
+ * Relationship depth bonus.
+ * Meetings >> email depth >> contact count.
+ */
+function computeRelationshipScore(
+  hasMeetings:        boolean,
+  totalEmails:        number,
+  contactCount:       number,
+  recentInteractions: number,
+): number {
+  let score = 0
+  if (hasMeetings)           score += 3.0
+  if (totalEmails > 20)      score += 2.5
+  else if (totalEmails > 5)  score += 1.5
+  else if (totalEmails > 0)  score += 0.5
+  if (contactCount >= 3)     score += 1.5
+  else if (contactCount >= 2) score += 1.0
+  if (recentInteractions >= 3) score += 1.0
+  else if (recentInteractions >= 1) score += 0.5
+  return score
 }
 
 // ---------------------------------------------------------------------------
@@ -591,90 +764,106 @@ interface CompanyWhyNowCtx {
   hasMeetings:        boolean
   emailSignals:       string[]
   twitterSignals:     TwitterSignal[]
+  signalEvidence:     SignalEvidence[]   // real tweet/email snippets
 }
 
 /**
- * Company-cluster narrative: explains why a company is worth reaching out to NOW
- * based on the combined relationship depth (contact count + meetings) and signals.
+ * Generates a sharp, evidence-grounded "why now" narrative for a company cluster.
  *
- * Patterns:
- *   "You know 3 people here and activity is increasing — strong entry point."
- *   "You've met and spoken recently, and they're launching something new — reach out now."
- *   "You have existing relationships here but haven't been in touch recently — reactivation opportunity."
+ * Priority order:
+ *   1. Direct buying signals (recommendation, pain) → quote snippet
+ *   2. High-intent signals (fundraising, launching, hiring) → grounded description
+ *   3. Email signals → subject-line evidence
+ *   4. Relationship activity alone → recency/depth context
  */
 function narrativeCompanyWhyNow(ctx: CompanyWhyNowCtx): string {
-  const { contactCount, recentInteractions, daysSince, hasMeetings, emailSignals, twitterSignals } = ctx
+  const {
+    contactCount, recentInteractions, daysSince, hasMeetings,
+    emailSignals, twitterSignals, signalEvidence,
+  } = ctx
 
-  const hasSignals   = emailSignals.length > 0 || twitterSignals.length > 0
   const isVeryRecent = daysSince <= 7
   const isRecent     = daysSince <= 30
   const isDormant    = daysSince > 60
   const hasMultiple  = contactCount >= 2
-  const isActive     = recentInteractions >= 2
 
-  // ── Opening: relationship cluster ────────────────────────────────────────
+  // ── Relationship opener ───────────────────────────────────────────────────
 
   let open: string
-  if (hasMultiple && (hasMeetings || isActive)) {
-    open = `You know ${contactCount} people here and activity is increasing`
-  } else if (hasMultiple && hasSignals) {
-    open = `You know ${contactCount} people here`
+  if (hasMultiple && (hasMeetings || recentInteractions >= 2)) {
+    open = `You know ${contactCount} people here and conversations are active`
   } else if (hasMultiple) {
     open = `You have ${contactCount} contacts at this company`
   } else if (hasMeetings && isVeryRecent) {
-    open = "You've met and spoken recently"
+    open = "You've met recently"
   } else if (hasMeetings) {
     open = "You've met with a contact here"
   } else if (isDormant) {
-    open = "You have existing relationships here but haven't been in touch recently"
-  } else if (isActive) {
-    open = "Recent conversations are active here"
+    open = "You have existing relationships here"
   } else {
     open = "You've been in contact here"
   }
 
-  // ── Signal / activity context ─────────────────────────────────────────────
+  // ── Signal sentence — use real evidence when available ────────────────────
 
-  const primaryEmail   = SIGNAL_PRIORITY.find((s) => emailSignals.includes(s))
-  const primaryTwitter = twitterSignals[0]
-
-  let signalText: string | null = null
-  if (primaryEmail && primaryTwitter) {
-    const ep      = EMAIL_PHRASES[primaryEmail]   ?? primaryEmail
-    const tp      = TWITTER_PHRASES[primaryTwitter] ?? primaryTwitter
-    const overlaps = SIGNAL_OVERLAP[primaryEmail]?.includes(primaryTwitter) ?? false
-    signalText = overlaps
-      ? `${ep}, confirmed via Twitter`
-      : `${ep} + ${tp}`
-  } else if (primaryEmail) {
-    signalText = EMAIL_PHRASES[primaryEmail] ?? primaryEmail
-  } else if (primaryTwitter) {
-    signalText = TWITTER_PHRASES[primaryTwitter] ?? primaryTwitter
-  } else if (isActive) {
-    signalText = "recent conversations suggest momentum"
+  // Prioritise direct buying signals — quote the tweet if possible
+  const directEvidence = signalEvidence.find(
+    (e) => e.signal === "recommendation" || e.signal === "pain",
+  )
+  if (directEvidence) {
+    const snippet = directEvidence.snippet.length > 100
+      ? `"${directEvidence.snippet.slice(0, 97)}…"`
+      : `"${directEvidence.snippet}"`
+    const suffix = directEvidence.signal === "recommendation"
+      ? "They're actively asking for help — this is a direct buying signal."
+      : "They expressed a problem that's worth solving — warm outreach would land well."
+    return `${open}. ${suffix} They tweeted: ${snippet}`
   }
 
-  // ── Recommendation / closure ──────────────────────────────────────────────
+  // High-intent Twitter signals — ground in real snippet where available
+  const prioritySignals: TwitterSignal[] = [
+    "fundraising", "launching", "hiring", "growth", "announcing", "building",
+  ]
+  const bestTwEvidence = prioritySignals
+    .map((s) => signalEvidence.find((e) => e.signal === s && e.source === "twitter"))
+    .find(Boolean)
 
-  let recommendation: string
-  if (isDormant && !hasSignals) {
-    recommendation = "reactivation opportunity"
-  } else if (hasMultiple && hasSignals && isRecent) {
-    recommendation = "strong entry point"
-  } else if (isVeryRecent && hasSignals) {
-    recommendation = "reach out now"
-  } else if (isRecent && hasSignals) {
-    recommendation = "good time to reach out"
-  } else if (isDormant) {
-    recommendation = "reactivation opportunity"
-  } else {
-    recommendation = "worth reconnecting"
+  if (bestTwEvidence) {
+    const signalDesc = TWITTER_PHRASES[bestTwEvidence.signal] ?? bestTwEvidence.signal
+    const extra      = twitterSignals.length > 1
+      ? ` (+ ${twitterSignals.length - 1} more signal${twitterSignals.length > 2 ? "s" : ""})`
+      : ""
+
+    const timing = isVeryRecent ? "reach out now while momentum is high"
+      : isRecent  ? "good moment to reach out"
+      : "worth reconnecting while they're active"
+
+    return `${open} — they're ${signalDesc}${extra}. ${timing}.`
   }
 
-  if (signalText) {
-    return `${open}, and ${signalText} — ${recommendation}.`
+  // Email signals — use subject line as evidence
+  const primaryEmail = SIGNAL_PRIORITY.find((s) => emailSignals.includes(s))
+  const emailEvidence = signalEvidence.find((e) => e.source === "email")
+
+  if (primaryEmail) {
+    const ep = EMAIL_PHRASES[primaryEmail] ?? primaryEmail
+    const evidenceSuffix = emailEvidence
+      ? ` (subject: "${emailEvidence.snippet.slice(0, 60)}")`
+      : ""
+    const timing = isVeryRecent ? "reach out now"
+      : isRecent  ? "good time to reach out"
+      : "worth reconnecting"
+    return `${open}, and ${ep}${evidenceSuffix} — ${timing}.`
   }
-  return `${open} — ${recommendation}.`
+
+  // Activity alone
+  if (recentInteractions >= 2) {
+    return `${open} — conversations are active. A timely check-in makes sense.`
+  }
+  if (isDormant) {
+    return `${open}, but haven't been in touch recently — reactivation opportunity.`
+  }
+  return `${open} — worth reconnecting.`
 }
 
 function warmPathStrength(
@@ -950,36 +1139,47 @@ export function buildContactOpportunities(
     const hasMeetings    = sortedContacts.some((c) => c.meetingCount > 0)
     const emailSignalList = [...emailSignals]
 
-    // Aggregate Twitter signals across all contacts (union)
+    // Aggregate Twitter signals across all contacts (union, SIGNAL_PRIORITY_PUBLIC order)
     const twitterSignalSet = new Set<TwitterSignal>()
     for (const c of sortedContacts) {
       for (const s of c.twitterData?.signals ?? []) twitterSignalSet.add(s)
     }
-    const twitterSignals = [...twitterSignalSet]
+    const twitterSignals = SIGNAL_PRIORITY_PUBLIC.filter((s) => twitterSignalSet.has(s))
 
-    // Combined signal list — email signals first, then Twitter-only signals
+    // Combined signal list — Twitter first (higher confidence), then email-only
     const allSignals = [
-      ...emailSignalList,
-      ...twitterSignals.filter((s) => !emailSignalList.includes(s)),
+      ...twitterSignals,
+      ...emailSignalList.filter((s) => !twitterSignals.includes(s as TwitterSignal)),
     ]
 
     const daysSince = mostRecent
       ? Math.floor((NOW - new Date(mostRecent).getTime()) / (1000 * 60 * 60 * 24))
       : 999
 
-    // ── Scoring ───────────────────────────────────────────────────────────────
-    const baseScore    = sortedContacts.reduce((n, c) => n + c.interactionScore, 0)
-    const contactBonus = (contactCount - 1) * 1.5                       // +1.5 per extra contact
-    const recentBonus  = Math.min(recentInteractions, 5) * 0.4          // +0.4 per recent ix, cap 5
-    const signalBonus  = emailSignalList.length * 0.8 + twitterSignals.length * 0.5
-    const raw          = baseScore + contactBonus + recentBonus + signalBonus
+    // ── Collect signal evidence (real tweet snippets) ─────────────────────────
+    const twitterEvidence = collectTwitterEvidence(sortedContacts)
+    const emailEvidence: SignalEvidence[] = (
+      [...new Set(subjects)].slice(0, 3)
+        .filter(Boolean)
+        .map((subject, i) => ({
+          signal:     emailSignalList[i] ?? "email",
+          snippet:    subject,
+          confidence: "medium" as const,
+          source:     "email" as const,
+        }))
+    )
+    const signalEvidence = [...twitterEvidence, ...emailEvidence]
 
-    const recencyMult  = daysSince <= 7  ? 1.25
-                       : daysSince <= 14 ? 1.15
-                       : daysSince <= 30 ? 1.05
-                       : 1.0
-    // Strong multiplier when BOTH cluster depth AND signals are present
-    const depthMult    = (contactCount >= 2 || hasMeetings) && allSignals.length >= 1 ? 1.3 : 1.0
+    // ── New strength-weighted scoring ─────────────────────────────────────────
+    const baseScore         = sortedContacts.reduce((n, c) => n + c.interactionScore, 0)
+    const signalScore       = computeSignalScore(sortedContacts, emailSignalList)
+    const totalEmails       = sortedContacts.reduce((n, c) => n + c.sentCount + c.receivedCount, 0)
+    const relationshipScore = computeRelationshipScore(hasMeetings, totalEmails, contactCount, recentInteractions)
+
+    const recencyMult = daysSince <= 7  ? 1.25
+                      : daysSince <= 14 ? 1.15
+                      : daysSince <= 30 ? 1.05
+                      : 1.0
 
     // ── Fit gate ──────────────────────────────────────────────────────────────
     const fitTier = scoreCompanyFit(
@@ -987,30 +1187,44 @@ export function buildContactOpportunities(
       profile,
     )
 
+    const fitMult     = fitTier === "low" ? 0 : FIT_MULTIPLIER[fitTier]
+    const raw         = baseScore + signalScore + relationshipScore
+    const finalScore  = Math.round(raw * recencyMult * fitMult * 100) / 100
+
+    const breakdown: ScoreBreakdown = {
+      baseScore:         Math.round(baseScore * 100) / 100,
+      signalScore:       Math.round(signalScore * 100) / 100,
+      relationshipScore: Math.round(relationshipScore * 100) / 100,
+      recencyMult,
+      fitMult,
+      total:             finalScore,
+    }
+
+    const belowThreshold = fitTier !== "low" && finalScore < MIN_OPPORTUNITY_SCORE
+
     if (debugLog) {
-      const isLow = fitTier === "low"
       debugLog.push({
-        company:         topContact.companyName,
-        domain:          topContact.domain,
+        company:          topContact.companyName,
+        domain:           topContact.domain,
         contactCount,
-        baseScore:       Math.round(baseScore * 100) / 100,
-        emailSignals:    emailSignalList,
+        baseScore:        breakdown.baseScore,
+        emailSignals:     emailSignalList,
         twitterSignals,
-        fitDecision:     fitTier,
-        rejectionReason: isLow
-          ? `scoreCompanyFit returned "low" for "${topContact.companyName}" (${topContact.domain})`
-          : null,
-        finalScore: isLow
-          ? 0
-          : Math.round(raw * recencyMult * depthMult * FIT_MULTIPLIER[fitTier] * 100) / 100,
-        included: !isLow,
+        fitDecision:      fitTier,
+        rejectionReason:
+          fitTier === "low"
+            ? `ICP filter: "${topContact.companyName}" (${topContact.domain})`
+            : belowThreshold
+              ? `Score ${finalScore} < MIN_OPPORTUNITY_SCORE (${MIN_OPPORTUNITY_SCORE})`
+              : null,
+        scoreBreakdown:   breakdown,
+        finalScore,
+        included:         fitTier !== "low" && !belowThreshold,
+        belowThreshold,
       })
     }
 
-    // Exclude companies that don't fit the agency's target market
-    if (fitTier === "low") continue
-
-    const score = Math.round(raw * recencyMult * depthMult * FIT_MULTIPLIER[fitTier] * 100) / 100
+    if (fitTier === "low" || belowThreshold) continue
 
     rows.push({
       company:            topContact.companyName,
@@ -1018,7 +1232,7 @@ export function buildContactOpportunities(
       contactCount,
       recentInteractions,
       signals:            allSignals,
-      score,
+      score:              finalScore,
       whyNow:             narrativeCompanyWhyNow({
         contactCount,
         recentInteractions,
@@ -1026,6 +1240,7 @@ export function buildContactOpportunities(
         hasMeetings,
         emailSignals:   emailSignalList,
         twitterSignals,
+        signalEvidence,
       }),
       contacts:           sortedContacts.map((c) => ({
         email:           c.email,
@@ -1038,6 +1253,8 @@ export function buildContactOpportunities(
       subjects:           [...new Set(subjects)].slice(0, 3),
       mostRecent,
       fitTier,
+      signalEvidence,
+      scoreBreakdown:     breakdown,
     })
   }
 
@@ -1075,16 +1292,18 @@ const MAX_PUBLIC_SIGNAL_RESULTS = 5
 
 /** Intent priority for picking the "primary" signal on a public-signal card. */
 const SIGNAL_PRIORITY_PUBLIC: TwitterSignal[] = [
-  "fundraising", "launching", "announcing", "hiring", "growth", "building",
+  "recommendation", "fundraising", "pain", "launching", "announcing", "hiring", "growth", "building",
 ]
 
 const PUBLIC_SIGNAL_DESCRIPTIONS: Record<TwitterSignal, string> = {
-  fundraising: "closing a funding round",
-  launching:   "about to launch publicly",
-  announcing:  "about to make a major announcement",
-  hiring:      "expanding their team",
-  growth:      "showing strong growth and traction",
-  building:    "actively building something new",
+  recommendation: "actively looking for agency or service support",
+  fundraising:    "closing a funding round",
+  pain:           "experiencing a problem that needs solving",
+  launching:      "about to launch publicly",
+  announcing:     "about to make a major announcement",
+  hiring:         "expanding their team",
+  growth:         "showing strong growth and traction",
+  building:       "actively building something new",
 }
 
 interface PublicSignalWhyNowCtx {
@@ -1093,16 +1312,33 @@ interface PublicSignalWhyNowCtx {
   hasEmailHistory: boolean
   hasMeetings:     boolean
   confidence:      "high" | "medium"
+  signalEvidence:  SignalEvidence[]
 }
 
 function narrativePublicSignalWhyNow(ctx: PublicSignalWhyNowCtx): string {
-  const { signal, signals, hasEmailHistory, hasMeetings, confidence } = ctx
+  const { signal, signals, hasEmailHistory, hasMeetings, confidence, signalEvidence } = ctx
 
-  const primaryDesc = PUBLIC_SIGNAL_DESCRIPTIONS[signal] ?? "showing strong signals"
+  // ── Direct buying / pain signals: quote the actual tweet ─────────────────
+  const directEvidence = signalEvidence.find(
+    (e) => (e.signal === "recommendation" || e.signal === "pain") && e.source === "twitter",
+  )
+  if (directEvidence) {
+    const quote    = directEvidence.snippet.slice(0, 120)
+    const relation = hasMeetings     ? "You've met — reconnect now."
+                   : hasEmailHistory ? "You're already in their inbox — reach out while the need is fresh."
+                   : "No prior contact — cold outreach justified by an explicit need."
+    return `They posted: "${quote}" — ${relation}`
+  }
 
-  // ── Activity line ─────────────────────────────────────────────────────────
+  // ── High-intent Twitter signal with a real snippet ────────────────────────
+  const primaryEvidence = signalEvidence.find((e) => e.signal === signal && e.source === "twitter")
+  const primaryDesc     = PUBLIC_SIGNAL_DESCRIPTIONS[signal] ?? "showing strong signals"
+
   let activity: string
-  if (signals.length >= 3) {
+  if (primaryEvidence) {
+    const quote = primaryEvidence.snippet.slice(0, 100)
+    activity    = `"${quote}" — ${primaryDesc}`
+  } else if (signals.length >= 3) {
     activity = `Multiple converging signals — ${primaryDesc}`
   } else if (signals.length === 2) {
     const second     = signals.find((s) => s !== signal)
@@ -1111,10 +1347,11 @@ function narrativePublicSignalWhyNow(ctx: PublicSignalWhyNowCtx): string {
   } else {
     activity = primaryDesc
   }
-  // Capitalise
+
+  // Capitalise first char
   activity = activity.charAt(0).toUpperCase() + activity.slice(1)
 
-  // ── Proximity + recommendation ────────────────────────────────────────────
+  // ── Proximity closing ─────────────────────────────────────────────────────
   let closing: string
   if (hasMeetings) {
     closing = "you have a warm relationship here — reconnect while momentum is high"
@@ -1197,12 +1434,45 @@ export function buildPublicSignalOpportunities(
     const hasEmailHistory = sortedContacts.some((c) => c.sentCount + c.receivedCount > 0)
     const hasMeetings     = sortedContacts.some((c) => c.meetingCount > 0)
     const emailCount      = sortedContacts.reduce((n, c) => n + c.sentCount + c.receivedCount, 0)
+    const contactCount    = sortedContacts.length
+    const recentInteractions = sortedContacts.filter((c) => {
+      if (!c.lastInteraction) return false
+      return (Date.now() - new Date(c.lastInteraction).getTime()) / 86_400_000 <= 14
+    }).length
 
-    // ── Scoring ───────────────────────────────────────────────────────────────
-    const base       = allSignals.length * 2.5
-    const confMult   = confidence === "high" ? 1.2 : 1.0
-    const proxMult   = hasMeetings ? 1.7 : hasEmailHistory ? 1.4 : 1.0
-    const score      = Math.round(base * confMult * proxMult * FIT_MULTIPLIER[fitTier] * 100) / 100
+    // ── Evidence (best tweet snippet per signal type) ─────────────────────────
+    const signalEvidence = collectTwitterEvidence(sortedContacts)
+
+    // ── Strength-weighted scoring (Twitter signals only — no email signals) ───
+    const baseScore         = sortedContacts.reduce((n, c) => n + c.interactionScore, 0)
+    const signalScore       = computeSignalScore(sortedContacts, [])
+    const totalEmails       = sortedContacts.reduce((n, c) => n + c.sentCount + c.receivedCount, 0)
+    const relationshipScore = computeRelationshipScore(hasMeetings, totalEmails, contactCount, recentInteractions)
+
+    const recencyMult = (() => {
+      const latest = sortedContacts
+        .map((c) => c.lastInteraction ? new Date(c.lastInteraction).getTime() : 0)
+        .reduce((a, b) => Math.max(a, b), 0)
+      if (!latest) return 1.0
+      const daysSince = (Date.now() - latest) / 86_400_000
+      return daysSince <= 7 ? 1.25 : daysSince <= 14 ? 1.15 : daysSince <= 30 ? 1.05 : 1.0
+    })()
+    const fitMult = FIT_MULTIPLIER[fitTier]
+
+    const raw        = baseScore + signalScore + relationshipScore
+    const finalScore = Math.round(raw * recencyMult * fitMult * 100) / 100
+
+    // Apply minimum score gate (same as email pipeline)
+    if (finalScore < MIN_OPPORTUNITY_SCORE) continue
+
+    const breakdown: ScoreBreakdown = {
+      baseScore,
+      signalScore,
+      relationshipScore,
+      recencyMult,
+      fitMult,
+      total: finalScore,
+    }
 
     rows.push({
       type:       "public_signal",
@@ -1211,7 +1481,7 @@ export function buildPublicSignalOpportunities(
       signal:     primarySignal,
       signals:    allSignals,
       confidence,
-      score,
+      score:      finalScore,
       fitTier,
       whyNow:     narrativePublicSignalWhyNow({
         signal: primarySignal,
@@ -1219,6 +1489,7 @@ export function buildPublicSignalOpportunities(
         hasEmailHistory,
         hasMeetings,
         confidence,
+        signalEvidence,
       }),
       contacts:   sortedContacts
         .filter((c) => c.twitterData)
@@ -1230,8 +1501,10 @@ export function buildPublicSignalOpportunities(
           bio:            c.twitterData!.bio,
           topics:         c.twitterData!.topics,
         })),
-      proximity: { hasEmailHistory, hasMeetings, emailCount },
-      topics:     [...topicSet],
+      proximity:      { hasEmailHistory, hasMeetings, emailCount },
+      topics:         [...topicSet],
+      signalEvidence,
+      scoreBreakdown: breakdown,
     })
   }
 
