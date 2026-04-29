@@ -107,6 +107,16 @@ export interface RadarEvent {
    * Always an array (empty until linked).
    */
   relatedSurfaces: SurfaceRef[]
+  /**
+   * Count of attendees who are directly reachable (have email history or meetings).
+   * Events with 0 reachable attendees are dropped.
+   */
+  reachableCount: number
+  /**
+   * Single concrete suggested action for this event — shown prominently on the card.
+   * Example: "Message Alex before the event — suggest meeting there."
+   */
+  suggestedAction: string
 }
 
 // ---------------------------------------------------------------------------
@@ -422,6 +432,65 @@ function computeScore(attendees: EventAttendee[], signals: EventSignalSummary[])
   const raw = base + signalBonus + warmthBonus + speakerBoost
   // Normalise: ~5 warm contacts with mixed signals ≈ raw 120 → score ~80
   return Math.min(100, Math.round(raw * 0.65))
+}
+
+// ---------------------------------------------------------------------------
+// Suggested action generation
+// ---------------------------------------------------------------------------
+
+/**
+ * Generates a single, concrete action for the event card.
+ * Prioritises the warmest, most reachable attendee.
+ *
+ * Examples:
+ *   "Message Sarah before the event — you've already met."
+ *   "Ask if they're attending — it's a natural reason to reconnect."
+ *   "Reach out to the speaker before the event — mention you'll be there."
+ */
+function buildSuggestedAction(
+  attendees:       EventAttendee[],
+  reachable:       EventAttendee[],
+  estimatedDate:   string | null,
+): string {
+  const speakers  = reachable.filter((a) => a.role === "speaker")
+  const warm      = reachable.filter((a) => attendeeWarmth(a) === "warm")
+  const firstName = (a: EventAttendee) =>
+    a.name?.split(" ")[0] ?? a.email.split("@")[0]
+
+  const timing = estimatedDate ? ` before ${estimatedDate}` : " before the event"
+
+  // Known speaker you have a warm relationship with → highest ROI
+  const warmSpeaker = speakers.find((s) => warm.includes(s))
+  if (warmSpeaker) {
+    return `Message ${firstName(warmSpeaker)}${timing} — you've already met, easy to reconnect around their talk.`
+  }
+
+  // Any speaker with email history
+  if (speakers.length > 0) {
+    return `Reach out to ${firstName(speakers[0])}${timing} — mention you'll be there and want to catch their talk.`
+  }
+
+  // Multiple warm contacts → schedule catch-ups
+  if (warm.length >= 2) {
+    return `Message ${warm.slice(0, 2).map(firstName).join(" and ")}${timing} — suggest a quick catch-up at the event.`
+  }
+
+  // Single warm contact
+  if (warm.length === 1) {
+    return `Message ${firstName(warm[0])}${timing} — suggest meeting there.`
+  }
+
+  // Email-only contacts (no meetings) → lower-friction ask
+  if (reachable.length >= 2) {
+    return `Ask your ${reachable.length} contacts if they're attending — it's a natural reason to reconnect.`
+  }
+  if (reachable.length === 1) {
+    return `Ask ${firstName(reachable[0])} if they're attending — a natural, low-pressure way to reconnect.`
+  }
+
+  // Fallback (shouldn't normally reach here after gating)
+  const total = attendees.length
+  return `${total} ${total === 1 ? "contact is" : "contacts are"} going — reach out before the event.`
 }
 
 // ---------------------------------------------------------------------------
@@ -752,6 +821,10 @@ export function buildEventRadar(contacts: Contact[]): RadarEvent[] {
 
       const td = contact.twitterData!
 
+      // Skip company / brand accounts — we only want individual humans.
+      // Company accounts attending events is noise, not a personal connection.
+      if (td.source === "company") continue
+
       // Accumulate signals
       for (const s of td.signals ?? []) {
         signalCounts.set(s, (signalCounts.get(s) ?? 0) + 1)
@@ -782,12 +855,21 @@ export function buildEventRadar(contacts: Contact[]): RadarEvent[] {
     const location      = extractLocation(allText)
     const hasDateOrLocation = estimatedDate !== null || location !== null
 
+    // ── Reachable attendees ──────────────────────────────────────────────────
+    // "Reachable" = has an email history or has met in person.
+    // Events are only shown when you can actually reach out to someone.
+    const reachableAttendees = attendees.filter((a) => {
+      const c = contactByEmail.get(a.email)
+      return c && (c.meetingCount > 0 || c.sentCount + c.receivedCount > 0)
+    })
+
     // ── Validation gate ──────────────────────────────────────────────────────
-    // An event is only surfaced if there is hard social proof (2+ distinct people
-    // independently mentioning it) OR concrete ground-truth evidence (an explicit
-    // date or location in the tweets).  A single person mentioning an event name
-    // with no supporting detail is indistinguishable from noise.
-    if (distinctCount < 2 && !hasDateOrLocation) continue
+    // Require 2+ reachable people for the same event (hard social proof from
+    // people you can actually contact), OR 1 reachable person + an explicit
+    // date or location in the tweets (concrete ground-truth evidence).
+    // Events with 0 reachable attendees are dropped entirely — they are noise.
+    if (reachableAttendees.length === 0) continue
+    if (reachableAttendees.length < 2 && !hasDateOrLocation) continue
 
     // ── Sort attendees warm-first ────────────────────────────────────────────
     attendees.sort((a, b) => {
@@ -827,12 +909,14 @@ export function buildEventRadar(contacts: Contact[]): RadarEvent[] {
     // ── Source evidence ───────────────────────────────────────────────────────
     const sourceEvidence = collectSourceEvidence(mentions, attendees, estimatedDate, location)
 
+    const suggestedAction = buildSuggestedAction(attendees, reachableAttendees, estimatedDate)
+
     events.push({
-      id:            key.replace(/\s+/g, "-"),
-      name:          canonical,
-      mentionCount:  mentions.length,
-      attendeeCount: attendees.length,
-      people:        attendees,
+      id:              key.replace(/\s+/g, "-"),
+      name:            canonical,
+      mentionCount:    mentions.length,
+      attendeeCount:   attendees.length,
+      people:          attendees,
       signals,
       estimatedDate,
       location,
@@ -843,6 +927,8 @@ export function buildEventRadar(contacts: Contact[]): RadarEvent[] {
       description,
       sourceEvidence,
       relatedSurfaces: [],   // filled in by linkEventsToSurfaces() in the page
+      reachableCount:  reachableAttendees.length,
+      suggestedAction,
     })
   }
 

@@ -201,9 +201,11 @@ export async function POST() {
 
   const durationMs = Date.now() - started
 
-  const xDroppedByScore = xDebug.filter((e) => !e.included && e.skipReason?.startsWith("score"))
-  const xDroppedByICP   = xDebug.filter((e) => !e.included && !e.skipReason?.startsWith("score") && e.skipReason !== "covered by email pipeline")
-  const xCoveredByEmail = xDebug.filter((e) => e.skipReason === "covered by email pipeline")
+  const xDroppedByScore        = xDebug.filter((e) => !e.included && e.skipReason?.startsWith("score"))
+  const xDroppedByICP          = xDebug.filter((e) => !e.included && !e.skipReason?.startsWith("score") && e.skipReason !== "covered by email pipeline" && !e.skipReason?.includes("reachability") && !e.skipReason?.includes("signal tier") && !e.skipReason?.includes("no relationship"))
+  const xCoveredByEmail        = xDebug.filter((e) => e.skipReason === "covered by email pipeline")
+  const xDroppedNoRelationship = xDebug.filter((e) => !e.included && (e.skipReason?.includes("reachability") || e.skipReason?.includes("no relationship")))
+  const xDroppedLowTier        = xDebug.filter((e) => !e.included && e.skipReason?.includes("signal tier"))
 
   // ── Console summary ────────────────────────────────────────────────────────
   console.log(
@@ -270,6 +272,19 @@ export async function POST() {
     xOpportunitiesFound:              publicSignalOpportunities.length,
     droppedDueToScore:                xDroppedByScore.length,
     droppedDueToICP:                  xDroppedByICP.length,
+    droppedNoRelationship:            xDroppedNoRelationship.length,
+    droppedLowTier:                   xDroppedLowTier.length,
+
+    // ── Action breakdown across all opportunities ─────────────────────────────
+    actionBreakdown: (() => {
+      const allOpps = [...opportunities, ...publicSignalOpportunities]
+      const counts: Record<string, number> = {}
+      for (const o of allOpps) {
+        const a = o.action ?? "unknown"
+        counts[a] = (counts[a] ?? 0) + 1
+      }
+      return counts
+    })(),
 
     // ── X signal stats + per-contact detail ──────────────────────────────────
     xStats: {

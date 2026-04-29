@@ -337,7 +337,22 @@ function EventCard({ event }: { event: RadarEvent }) {
         </button>
       </div>
 
-      {/* ── Example tweets — real evidence BEFORE the AI summary ──────────── */}
+      {/* ── Suggested action — top CTA ────────────────────────────────────── */}
+      <div className="border-t border-border px-4 py-3">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/30 mb-1">
+          Suggested action
+          {event.reachableCount > 0 && (
+            <span className="ml-1.5 font-normal normal-case tracking-normal text-muted-foreground/40">
+              · {event.reachableCount} reachable {event.reachableCount === 1 ? "contact" : "contacts"}
+            </span>
+          )}
+        </p>
+        <p className="text-[13px] leading-snug font-semibold text-foreground/90">
+          {event.suggestedAction}
+        </p>
+      </div>
+
+      {/* ── Example tweets — real evidence ───────────────────────────────── */}
       <SourceEvidenceSection evidence={event.sourceEvidence} people={event.people} />
 
       {/* ── Why attend ─────────────────────────────────────────────────────── */}

@@ -165,6 +165,19 @@ export type BuyerLikelihood = "high" | "medium" | "low"
  */
 export type OpportunityType = "client" | "network" | "hybrid"
 
+/**
+ * Single recommended action for this opportunity.
+ *
+ *   "reach_out"     — you have a direct email path + active signal
+ *   "reconnect"     — you have history but it has gone quiet (>60d)
+ *   "ask_for_intro" — warm path exists but no direct email history
+ *   "meet"          — strong relationship + high-intent signal → propose a call
+ *   "track"         — no reachable path right now; watch but don't act
+ *
+ * "track" items are excluded from the main Opportunities page.
+ */
+export type OpportunityAction = "reach_out" | "reconnect" | "ask_for_intro" | "meet" | "track"
+
 export interface BuyerClassification {
   companySize:     CompanySize
   buyerLikelihood: BuyerLikelihood
@@ -765,6 +778,16 @@ export interface CompanyOpportunityRow {
   buyerReason:        string
   /** Recommended action: sell (client), connect (network), or both (hybrid). */
   opportunityType:    OpportunityType
+  /**
+   * Single recommended next action.
+   * "track" items are hidden on the main Opportunities page.
+   */
+  action:             OpportunityAction
+  /**
+   * Leverage score (0–100): how easy is it to act on this right now?
+   * Primary dimension is reachability (met > email > X-only).
+   */
+  leverageScore:      number
 }
 
 /** @deprecated Use CompanyOpportunityRow */
@@ -840,6 +863,10 @@ export interface PublicSignalOpportunityRow {
   buyerReason:     string
   /** Recommended action: sell (client), connect (network), or both (hybrid). */
   opportunityType: OpportunityType
+  /** Single recommended next action. "track" items are hidden on the main page. */
+  action:          OpportunityAction
+  /** Leverage score (0–100): reachability × relationship × recency × signal. */
+  leverageScore:   number
 }
 
 /**
@@ -1647,6 +1674,141 @@ function narrativeCompanyWhyNow(ctx: CompanyWhyNowCtx): string {
 }
 
 // ---------------------------------------------------------------------------
+// Action + Leverage helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Derives the recommended single action for a contact-based opportunity.
+ *
+ * Resolution order (first match wins):
+ *   "meet"         — you have meetings + recent high-intent signal
+ *   "reconnect"    — you have history but it has gone quiet (>60d)
+ *   "reach_out"    — warm/strong relationship with a direct email path
+ *   "track"        — cold, no email history, no clear path
+ */
+function deriveContactAction(params: {
+  hasMeetings:          boolean
+  daysSince:            number
+  totalEmails:          number
+  emailSignals:         string[]
+  twitterSignals:       TwitterSignal[]
+  relationshipStrength: RelationshipStrength
+}): OpportunityAction {
+  const { hasMeetings, daysSince, totalEmails, emailSignals, twitterSignals, relationshipStrength } = params
+
+  const allSigs      = [...emailSignals, ...twitterSignals]
+  const hasHighSignal = allSigs.some((s) =>
+    ["recommendation", "pain", "agency", "budget", "launching", "fundraising"].includes(s),
+  )
+
+  // "meet" — real in-person history + active high-intent signal, still in window
+  if (hasMeetings && daysSince <= 30 && hasHighSignal) return "meet"
+
+  // "reconnect" — had a relationship but it has gone quiet
+  if ((totalEmails > 0 || hasMeetings) && daysSince > 60) return "reconnect"
+
+  // "reach_out" — warm/strong relationship or active email thread with signal
+  if (relationshipStrength === "strong" || relationshipStrength === "warm") return "reach_out"
+  if (totalEmails > 0 && (emailSignals.length > 0 || twitterSignals.length > 0)) return "reach_out"
+
+  // "track" — cold contact, no email history
+  if (totalEmails === 0 && !hasMeetings) return "track"
+
+  return "reach_out"
+}
+
+/**
+ * Derives the recommended single action for a public-signal opportunity.
+ *
+ * Resolution order (first match wins):
+ *   "meet"          — prior calendar meeting + active high-intent signal
+ *   "reconnect"     — has history (email or meeting) but gone quiet (>60d)
+ *   "reach_out"     — direct email path exists + warm/strong relationship
+ *   "ask_for_intro" — warm relationship but no direct email path
+ *   "track"         — cold contact, no reachable path
+ */
+function derivePublicSignalAction(params: {
+  hasMeetings:          boolean
+  hasEmailHistory:      boolean
+  daysSince:            number
+  totalEmails:          number
+  relationshipStrength: RelationshipStrength
+  signals:              TwitterSignal[]
+}): OpportunityAction {
+  const { hasMeetings, hasEmailHistory, daysSince, totalEmails, relationshipStrength, signals } = params
+
+  const hasHighSignal = signals.some((s) =>
+    ["recommendation", "pain", "launching", "fundraising"].includes(s),
+  )
+
+  // "meet" — calendar history + active high signal
+  if (hasMeetings && daysSince <= 30 && hasHighSignal) return "meet"
+
+  // "reconnect" — has history but gone quiet
+  if ((hasEmailHistory || hasMeetings) && daysSince > 60) return "reconnect"
+
+  // "reach_out" — email path + warm relationship
+  if (hasEmailHistory && (relationshipStrength === "warm" || relationshipStrength === "strong")) {
+    return "reach_out"
+  }
+  if (hasEmailHistory) return "reach_out"
+
+  // "ask_for_intro" — warm but no email path (e.g. X-only with meeting/relationship signal)
+  if (relationshipStrength === "warm" || relationshipStrength === "strong") return "ask_for_intro"
+
+  // "track" — no reachable path
+  return "track"
+}
+
+/**
+ * Computes a leverage score (0–100) reflecting how actionable this opportunity
+ * is right now, with reachability as the dominant dimension.
+ *
+ * Dimensions:
+ *   1. Reachability (0–40)  — met > deep email > some email > X-only
+ *   2. Relationship (0–30)  — strong > warm > cold
+ *   3. Recency (0–20)       — 7d peak, penalty >90d
+ *   4. Signal quality (0–10) — high-intent signals add a bonus
+ */
+function computeLeverageScore(params: {
+  hasMeetings:          boolean
+  hasEmailHistory:      boolean
+  daysSince:            number
+  totalEmails:          number
+  relationshipStrength: RelationshipStrength
+  signals:              string[]
+}): number {
+  const { hasMeetings, hasEmailHistory, daysSince, totalEmails, relationshipStrength, signals } = params
+
+  // ── 1. Reachability ───────────────────────────────────────────────────────────
+  let score = 0
+  if      (hasMeetings)          score += 40
+  else if (totalEmails > 10)     score += 30
+  else if (hasEmailHistory)      score += 20
+  // X-only / cold = 0
+
+  // ── 2. Relationship strength ──────────────────────────────────────────────────
+  if      (relationshipStrength === "strong") score += 30
+  else if (relationshipStrength === "warm")   score += 20
+  else                                        score += 5
+
+  // ── 3. Recency ────────────────────────────────────────────────────────────────
+  if      (daysSince <= 7)  score += 20
+  else if (daysSince <= 14) score += 15
+  else if (daysSince <= 30) score += 8
+  else if (daysSince > 90)  score -= 10
+
+  // ── 4. Signal quality bonus ───────────────────────────────────────────────────
+  const highSigs = signals.filter((s) =>
+    ["recommendation", "pain", "launching", "fundraising", "agency", "budget"].includes(s),
+  )
+  if      (highSigs.length >= 2) score += 10
+  else if (highSigs.length >= 1) score += 6
+
+  return Math.min(100, Math.max(0, score))
+}
+
+// ---------------------------------------------------------------------------
 // Opportunities from contact signals
 // ---------------------------------------------------------------------------
 
@@ -1903,6 +2065,24 @@ export function buildContactOpportunities(
       relationshipContext: relCtx,
     })
 
+    const contactAction = deriveContactAction({
+      hasMeetings,
+      daysSince,
+      totalEmails,
+      emailSignals:         emailSignalList,
+      twitterSignals,
+      relationshipStrength: topRelStrength,
+    })
+
+    const contactLevScore = computeLeverageScore({
+      hasMeetings,
+      hasEmailHistory: totalEmails > 0,
+      daysSince,
+      totalEmails,
+      relationshipStrength: topRelStrength,
+      signals:              allSignals,
+    })
+
     rows.push({
       company:             topContact.companyName,
       domain:              topContact.domain,
@@ -1940,6 +2120,8 @@ export function buildContactOpportunities(
       buyerLikelihood:    buyerClass.buyerLikelihood,
       buyerReason:        buyerClass.reason,
       opportunityType,
+      action:             contactAction,
+      leverageScore:      contactLevScore,
     })
   }
 
@@ -2282,6 +2464,15 @@ export function buildPublicSignalOpportunities(
       continue
     }
 
+    // ── Gate 6: Reachability — no relationship edge → drop ────────────────────
+    // Every surfaced opportunity must have at least one real path to the person.
+    // A tweet from a cold contact with no email or meeting history is noise.
+    // Warm/strong relationship satisfies this even without direct email.
+    if (!hasEmailHistory && !hasMeetings && !hasRelationship) {
+      debugLog?.push(makeDropDebug("no reachability — cold contact, no email or meeting history"))
+      continue
+    }
+
     // ── Evidence ───────────────────────────────────────────────────────────
     const signalEvidence = collectTwitterEvidence(sortedContacts)
 
@@ -2403,6 +2594,24 @@ export function buildPublicSignalOpportunities(
       relationshipContext: relCtxP,
     })
 
+    const pubAction = derivePublicSignalAction({
+      hasMeetings,
+      hasEmailHistory,
+      daysSince:            pubDaysSince,
+      totalEmails:          emailCount,
+      relationshipStrength: pubRelStrength,
+      signals:              allSignals,
+    })
+
+    const pubLevScore = computeLeverageScore({
+      hasMeetings,
+      hasEmailHistory,
+      daysSince:            pubDaysSince,
+      totalEmails:          emailCount,
+      relationshipStrength: pubRelStrength,
+      signals:              allSignals,
+    })
+
     rows.push({
       type:         "public_signal",
       company:      topContact.companyName,
@@ -2444,6 +2653,8 @@ export function buildPublicSignalOpportunities(
       buyerLikelihood: buyerClass.buyerLikelihood,
       buyerReason:     buyerClass.reason,
       opportunityType: classifyOpportunityType(buyerClass.buyerLikelihood, allSignals),
+      action:          pubAction,
+      leverageScore:   pubLevScore,
     })
   }
 

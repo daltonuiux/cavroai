@@ -33,7 +33,7 @@ export default async function OpportunitiesRoute() {
         Opportunities
       </h1>
       <p className="mt-0.5 text-[12px] text-muted-foreground">
-        Surfaced from your real network — split by whether to sell or simply connect
+        Ranked by how actionable they are right now — deal opportunities and networking paths, all from real relationships
       </p>
     </div>
   )

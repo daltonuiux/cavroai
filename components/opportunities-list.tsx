@@ -4,7 +4,7 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import type { EvidenceItem } from "@/lib/types"
-import type { CompanyOpportunityRow, PublicSignalOpportunityRow, CompanySize, BuyerLikelihood, OpportunityType, RelationshipStrength } from "@/lib/contact-graph"
+import type { CompanyOpportunityRow, PublicSignalOpportunityRow, CompanySize, BuyerLikelihood, OpportunityType, RelationshipStrength, OpportunityAction } from "@/lib/contact-graph"
 import { signalLabels } from "@/lib/contact-graph"
 
 // ---------------------------------------------------------------------------
@@ -392,7 +392,7 @@ export function OpportunitiesPage({
   const [dismissedClients, setDismissedClients] = useState<Set<string>>(new Set())
   const visibleClients = clientRows.filter((r) => !dismissedClients.has(r.id))
 
-  // ── Tag and split opportunities into client vs network buckets ──────────────
+  // ── Tag and split opportunities into deal vs network buckets ───────────────
   type TaggedOpp =
     | { kind: "contact"; row: CompanyOpportunityRow }
     | { kind: "signal";  row: PublicSignalOpportunityRow }
@@ -402,17 +402,20 @@ export function OpportunitiesPage({
     ...publicSignalOpportunities.map((row): TaggedOpp => ({ kind: "signal", row })),
   ]
 
-  // "client" + "hybrid" → sell section, sorted by actionability (actionScore desc)
-  const clientOpps = allOpps
+  // Exclude "track" — no actionable path exists right now
+  const actionableOpps = allOpps.filter((o) => o.row.action !== "track")
+
+  // "client" + "hybrid" + buyerLikelihood high/medium → Deal Opportunities
+  const dealOpps = actionableOpps
     .filter((o) => o.row.opportunityType !== "network")
     .sort((a, b) => b.row.actionScore - a.row.actionScore)
 
-  // "network" → connect section, sorted by actionability (actionScore desc)
-  const networkOpps = allOpps
+  // "network" + buyerLikelihood low → Networking Opportunities
+  const networkOpps = actionableOpps
     .filter((o) => o.row.opportunityType === "network")
     .sort((a, b) => b.row.actionScore - a.row.actionScore)
 
-  const hasContactOpps = clientOpps.length > 0 || networkOpps.length > 0
+  const hasContactOpps = dealOpps.length > 0 || networkOpps.length > 0
 
   function renderOpp(opp: TaggedOpp) {
     return opp.kind === "contact"
@@ -423,33 +426,39 @@ export function OpportunitiesPage({
   return (
     <div className="flex flex-col gap-10">
 
-      {/* ── Section 1: Client Opportunities ──────────────────────────────────── */}
-      {clientOpps.length > 0 && (
+      {/* ── Section 1: Deal Opportunities ────────────────────────────────────── */}
+      {dealOpps.length > 0 && (
         <div className="flex flex-col gap-2">
           <div className="flex items-start justify-between gap-3 px-0.5 mb-1">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50">
-                Client Opportunities
+                Deal Opportunities
+                <span className="ml-1.5 font-normal tabular-nums text-muted-foreground/35">
+                  {dealOpps.length}
+                </span>
               </p>
               <p className="text-[11px] text-muted-foreground/40 mt-0.5">
-                Companies you can realistically sell to
+                Companies you can realistically sell to — ranked by how actionable they are right now
               </p>
             </div>
             <RebuildButton />
           </div>
-          {clientOpps.map(renderOpp)}
+          {dealOpps.map(renderOpp)}
         </div>
       )}
 
-      {/* ── Section 2: Network Opportunities ─────────────────────────────────── */}
+      {/* ── Section 2: Networking Opportunities ──────────────────────────────── */}
       {networkOpps.length > 0 && (
         <div className="flex flex-col gap-2">
           <div className="px-0.5 mb-1">
             <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50">
-              Network Opportunities
+              Networking Opportunities
+              <span className="ml-1.5 font-normal tabular-nums text-muted-foreground/35">
+                {networkOpps.length}
+              </span>
             </p>
             <p className="text-[11px] text-muted-foreground/40 mt-0.5">
-              High-value people and companies to build relationships with
+              Warm paths to valuable people — connect now while there's a reason
             </p>
           </div>
           {networkOpps.map(renderOpp)}
@@ -528,6 +537,9 @@ interface RebuildResult {
   publicSignalOpportunitiesCreated: number
   droppedDueToScore:                number
   droppedDueToICP:                  number
+  droppedNoRelationship?:           number
+  droppedLowTier?:                  number
+  actionBreakdown?:                 Record<string, number>
   durationMs:                       number
   xStats?: {
     contactsWithX:       number
@@ -610,16 +622,29 @@ function RebuildButton() {
           {/* X signal breakdown */}
           <div className="text-[10px] text-muted-foreground/40 space-y-0.5 pl-0.5">
             {result.xStats && (
-              <>
-                <p>· {result.xStats.contactsWithX} contacts with X data · {result.xStats.contactsWithSignals} with intent signals · {result.xStats.signalsLoaded} signals loaded</p>
-              </>
+              <p>· {result.xStats.contactsWithX} contacts with X data · {result.xStats.contactsWithSignals} with intent signals · {result.xStats.signalsLoaded} signals loaded</p>
             )}
             <p>
               · {result.emailOpportunitiesFound} email-based · {result.publicSignalOpportunitiesCreated} X-signal
               {(result.droppedDueToScore > 0 || result.droppedDueToICP > 0) && (
                 <> · {result.droppedDueToScore} dropped (score) · {result.droppedDueToICP} dropped (ICP)</>
               )}
+              {(result.droppedNoRelationship ?? 0) > 0 && (
+                <> · {result.droppedNoRelationship} dropped (no relationship)</>
+              )}
+              {(result.droppedLowTier ?? 0) > 0 && (
+                <> · {result.droppedLowTier} dropped (low signal tier)</>
+              )}
             </p>
+            {result.actionBreakdown && Object.keys(result.actionBreakdown).length > 0 && (
+              <p>
+                · actions:{" "}
+                {Object.entries(result.actionBreakdown)
+                  .filter(([k]) => k !== "track")
+                  .map(([k, v]) => `${v} ${k.replace("_", "-")}`)
+                  .join(" · ")}
+              </p>
+            )}
           </div>
 
           {/* Per-domain X debug toggle */}
@@ -690,7 +715,8 @@ const TWITTER_SIGNAL_LABELS: Record<string, string> = {
 
 
 function CompanyOpportunityCard({ row }: { row: CompanyOpportunityRow }) {
-  const [showContacts, setShowContacts] = useState(false)
+  const [showContacts,  setShowContacts]  = useState(false)
+  const [showEvidence,  setShowEvidence]  = useState(false)
 
   const daysSince = row.mostRecent
     ? Math.floor((Date.now() - new Date(row.mostRecent).getTime()) / (1000 * 60 * 60 * 24))
@@ -701,17 +727,19 @@ function CompanyOpportunityCard({ row }: { row: CompanyOpportunityRow }) {
     : daysSince === 1 ? "yesterday"
     : `${daysSince}d ago`
 
-  const relStrength = deriveRelStrength(row.contacts)
+  const relStrength  = deriveRelStrength(row.contacts)
+  const hasEvidence  = row.subjects.length > 0 || row.signalEvidence.length > 0
 
   return (
     <div className="card-cavro rounded-md px-4 py-3.5 flex flex-col gap-3">
 
-      {/* Header — company name + contact count + signals + recency */}
+      {/* Header — company name + action + signals + recency */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
             <span className="text-[13px] font-semibold text-foreground">{row.company}</span>
-            <OpportunityTypeBadge type={row.opportunityType} />
+            <ActionBadge action={row.action} />
+            <LeverageScorePill score={row.leverageScore} />
             {relStrength && <RelationshipStrengthBadge strength={relStrength} />}
             <CompanySizeBadge size={row.companySize} />
             <BuyerLikelihoodBadge likelihood={row.buyerLikelihood} reason={row.buyerReason} />
@@ -736,27 +764,49 @@ function CompanyOpportunityCard({ row }: { row: CompanyOpportunityRow }) {
         )}
       </div>
 
-      {/* Action reason — primary verdict line */}
+      {/* 1. Action headline — the verdict */}
       <div className="border-t border-border pt-3 flex flex-col gap-1.5">
-        {/* Relationship context — scannable label for the "[context]" clause */}
         <p className="text-[11px] text-muted-foreground/45 leading-none">{row.relationshipContext}</p>
         <p className="text-[13px] leading-snug font-semibold text-foreground/90">{row.actionReason}</p>
 
-        {/* Why now — fuller context, slightly muted */}
+        {/* 2. Why now — richer context */}
         {row.whyNow !== row.actionReason && (
           <p className="text-[12px] leading-snug text-muted-foreground/60">{row.whyNow}</p>
         )}
       </div>
 
-      {/* Signal evidence — top matching subject line */}
-      {row.subjects[0] && (
-        <div className="rounded-md bg-foreground/[0.03] border border-border/60 px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/35 mb-1">
-            Detected in
-          </p>
-          <p className="text-[11px] text-muted-foreground/55 italic truncate">
-            &ldquo;{row.subjects[0]}&rdquo;
-          </p>
+      {/* 3. Evidence — collapsible, shows email subjects + tweet snippets */}
+      {hasEvidence && (
+        <div>
+          <button
+            onClick={() => setShowEvidence((v) => !v)}
+            className="text-[11px] text-muted-foreground/35 hover:text-foreground transition-colors"
+          >
+            {showEvidence ? "Hide evidence" : "Show evidence"}
+          </button>
+
+          {showEvidence && (
+            <div className="mt-2 flex flex-col gap-2">
+              {row.subjects.slice(0, 3).map((s, i) => (
+                <div key={i} className="rounded-md bg-foreground/[0.03] border border-border/60 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/35 mb-0.5">
+                    Detected in email
+                  </p>
+                  <p className="text-[11px] text-muted-foreground/55 italic truncate">&ldquo;{s}&rdquo;</p>
+                </div>
+              ))}
+              {row.signalEvidence.filter((e) => e.source === "twitter").slice(0, 2).map((e, i) => (
+                <div key={i} className="rounded-md bg-foreground/[0.03] border border-border/60 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/35 mb-0.5">
+                    Detected on X · {e.signal}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground/55 italic leading-relaxed">
+                    &ldquo;{e.snippet}&rdquo;
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -919,6 +969,51 @@ function BuyerLikelihoodBadge({ likelihood, reason }: { likelihood: BuyerLikelih
   return null  // "medium" — implicit, no badge needed
 }
 
+const ACTION_LABELS: Record<OpportunityAction, string> = {
+  reach_out:     "Reach out",
+  reconnect:     "Reconnect",
+  ask_for_intro: "Ask for intro",
+  meet:          "Suggest a meeting",
+  track:         "Track",
+}
+
+const ACTION_COLOURS: Record<OpportunityAction, string> = {
+  reach_out:     "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  reconnect:     "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  ask_for_intro: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+  meet:          "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+  track:         "bg-foreground/[0.04] text-foreground/35",
+}
+
+function ActionBadge({ action }: { action: OpportunityAction }) {
+  return (
+    <span className={`rounded px-1.5 py-px text-[10px] font-semibold ${ACTION_COLOURS[action]}`}>
+      {ACTION_LABELS[action]}
+    </span>
+  )
+}
+
+/**
+ * Leverage score pill — shows how easy it is to act on this right now.
+ * Only rendered when score is above a visual noise floor (≥30).
+ */
+function LeverageScorePill({ score }: { score: number }) {
+  if (score < 30) return null
+  const colour = score >= 70
+    ? "bg-emerald-500/8 text-emerald-600 dark:text-emerald-400 border-emerald-500/15"
+    : score >= 50
+    ? "bg-sky-500/8 text-sky-600 dark:text-sky-400 border-sky-500/15"
+    : "bg-foreground/[0.04] text-foreground/40 border-border/60"
+  return (
+    <span
+      title={`Leverage score: ${score}/100 — how easy it is to act right now`}
+      className={`rounded px-1.5 py-px text-[10px] font-semibold tabular-nums border cursor-default ${colour}`}
+    >
+      ↑{score}
+    </span>
+  )
+}
+
 /**
  * Derives the best relationship strength across all contacts in an opportunity.
  * Falls back to inferring from proximity flags when the field isn't available.
@@ -982,15 +1077,13 @@ function ProximityBadge({ proximity }: { proximity: PublicSignalOpportunityRow["
 }
 
 function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
-  const [showContacts, setShowContacts] = useState(false)
-  const [showScore,    setShowScore]    = useState(false)
+  const [showContacts,  setShowContacts]  = useState(false)
+  const [showScore,     setShowScore]     = useState(false)
+  const [showEvidence,  setShowEvidence]  = useState(false)
 
-  const relStrength = deriveRelStrength(null, row.proximity.hasMeetings, row.proximity.hasEmailHistory)
-
-  // Best tweet evidence snippet that isn't already in the whyNow
-  const evidenceSnippet = row.signalEvidence?.find(
-    (e) => e.source === "twitter" && e.snippet,
-  )?.snippet
+  const relStrength    = deriveRelStrength(null, row.proximity.hasMeetings, row.proximity.hasEmailHistory)
+  const tweetEvidence  = row.signalEvidence?.filter((e) => e.source === "twitter") ?? []
+  const hasEvidence    = tweetEvidence.length > 0
 
   return (
     <div className="card-cavro rounded-md px-4 py-3.5 flex flex-col gap-3">
@@ -1000,7 +1093,8 @@ function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
             <span className="text-[13px] font-semibold text-foreground">{row.company}</span>
-            <OpportunityTypeBadge type={row.opportunityType} />
+            <ActionBadge action={row.action} />
+            <LeverageScorePill score={row.leverageScore} />
             {relStrength && <RelationshipStrengthBadge strength={relStrength} />}
             <CompanySizeBadge size={row.companySize} />
             <BuyerLikelihoodBadge likelihood={row.buyerLikelihood} reason={row.buyerReason} />
@@ -1016,7 +1110,7 @@ function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
             <ProximityBadge proximity={row.proximity} />
           </div>
         </div>
-        {/* Action score pill */}
+        {/* Action score pill (debug) */}
         <button
           onClick={() => setShowScore((v) => !v)}
           title="Show action score breakdown"
@@ -1038,28 +1132,47 @@ function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
           <div className="border-t border-border/40 pt-0.5 font-semibold text-foreground/40">
             action score        {row.actionScore}
           </div>
+          <div className="border-t border-border/40 pt-0.5">
+            leverage score      {row.leverageScore}
+          </div>
         </div>
       )}
 
-      {/* Action reason — primary verdict line */}
+      {/* 1. Action headline — the verdict */}
       <div className="border-t border-border pt-3 flex flex-col gap-1.5">
-        {/* Relationship context — scannable label for the "[context]" clause */}
         <p className="text-[11px] text-muted-foreground/45 leading-none">{row.relationshipContext}</p>
         <p className="text-[13px] leading-snug font-semibold text-foreground/90">{row.actionReason}</p>
 
-        {/* Why now — fuller context, slightly muted */}
+        {/* 2. Why now — richer context */}
         {row.whyNow !== row.actionReason && (
           <p className="text-[12px] leading-snug text-muted-foreground/60">{row.whyNow}</p>
         )}
       </div>
 
-      {/* Tweet evidence — shown when the signal evidence has a snippet that adds
-          context beyond the whyNow narrative */}
-      {evidenceSnippet && !row.whyNow.includes(evidenceSnippet.slice(0, 30)) && (
-        <div className="rounded bg-foreground/[0.025] border-l-2 border-foreground/10 pl-3 pr-2 py-2">
-          <p className="text-[11px] text-muted-foreground/50 italic leading-relaxed">
-            "{evidenceSnippet.slice(0, 200)}{evidenceSnippet.length > 200 ? "…" : ""}"
-          </p>
+      {/* 3. Evidence — collapsible tweet snippets */}
+      {hasEvidence && (
+        <div>
+          <button
+            onClick={() => setShowEvidence((v) => !v)}
+            className="text-[11px] text-muted-foreground/35 hover:text-foreground transition-colors"
+          >
+            {showEvidence ? "Hide evidence" : `Show evidence (${tweetEvidence.length} tweet${tweetEvidence.length === 1 ? "" : "s"})`}
+          </button>
+
+          {showEvidence && (
+            <div className="mt-2 flex flex-col gap-2">
+              {tweetEvidence.slice(0, 3).map((e, i) => (
+                <div key={i} className="rounded-md bg-foreground/[0.03] border-l-2 border-foreground/10 pl-3 pr-2 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/35 mb-0.5">
+                    {PUBLIC_SIGNAL_LABELS[e.signal] ?? e.signal} · X
+                  </p>
+                  <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+                    &ldquo;{e.snippet.slice(0, 280)}&rdquo;
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
