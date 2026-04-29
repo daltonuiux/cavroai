@@ -60,13 +60,15 @@ export async function POST() {
   const started = Date.now()
 
   // Run the sync
-  let contacts: Awaited<ReturnType<typeof syncGoogleData>>["contacts"]
+  let contacts:     Awaited<ReturnType<typeof syncGoogleData>>["contacts"]
   let interactions: Awaited<ReturnType<typeof syncGoogleData>>["interactions"]
+  let debug:        Awaited<ReturnType<typeof syncGoogleData>>["debug"]
 
   try {
-    const result = await syncGoogleData(accessToken, connection.googleEmail)
-    contacts     = result.contacts
-    interactions = result.interactions
+    const result  = await syncGoogleData(accessToken, connection.googleEmail)
+    contacts      = result.contacts
+    interactions  = result.interactions
+    debug         = result.debug
   } catch (err) {
     console.error("GOOGLE SYNC: data fetch failed —", err)
     return NextResponse.json(
@@ -97,8 +99,12 @@ export async function POST() {
 
   const durationMs = Date.now() - started
   console.log(
-    `GOOGLE SYNC [${connection.googleEmail}]: ` +
-    `${contactsUpserted} contacts, ${interactionsUpserted} interactions — ${durationMs}ms`,
+    `GOOGLE SYNC [${connection.googleEmail}] complete — ${durationMs}ms\n` +
+    `  Gmail contacts found:    ${debug.gmailContactsFound}\n` +
+    `  Calendar contacts found: ${debug.calendarContactsFound}\n` +
+    `  Saved contacts found:    ${debug.savedContactsFound} (People API not used)\n` +
+    `  Contacts saved:          ${contactsUpserted} (after DB dedup)\n` +
+    `  Interactions saved:      ${interactionsUpserted}`,
   )
 
   return NextResponse.json({
@@ -106,5 +112,12 @@ export async function POST() {
     contactsUpserted,
     interactionsUpserted,
     durationMs,
+    debug: {
+      gmailContactsFound:    debug.gmailContactsFound,
+      calendarContactsFound: debug.calendarContactsFound,
+      savedContactsFound:    debug.savedContactsFound,
+      contactsAfterFilter:   debug.contactsAfterFilter,
+      interactionsSaved:     debug.interactionsSaved,
+    },
   })
 }

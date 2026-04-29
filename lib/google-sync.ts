@@ -42,7 +42,7 @@ const FREE_EMAIL_DOMAINS = new Set([
  * Local-part patterns that identify automated/transactional senders.
  * Tested against the part of the email address before the @.
  */
-const NO_REPLY_RE = /^(no[._-]?reply|do[._-]?not[._-]?reply|dont[._-]?reply|donotreply|notifications?|newsletters?|mailer(-daemon)?|bounce[sd]?|auto[._-]?mailer|autoresponder|alerts?|digest|campaigns?|updates|postmaster|hostmaster|webmaster|unsubscribe|opt[._-]?out|feedback[._-]?noreply|support[._-]?noreply|hello|hi|info|news|marketing|automated|system|daemon|noti)$/i
+const NO_REPLY_RE = /^(no[._-]?reply|do[._-]?not[._-]?reply|dont[._-]?reply|donotreply|notifications?|newsletters?|mailer(-daemon)?|bounce[sd]?|auto[._-]?mailer|autoresponder|alerts?|digest|campaigns?|updates|postmaster|hostmaster|webmaster|unsubscribe|opt[._-]?out|feedback[._-]?noreply|support[._-]?noreply|hello|hi|info|news|marketing|automated|system|daemon|noti|calendar[._-]?notification|calendar-server|google[._-]?alerts?|invitations?)$/i
 
 /**
  * Domains that emit only automated/platform notifications — not real contacts.
@@ -60,9 +60,17 @@ const NOTIFICATION_DOMAINS = new Set([
   // Design platforms
   "dribbble.com",
   "behance.net",
-  // Dev platforms (notification emails, not employee contacts)
+  // Dev / infra platforms (contacts here are employees of the platform, not prospects)
   "github.com",
   "gitlab.com",
+  "vercel.com",
+  // Google — all notification routing goes through google.com;
+  // real prospect contacts won't be @google.com in a B2B agency context
+  "google.com",
+  "googlegroups.com",
+  "notifications.google.com",
+  "mail-noreply.google.com",
+  "calendar.google.com",
   // Publishing / newsletter platforms
   "medium.com",
   "substack.com",
@@ -396,6 +404,26 @@ export interface ContactInteractionRow {
 }
 
 // ---------------------------------------------------------------------------
+// Debug counts
+// ---------------------------------------------------------------------------
+
+export interface SyncDebugCounts {
+  /** Unique business emails extracted from Gmail sent + received (after filter). */
+  gmailContactsFound:    number
+  /** Unique business emails extracted from Calendar attendees (after filter). */
+  calendarContactsFound: number
+  /**
+   * Always 0 — Cavro builds contacts entirely from interaction history.
+   * The Google People API (saved contacts) is intentionally not used.
+   */
+  savedContactsFound:    number
+  /** Total unique contacts persisted (merged across all sources). */
+  contactsAfterFilter:   number
+  /** Signal-matched interactions persisted (only hiring/launch/project/budget/agency). */
+  interactionsSaved:     number
+}
+
+// ---------------------------------------------------------------------------
 // Public sync function
 // ---------------------------------------------------------------------------
 
@@ -410,18 +438,28 @@ export interface SyncResult {
  * Fetches the last 90 days of Gmail + Calendar data, extracts contacts,
  * scores them, and returns structured rows for DB persistence.
  *
+ * Contact sources:
+ *   - Gmail sent mail   → To / Cc addresses
+ *   - Gmail inbox       → From addresses
+ *   - Calendar events   → attendee list
+ *   - Google People API → NOT used (contacts come from interaction history only)
+ *
  * Never throws — errors are caught and logged per-step.
  */
 export async function syncGoogleData(
   accessToken: string,
   userEmail:   string,
-): Promise<{ contacts: ContactRow[]; interactions: ContactInteractionRow[] }> {
+): Promise<{ contacts: ContactRow[]; interactions: ContactInteractionRow[]; debug: SyncDebugCounts }> {
   const since = new Date(Date.now() - SYNC_WINDOW_DAYS * 24 * 60 * 60 * 1000)
   const sinceStr = since.toISOString().split("T")[0].replace(/-/g, "/")
   const userDomain = domainFromEmail(userEmail)
 
   const contactMap: ContactMap = new Map()
   const interactions: ContactInteractionRow[] = []
+
+  // Per-source tracking (unique emails that passed the filter)
+  const gmailEmailsKept    = new Set<string>()
+  const calendarEmailsKept = new Set<string>()
 
   // ── Sent mail ─────────────────────────────────────────────────────────────
   let sentIds: string[] = []
@@ -431,11 +469,11 @@ export async function syncGoogleData(
       `in:sent after:${sinceStr}`,
       MAX_MESSAGES_SENT,
     )
-    console.log(`GOOGLE SYNC: ${sentIds.length} sent message IDs`)
   } catch (err) {
     console.error("GOOGLE SYNC: sent message list failed —", err)
   }
 
+  let gmailSentKept = 0
   if (sentIds.length > 0) {
     const metas = await batchProcess(
       sentIds,
@@ -458,6 +496,10 @@ export async function syncGoogleData(
       for (const addr of toAddrs) {
         if (shouldSkipContact(addr.email, userDomain)) continue
         touchContact(contactMap, addr, when, "sent")
+        if (!gmailEmailsKept.has(addr.email)) {
+          gmailEmailsKept.add(addr.email)
+          gmailSentKept++
+        }
 
         const signals = detectOpportunitySignals(subject)
         if (signals.length > 0) {
@@ -482,11 +524,11 @@ export async function syncGoogleData(
       `in:inbox -from:me after:${sinceStr}`,
       MAX_MESSAGES_RECV,
     )
-    console.log(`GOOGLE SYNC: ${recvIds.length} received message IDs`)
   } catch (err) {
     console.error("GOOGLE SYNC: received message list failed —", err)
   }
 
+  let gmailRecvKept = 0
   if (recvIds.length > 0) {
     const metas = await batchProcess(
       recvIds,
@@ -506,6 +548,10 @@ export async function syncGoogleData(
       for (const addr of from) {
         if (shouldSkipContact(addr.email, userDomain)) continue
         touchContact(contactMap, addr, when, "received")
+        if (!gmailEmailsKept.has(addr.email)) {
+          gmailEmailsKept.add(addr.email)
+          gmailRecvKept++
+        }
 
         const signals = detectOpportunitySignals(subject)
         if (signals.length > 0) {
@@ -526,7 +572,6 @@ export async function syncGoogleData(
   let events: CalendarEvent[] = []
   try {
     events = await fetchCalendarEvents(accessToken, since)
-    console.log(`GOOGLE SYNC: ${events.length} calendar events`)
   } catch (err) {
     console.error("GOOGLE SYNC: calendar fetch failed —", err)
   }
@@ -544,6 +589,7 @@ export async function syncGoogleData(
       }
       if (shouldSkipContact(addr.email, userDomain)) continue
       touchContact(contactMap, addr, when, "meeting")
+      calendarEmailsKept.add(addr.email)
 
       const signals = detectOpportunitySignals(title)
       if (signals.length > 0) {
@@ -584,10 +630,25 @@ export async function syncGoogleData(
     return true
   })
 
+  const debug: SyncDebugCounts = {
+    gmailContactsFound:    gmailEmailsKept.size,
+    calendarContactsFound: calendarEmailsKept.size,
+    savedContactsFound:    0,  // People API not used — contacts from interaction history only
+    contactsAfterFilter:   contacts.length,
+    interactionsSaved:     dedupedInteractions.length,
+  }
+
   console.log(
-    `GOOGLE SYNC: ${contacts.length} contacts, ` +
-    `${dedupedInteractions.length} opportunity interactions`,
+    `GOOGLE SYNC [${userEmail}] breakdown:\n` +
+    `  Gmail (sent):     ${sentIds.length} msgs → ${gmailSentKept} new unique contacts kept\n` +
+    `  Gmail (received): ${recvIds.length} msgs → ${gmailRecvKept} new unique contacts kept\n` +
+    `  Gmail total:      ${debug.gmailContactsFound} unique business emails\n` +
+    `  Calendar:         ${events.length} events → ${debug.calendarContactsFound} unique attendees kept\n` +
+    `  Saved contacts:   0 (People API not used)\n` +
+    `  ─────────────────────────────────────────\n` +
+    `  Contacts total:   ${debug.contactsAfterFilter} (after cross-source dedup)\n` +
+    `  Interactions:     ${debug.interactionsSaved} (signal-matched only)`,
   )
 
-  return { contacts, interactions: dedupedInteractions }
+  return { contacts, interactions: dedupedInteractions, debug }
 }
