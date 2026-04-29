@@ -25,6 +25,7 @@
  */
 
 import { NextResponse }    from "next/server"
+import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { createClient }    from "@/lib/supabase/server"
 import {
   MVP_USER_ID,
@@ -33,6 +34,15 @@ import {
   getAgencyProfile,
   deleteContactsByEmails,
 } from "@/lib/db"
+
+/** Service-role client — bypasses RLS, same as lib/db.ts `db()`. */
+function serviceDb() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  )
+}
 import {
   buildContactOpportunitiesWithDebug,
   buildPublicSignalOpportunitiesWithDebug,
@@ -118,6 +128,52 @@ export async function POST() {
   } catch {
     // Non-fatal — fit scoring falls back to defaults
   }
+
+  // ── Raw DB diagnostic — query twitter_data directly to detect write failures ─
+  // This bypasses the ORM mapper so we can see exactly what Supabase returns,
+  // including whether the column exists and whether it's NULL or populated.
+  let rawDiagnostic: {
+    checked:         number
+    columnExists:    boolean
+    rowsWithData:    number
+    sample:          Array<{ email: string; hasData: boolean; signalCount: number; source?: string }>
+    error?:          string
+  } = { checked: 0, columnExists: false, rowsWithData: 0, sample: [] }
+
+  try {
+    const { data: rawRows, error: rawErr } = await serviceDb()
+      .from("contacts")
+      .select("email, twitter_data")
+      .eq("user_id", userId)
+      .limit(10)
+
+    if (rawErr) {
+      rawDiagnostic.error = rawErr.message
+    } else if (rawRows) {
+      rawDiagnostic.checked     = rawRows.length
+      rawDiagnostic.columnExists = true   // if query succeeded, column exists
+      rawDiagnostic.rowsWithData = rawRows.filter((r: Record<string, unknown>) => r.twitter_data != null).length
+      rawDiagnostic.sample      = rawRows.map((r: Record<string, unknown>) => ({
+        email:       r.email as string,
+        hasData:     r.twitter_data != null,
+        signalCount: (r.twitter_data as { signals?: unknown[] } | null)?.signals?.length ?? 0,
+        source:      (r.twitter_data as { source?: string } | null)?.source,
+      }))
+    }
+  } catch (diagErr) {
+    rawDiagnostic.error = String(diagErr)
+  }
+
+  console.log(
+    `REBUILD RAW DIAGNOSTIC [${userId}]:\n` +
+    `  Column exists:  ${rawDiagnostic.columnExists}\n` +
+    `  Rows checked:   ${rawDiagnostic.checked}\n` +
+    `  Rows with data: ${rawDiagnostic.rowsWithData}\n` +
+    (rawDiagnostic.error ? `  Error: ${rawDiagnostic.error}\n` : "") +
+    rawDiagnostic.sample.map((s) =>
+      `  ${s.hasData ? "✓" : "✗"} ${s.email} — ${s.signalCount} signals${s.source ? ` (${s.source})` : ""}`,
+    ).join("\n"),
+  )
 
   // ── X / Twitter signal stats (for debug) ─────────────────────────────────
   const contactsWithXData    = freshContacts.filter((c) => c.twitterData != null)
@@ -237,6 +293,9 @@ export async function POST() {
         })),
       })),
     },
+
+    // ── Raw DB diagnostic (detects column-missing / write-failure issues) ───────
+    rawDiagnostic,
 
     // ── X pipeline debug (per domain — why included or dropped) ─────────────
     xDebug,

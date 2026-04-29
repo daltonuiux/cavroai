@@ -32,6 +32,7 @@ type SyncSuccess = {
   tweetsChecked:       number
   signalsFound:        number
   savedCount:          number
+  saveErrors:          string[]   // per-contact error messages from XSyncResult.errors
   partial:             boolean
 }
 
@@ -64,6 +65,7 @@ interface SyncApiResponse {
   tweetsChecked?:       number
   signalsFound?:        number
   savedCount?:          number
+  errors?:              string[]   // per-contact save errors from XSyncResult
   partial?:             boolean
   // cached fields
   syncedMinutesAgo?:    number
@@ -148,6 +150,7 @@ export function XConnectButton({
         tweetsChecked:       data.tweetsChecked       ?? 0,
         signalsFound:        data.signalsFound        ?? 0,
         savedCount:          data.savedCount          ?? 0,
+        saveErrors:          data.errors              ?? [],
         partial:             data.partial             ?? false,
       })
       setLastSyncedAt(new Date().toISOString())
@@ -340,23 +343,51 @@ function SyncStatus({
     r.skippedByCache      > 0 ? `${r.skippedByCache} served from cache`      : null,
   ].filter(Boolean).join(", ")
 
+  // Detect write failures: signals were found but not all were saved
+  const saveFailed = r.signalsFound > 0 && r.savedCount < r.signalsFound
+
   return (
     <div className="mt-2 space-y-0.5">
       <div className="flex items-start gap-1.5 text-[12px] text-emerald-600 dark:text-emerald-400">
         <CheckCircle className="mt-px size-3 shrink-0" />
         <span>
           {accountsSummary ? `${accountsSummary} — ` : ""}
-          {r.tweetsChecked} tweets checked, {r.signalsFound} intent signals found.
+          {r.tweetsChecked} tweets checked, {r.signalsFound} intent signals found
+          {r.savedCount > 0 ? `, ${r.savedCount} saved` : ""}.
           {" "}
           <a href="/opportunities" className="underline underline-offset-2">
             View opportunities →
           </a>
         </span>
       </div>
+
+      {/* Warn when signals were found but saves failed — surface the write bug */}
+      {saveFailed && (
+        <div className="flex items-start gap-1.5 text-[12px] text-amber-600 dark:text-amber-400">
+          <AlertCircle className="mt-px size-3 shrink-0" />
+          <span>
+            {r.signalsFound - r.savedCount} signal{r.signalsFound - r.savedCount !== 1 ? "s" : ""} could not be saved to the database.
+            {" "}The <code className="text-[11px]">twitter_data</code> column may be missing — run the migration in your Supabase SQL editor:
+            <br />
+            <code className="text-[11px] break-all">
+              ALTER TABLE contacts ADD COLUMN IF NOT EXISTS twitter_data jsonb;
+            </code>
+          </span>
+        </div>
+      )}
+
       {r.partial && (
         <p className="pl-[18px] text-[11px] text-muted-foreground">
           Sync budget reached — some accounts were skipped. Run again to continue.
         </p>
+      )}
+
+      {/* Show first save error verbatim — helps diagnose DB column issues */}
+      {r.saveErrors.length > 0 && !saveFailed && (
+        <div className="flex items-start gap-1.5 text-[11px] text-amber-600/70 dark:text-amber-400/70">
+          <AlertCircle className="mt-px size-3 shrink-0" />
+          <span>{r.saveErrors[0]}</span>
+        </div>
       )}
     </div>
   )

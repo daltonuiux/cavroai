@@ -1344,11 +1344,28 @@ export async function saveContactTwitterData(
   email:       string,
   twitterData: ContactTwitterData,
 ): Promise<void> {
-  const { error } = await db()
+  const { data, error } = await db()
     .from("contacts")
     .update({ twitter_data: twitterData })
     .eq("user_id", userId)
     .eq("email", email)
+    .select("id")   // forces Supabase to return affected rows
 
-  if (error) throw new Error(`saveContactTwitterData(${email}): ${error.message}`)
+  if (error) {
+    // Surface column-missing errors explicitly so they show up in sync logs
+    const hint = error.message.includes("twitter_data")
+      ? " — column may not exist; run: ALTER TABLE contacts ADD COLUMN IF NOT EXISTS twitter_data jsonb;"
+      : ""
+    throw new Error(`saveContactTwitterData(${email}): ${error.message}${hint}`)
+  }
+
+  // If 0 rows matched the update, the write silently did nothing.
+  // This means userId or email didn't match any row — surface it as an error
+  // so it appears in XSyncResult.errors[] and is visible in the UI.
+  if (!data || data.length === 0) {
+    throw new Error(
+      `saveContactTwitterData(${email}): no matching contact row for user_id=${userId} — ` +
+      `contact may not exist yet (run Google sync first) or userId mismatch`,
+    )
+  }
 }
