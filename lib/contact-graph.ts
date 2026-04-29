@@ -27,7 +27,7 @@
  *    signal strength.  → curated outreach opportunity cards.
  */
 
-import type { Client, RelationshipSignal } from "./types"
+import type { AgencyProfile, Client, RelationshipSignal } from "./types"
 
 // ---------------------------------------------------------------------------
 // Quality thresholds
@@ -41,6 +41,91 @@ const MIN_WARM_PATH_SCORE = 1.5
 
 /** Max opportunity cards to surface — keep it curated. */
 const MAX_OPPORTUNITY_RESULTS = 5
+
+// ---------------------------------------------------------------------------
+// Company fit scoring
+// ---------------------------------------------------------------------------
+
+/**
+ * Keywords that identify companies unlikely to be a good client fit.
+ * Matched as whole words (case-insensitive) against company name + domain.
+ * Overridden/extended by AgencyProfile.badFitClients when available.
+ */
+const DEFAULT_REJECT_KEYWORDS = [
+  "insurance", "bank", "banking", "government", "gov",
+  "enterprise", "ngo", "nonprofit", "non-profit",
+]
+
+/**
+ * Keywords that identify high-fit companies.
+ * Matched as substrings (case-insensitive) against company name + domain.
+ * Overridden/extended by AgencyProfile.idealClientTypes + .industries.
+ */
+const DEFAULT_BOOST_KEYWORDS = [
+  "ai", "saas", "startup", "tech", "software",
+  "app", "platform", "digital", "cloud",
+]
+
+/** Score multiplier applied to the opportunity score for each fit tier. */
+const FIT_MULTIPLIER: Record<"high" | "medium", number> = {
+  high:   1.5,
+  medium: 1.0,
+}
+
+/**
+ * Scores a company's fit against the agency's target market.
+ *
+ * Resolution order (most specific wins):
+ *   1. Profile reject list (badFitClients) → "low"
+ *   2. Default reject keywords             → "low"
+ *   3. Profile boost lists (idealClientTypes + industries) → "high"
+ *   4. Default boost keywords              → "high"
+ *   5. Everything else                     → "medium"
+ *
+ * "low" companies are excluded from the opportunity pipeline entirely.
+ */
+export function scoreCompanyFit(
+  company: { name: string; domain: string },
+  profile?: AgencyProfile | null,
+): "high" | "medium" | "low" {
+  const haystack = `${company.name} ${company.domain}`.toLowerCase()
+
+  // Build reject terms: profile-specific first (higher authority)
+  const rejectTerms = [
+    ...(profile?.badFitClients ?? []).map((s) => s.toLowerCase().trim()),
+    ...DEFAULT_REJECT_KEYWORDS,
+  ]
+
+  for (const term of rejectTerms) {
+    if (!term) continue
+    // Whole-word match to avoid "bankrupt" → "bank" false positives
+    if (new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(haystack)) {
+      return "low"
+    }
+  }
+
+  // Build boost terms: profile-specific first
+  const boostTerms = [
+    ...(profile?.idealClientTypes ?? []).map((s) => s.toLowerCase().trim()),
+    ...(profile?.industries ?? []).map((s) => s.toLowerCase().trim()),
+    ...DEFAULT_BOOST_KEYWORDS,
+  ]
+
+  for (const term of boostTerms) {
+    if (!term) continue
+    if (haystack.includes(term)) return "high"
+  }
+
+  return "medium"
+}
+
+/** Returns true when a company is not actively excluded from the pipeline. */
+export function isTargetCompany(
+  company: { name: string; domain: string },
+  profile?: AgencyProfile | null,
+): boolean {
+  return scoreCompanyFit(company, profile) !== "low"
+}
 
 // ---------------------------------------------------------------------------
 // Twitter enrichment types
@@ -160,6 +245,11 @@ export interface CompanyOpportunityRow {
   subjects:           string[]
   /** ISO timestamp of the most recent interaction across all contacts. */
   mostRecent:         string
+  /**
+   * Company fit tier relative to the agency's target market.
+   * "low" companies never reach this point — they are excluded in the pipeline.
+   */
+  fitTier:            "high" | "medium"
 }
 
 /** @deprecated Use CompanyOpportunityRow */
@@ -645,6 +735,7 @@ const GENERIC_EMAIL_DOMAINS = new Set([
 export function buildContactOpportunities(
   contacts:     Contact[],
   interactions: ContactInteraction[],
+  profile?:     AgencyProfile | null,
 ): CompanyOpportunityRow[] {
   if (contacts.length === 0) return []
 
@@ -756,7 +847,16 @@ export function buildContactOpportunities(
                        : 1.0
     // Strong multiplier when BOTH cluster depth AND signals are present
     const depthMult    = (contactCount >= 2 || hasMeetings) && allSignals.length >= 1 ? 1.3 : 1.0
-    const score        = Math.round(raw * recencyMult * depthMult * 100) / 100
+
+    // ── Fit gate ──────────────────────────────────────────────────────────────
+    const fitTier = scoreCompanyFit(
+      { name: topContact.companyName, domain: topContact.domain },
+      profile,
+    )
+    // Exclude companies that don't fit the agency's target market
+    if (fitTier === "low") continue
+
+    const score = Math.round(raw * recencyMult * depthMult * FIT_MULTIPLIER[fitTier] * 100) / 100
 
     rows.push({
       company:            topContact.companyName,
@@ -783,6 +883,7 @@ export function buildContactOpportunities(
       })),
       subjects:           [...new Set(subjects)].slice(0, 3),
       mostRecent,
+      fitTier,
     })
   }
 

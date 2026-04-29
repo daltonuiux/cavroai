@@ -59,7 +59,7 @@ export default async function OpportunitiesRoute() {
     agencyProfile = profile
 
     // ── Contact-sourced opportunities (from Google sync) ────────────────────
-    contactOpps = buildContactOpportunities(contacts, interactions)
+    contactOpps = buildContactOpportunities(contacts, interactions, profile)
 
     // ── Enrichment-sourced prospects ────────────────────────────────────────
     const clientNameSet = new Set(clients.map((c) => c.name.toLowerCase().trim()))

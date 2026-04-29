@@ -445,6 +445,15 @@ export function OpportunitiesPage({
 // Contact opportunity card
 // ---------------------------------------------------------------------------
 
+function FitTierBadge({ tier }: { tier: "high" | "medium" }) {
+  if (tier !== "high") return null
+  return (
+    <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+      High Fit
+    </span>
+  )
+}
+
 const SIGNAL_COLOURS: Record<string, string> = {
   hiring:  "bg-violet-500/10 text-violet-600 dark:text-violet-400",
   launch:  "bg-sky-500/10 text-sky-600 dark:text-sky-400",
@@ -490,6 +499,7 @@ function CompanyOpportunityCard({ row }: { row: CompanyOpportunityRow }) {
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
             <span className="text-[13px] font-semibold text-foreground">{row.company}</span>
+            <FitTierBadge tier={row.fitTier} />
             {row.contactCount > 1 && (
               <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-foreground/[0.06] text-foreground/50">
                 {row.contactCount} contacts
