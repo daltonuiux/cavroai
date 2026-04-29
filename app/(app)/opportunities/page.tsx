@@ -33,7 +33,7 @@ export default async function OpportunitiesRoute() {
         Opportunities
       </h1>
       <p className="mt-0.5 text-[12px] text-muted-foreground">
-        Companies to reach out to — surfaced through your client network and real relationships
+        Surfaced from your real network — split by whether to sell or simply connect
       </p>
     </div>
   )

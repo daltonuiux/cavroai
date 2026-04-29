@@ -4,7 +4,7 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import type { EvidenceItem } from "@/lib/types"
-import type { CompanyOpportunityRow, PublicSignalOpportunityRow, CompanySize, BuyerLikelihood } from "@/lib/contact-graph"
+import type { CompanyOpportunityRow, PublicSignalOpportunityRow, CompanySize, BuyerLikelihood, OpportunityType } from "@/lib/contact-graph"
 import { signalLabels } from "@/lib/contact-graph"
 
 // ---------------------------------------------------------------------------
@@ -390,56 +390,74 @@ export function OpportunitiesPage({
   publicSignalOpportunities?: PublicSignalOpportunityRow[]
 }) {
   const [dismissedClients, setDismissedClients] = useState<Set<string>>(new Set())
-
   const visibleClients = clientRows.filter((r) => !dismissedClients.has(r.id))
 
-  return (
-    <div className="flex flex-col gap-8">
+  // ── Tag and split opportunities into client vs network buckets ──────────────
+  type TaggedOpp =
+    | { kind: "contact"; row: CompanyOpportunityRow }
+    | { kind: "signal";  row: PublicSignalOpportunityRow }
 
-      {/* ── From your real network (Google sync) ──────────────────────────────── */}
-      {contactOpportunities.length > 0 && (
+  const allOpps: TaggedOpp[] = [
+    ...contactOpportunities.map((row): TaggedOpp => ({ kind: "contact", row })),
+    ...publicSignalOpportunities.map((row): TaggedOpp => ({ kind: "signal", row })),
+  ]
+
+  // "client" + "hybrid" → sell section, sorted by deal likelihood (score desc)
+  const clientOpps = allOpps
+    .filter((o) => o.row.opportunityType !== "network")
+    .sort((a, b) => b.row.score - a.row.score)
+
+  // "network" → connect section, sorted by influence proxy (score desc)
+  const networkOpps = allOpps
+    .filter((o) => o.row.opportunityType === "network")
+    .sort((a, b) => b.row.score - a.row.score)
+
+  const hasContactOpps = clientOpps.length > 0 || networkOpps.length > 0
+
+  function renderOpp(opp: TaggedOpp) {
+    return opp.kind === "contact"
+      ? <CompanyOpportunityCard key={`c|${opp.row.domain}|${opp.row.company}`} row={opp.row} />
+      : <PublicSignalCard key={`s|${opp.row.domain}|${opp.row.signal}`} row={opp.row} />
+  }
+
+  return (
+    <div className="flex flex-col gap-10">
+
+      {/* ── Section 1: Client Opportunities ──────────────────────────────────── */}
+      {clientOpps.length > 0 && (
         <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between px-0.5 mb-0.5">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">
-              Companies you should reach out to
-            </p>
+          <div className="flex items-start justify-between gap-3 px-0.5 mb-1">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+                Client Opportunities
+              </p>
+              <p className="text-[11px] text-muted-foreground/40 mt-0.5">
+                Companies you can realistically sell to
+              </p>
+            </div>
             <RebuildButton />
           </div>
-          {contactOpportunities.map((row) => (
-            <CompanyOpportunityCard key={`${row.domain}|${row.company}`} row={row} />
-          ))}
+          {clientOpps.map(renderOpp)}
         </div>
       )}
 
-      {/* ── Emerging opportunities (Twitter / public signals) ─────────────────── */}
-      {publicSignalOpportunities.length > 0 && (
+      {/* ── Section 2: Network Opportunities ─────────────────────────────────── */}
+      {networkOpps.length > 0 && (
         <div className="flex flex-col gap-2">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 px-0.5">
-            Emerging opportunities
-          </p>
-          <p className="text-[11px] text-muted-foreground/40 px-0.5 -mt-1">
-            Companies showing public intent signals — even without email history
-          </p>
-          {publicSignalOpportunities.map((row) => (
-            <PublicSignalCard key={`${row.domain}|${row.signal}`} row={row} />
-          ))}
+          <div className="px-0.5 mb-1">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+              Network Opportunities
+            </p>
+            <p className="text-[11px] text-muted-foreground/40 mt-0.5">
+              High-value people and companies to build relationships with
+            </p>
+          </div>
+          {networkOpps.map(renderOpp)}
         </div>
       )}
 
-      {/* ── Primary: discovered prospects ─────────────────────────────────────── */}
-      {prospects.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 px-0.5">
-            Discovered through your client network
-          </p>
-          {prospects.map((row) => (
-            <ProspectCard key={row.id} row={row} />
-          ))}
-        </div>
-      )}
-
-      {/* ── Empty state — Google synced but nothing qualified ─────────────────── */}
-      {prospects.length === 0 && contactOpportunities.length === 0 && publicSignalOpportunities.length === 0 && (
+      {/* ── Empty state ──────────────────────────────────────────────────────── */}
+      {!hasContactOpps && prospects.length === 0 && (
         <div className="rounded-md border border-dashed border-border px-6 py-8 flex flex-col items-center gap-4 text-center">
           <div>
             <p className="text-[13px] font-medium text-foreground mb-1">
@@ -458,7 +476,19 @@ export function OpportunitiesPage({
         </div>
       )}
 
-      {/* ── Secondary: existing clients with expansion signals ─────────────────── */}
+      {/* ── Discovered through client network ────────────────────────────────── */}
+      {prospects.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50 px-0.5">
+            Discovered through your client network
+          </p>
+          {prospects.map((row) => (
+            <ProspectCard key={row.id} row={row} />
+          ))}
+        </div>
+      )}
+
+      {/* ── Existing clients with expansion signals ───────────────────────────── */}
       {visibleClients.length > 0 && (
         <ClientExpansionSection
           rows={visibleClients}
@@ -628,14 +658,6 @@ function RebuildButton() {
   )
 }
 
-function FitTierBadge({ tier }: { tier: "high" | "medium" }) {
-  if (tier !== "high") return null
-  return (
-    <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-      High Fit
-    </span>
-  )
-}
 
 const SIGNAL_COLOURS: Record<string, string> = {
   hiring:  "bg-violet-500/10 text-violet-600 dark:text-violet-400",
@@ -682,7 +704,9 @@ function CompanyOpportunityCard({ row }: { row: CompanyOpportunityRow }) {
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
             <span className="text-[13px] font-semibold text-foreground">{row.company}</span>
-            <FitTierBadge tier={row.fitTier} />
+            <OpportunityTypeBadge type={row.opportunityType} />
+            <CompanySizeBadge size={row.companySize} />
+            <BuyerLikelihoodBadge likelihood={row.buyerLikelihood} reason={row.buyerReason} />
             {row.contactCount > 1 && (
               <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-foreground/[0.06] text-foreground/50">
                 {row.contactCount} contacts
@@ -806,6 +830,26 @@ function PublicSignalBadge({ signal }: { signal: string }) {
   )
 }
 
+function OpportunityTypeBadge({ type }: { type: OpportunityType }) {
+  if (type === "client")
+    return (
+      <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+        Client
+      </span>
+    )
+  if (type === "network")
+    return (
+      <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-violet-500/10 text-violet-600 dark:text-violet-400">
+        Network
+      </span>
+    )
+  return (
+    <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400">
+      Hybrid
+    </span>
+  )
+}
+
 function CompanySizeBadge({ size }: { size: CompanySize }) {
   if (size === "startup")
     return (
@@ -889,7 +933,7 @@ function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
             <span className="text-[13px] font-semibold text-foreground">{row.company}</span>
-            <FitTierBadge tier={row.fitTier} />
+            <OpportunityTypeBadge type={row.opportunityType} />
             <CompanySizeBadge size={row.companySize} />
             <BuyerLikelihoodBadge likelihood={row.buyerLikelihood} reason={row.buyerReason} />
             {row.signals.map((s) => <PublicSignalBadge key={s} signal={s} />)}

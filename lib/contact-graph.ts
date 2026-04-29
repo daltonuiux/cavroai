@@ -157,6 +157,14 @@ export function isTargetCompany(
 export type CompanySize     = "startup" | "scaleup" | "enterprise" | "unknown"
 export type BuyerLikelihood = "high" | "medium" | "low"
 
+/**
+ * How to approach this opportunity.
+ *   "client"  — realistic buyer with strong commercial signal → sell
+ *   "network" — influential company/contact but low buyer likelihood → connect
+ *   "hybrid"  — both dimensions worth pursuing
+ */
+export type OpportunityType = "client" | "network" | "hybrid"
+
 export interface BuyerClassification {
   companySize:     CompanySize
   buyerLikelihood: BuyerLikelihood
@@ -346,6 +354,38 @@ export function classifyBuyer(
   }
 }
 
+/**
+ * Classifies the recommended action for an opportunity.
+ *
+ * Resolution:
+ *   "network"  — buyerLikelihood === "low" (enterprise/household brands rarely
+ *                hire boutique agencies; they're valuable as network nodes)
+ *   "client"   — high buyer likelihood + at least one direct commercial signal,
+ *                OR medium likelihood + a direct buying signal (agency need /
+ *                budget / recommendation / pain)
+ *   "hybrid"   — everything else: some buying potential but also worth
+ *                building a relationship regardless of immediate conversion
+ */
+export function classifyOpportunityType(
+  buyerLikelihood: BuyerLikelihood,
+  signals:         string[],
+): OpportunityType {
+  if (buyerLikelihood === "low") return "network"
+
+  // Signals that indicate an active commercial need right now
+  const DIRECT_BUYING  = new Set(["recommendation", "pain", "agency", "budget"])
+  // Signals that indicate imminent spend capacity
+  const STRONG_INTENT  = new Set(["fundraising", "launching", "project"])
+
+  const hasDirect = signals.some((s) => DIRECT_BUYING.has(s))
+  const hasStrong = signals.some((s) => STRONG_INTENT.has(s))
+
+  if (buyerLikelihood === "high" && (hasDirect || hasStrong)) return "client"
+  if (buyerLikelihood === "medium" && hasDirect)              return "client"
+
+  return "hybrid"
+}
+
 // ---------------------------------------------------------------------------
 // Twitter enrichment types
 // ---------------------------------------------------------------------------
@@ -511,6 +551,12 @@ export interface CompanyOpportunityRow {
   signalEvidence:     SignalEvidence[]
   /** Full score component breakdown for debug/display. */
   scoreBreakdown:     ScoreBreakdown
+  /** Buyer-fit classification derived from company name + domain heuristics. */
+  companySize:        CompanySize
+  buyerLikelihood:    BuyerLikelihood
+  buyerReason:        string
+  /** Recommended action: sell (client), connect (network), or both (hybrid). */
+  opportunityType:    OpportunityType
 }
 
 /** @deprecated Use CompanyOpportunityRow */
@@ -568,6 +614,8 @@ export interface PublicSignalOpportunityRow {
   companySize:     CompanySize
   buyerLikelihood: BuyerLikelihood
   buyerReason:     string
+  /** Recommended action: sell (client), connect (network), or both (hybrid). */
+  opportunityType: OpportunityType
 }
 
 /**
@@ -1285,6 +1333,10 @@ export function buildContactOpportunities(
 
     if (fitTier === "low" || belowThreshold) continue
 
+    // ── Buyer + opportunity classification ────────────────────────────────────
+    const buyerClass     = classifyBuyer({ name: topContact.companyName, domain: topContact.domain })
+    const opportunityType = classifyOpportunityType(buyerClass.buyerLikelihood, allSignals)
+
     rows.push({
       company:            topContact.companyName,
       domain:             topContact.domain,
@@ -1314,6 +1366,10 @@ export function buildContactOpportunities(
       fitTier,
       signalEvidence,
       scoreBreakdown:     breakdown,
+      companySize:        buyerClass.companySize,
+      buyerLikelihood:    buyerClass.buyerLikelihood,
+      buyerReason:        buyerClass.reason,
+      opportunityType,
     })
   }
 
@@ -1687,6 +1743,7 @@ export function buildPublicSignalOpportunities(
       companySize:     buyerClass.companySize,
       buyerLikelihood: buyerClass.buyerLikelihood,
       buyerReason:     buyerClass.reason,
+      opportunityType: classifyOpportunityType(buyerClass.buyerLikelihood, allSignals),
     })
   }
 
