@@ -15,6 +15,14 @@
  * domain is kept but flagged so the UI can show "internal" contacts.
  */
 
+import {
+  FREE_EMAIL_DOMAINS,
+  NOTIFICATION_DOMAINS,
+  NO_REPLY_RE,
+  shouldSkipContact,
+  domainFromEmail,
+} from "./contact-filter"
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -29,83 +37,8 @@ const MAX_EVENTS        = 500
 /** Parallel fetch concurrency when loading message metadata. */
 const FETCH_CONCURRENCY = 20
 
-/** Free/personal email providers — not useful for B2B contact mapping. */
-const FREE_EMAIL_DOMAINS = new Set([
-  "gmail.com", "googlemail.com", "yahoo.com", "yahoo.co.uk",
-  "hotmail.com", "hotmail.co.uk", "outlook.com", "live.com", "msn.com",
-  "icloud.com", "me.com", "mac.com", "aol.com", "aol.co.uk",
-  "protonmail.com", "proton.me", "pm.me",
-  "zoho.com", "yandex.com", "mail.com",
-])
-
-/**
- * Local-part patterns that identify automated/transactional senders.
- * Tested against the part of the email address before the @.
- */
-const NO_REPLY_RE = /^(no[._-]?reply|do[._-]?not[._-]?reply|dont[._-]?reply|donotreply|notifications?|newsletters?|mailer(-daemon)?|bounce[sd]?|auto[._-]?mailer|autoresponder|alerts?|digest|campaigns?|updates|postmaster|hostmaster|webmaster|unsubscribe|opt[._-]?out|feedback[._-]?noreply|support[._-]?noreply|hello|hi|info|news|marketing|automated|system|daemon|noti|calendar[._-]?notification|calendar-server|google[._-]?alerts?|invitations?)$/i
-
-/**
- * Domains that emit only automated/platform notifications — not real contacts.
- * Individual company contacts (e.g. john@stripe.com) are kept;
- * this list targets pure notification-routing infrastructure.
- */
-const NOTIFICATION_DOMAINS = new Set([
-  // Social / professional networks
-  "linkedin.com", "bounce.linkedin.com", "email.linkedin.com",
-  "twitter.com", "x.com", "t.co",
-  "facebook.com", "facebookmail.com",
-  "instagram.com",
-  "pinterest.com",
-  "tiktok.com",
-  // Design platforms
-  "dribbble.com",
-  "behance.net",
-  // Dev / infra platforms (contacts here are employees of the platform, not prospects)
-  "github.com",
-  "gitlab.com",
-  "vercel.com",
-  // Google — all notification routing goes through google.com;
-  // real prospect contacts won't be @google.com in a B2B agency context
-  "google.com",
-  "googlegroups.com",
-  "notifications.google.com",
-  "mail-noreply.google.com",
-  "calendar.google.com",
-  // Publishing / newsletter platforms
-  "medium.com",
-  "substack.com",
-  "beehiiv.com",
-  "convertkit.com",
-  "kit.com",
-  // Email marketing / transactional infra
-  "mailchimp.com", "list-manage.com",
-  "sendgrid.net", "sendgrid.com",
-  "mailgun.org",
-  "amazonses.com",
-  "sparkpostmail.com",
-  "klaviyo.com",
-  "mandrillapp.com",
-  "mailerlite.com",
-  "constantcontact.com",
-  // Survey / form tools
-  "surveymonkey.com",
-  "typeform.com",
-])
-
-/**
- * Returns true if this email address should be excluded from the contact graph.
- * Covers: free providers, notification-only platforms, and automated sender patterns.
- */
-function shouldSkipContact(email: string, userDomain: string): boolean {
-  const domain = domainFromEmail(email)
-  if (!domain || !domain.includes(".")) return true
-  if (FREE_EMAIL_DOMAINS.has(domain)) return true
-  if (NOTIFICATION_DOMAINS.has(domain)) return true
-  if (domain === userDomain) return true
-  const localPart = email.split("@")[0] ?? ""
-  if (NO_REPLY_RE.test(localPart)) return true
-  return false
-}
+// shouldSkipContact, NO_REPLY_RE, NOTIFICATION_DOMAINS, FREE_EMAIL_DOMAINS,
+// and domainFromEmail are all imported from ./contact-filter above.
 
 // ---------------------------------------------------------------------------
 // Opportunity signal detection
@@ -166,10 +99,6 @@ function parseAddressHeader(value: string): ParsedAddress[] {
   }
 
   return results
-}
-
-function domainFromEmail(email: string): string {
-  return email.split("@")[1]?.toLowerCase() ?? ""
 }
 
 /**

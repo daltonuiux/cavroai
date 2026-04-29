@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import type { EvidenceItem } from "@/lib/types"
 import type { CompanyOpportunityRow } from "@/lib/contact-graph"
@@ -396,9 +397,12 @@ export function OpportunitiesPage({
       {/* ── From your real network (Google sync) ──────────────────────────────── */}
       {contactOpportunities.length > 0 && (
         <div className="flex flex-col gap-2">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 px-0.5">
-            People you should message this week
-          </p>
+          <div className="flex items-center justify-between px-0.5 mb-0.5">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">
+              Companies you should reach out to
+            </p>
+            <RebuildButton />
+          </div>
           {contactOpportunities.map((row) => (
             <CompanyOpportunityCard key={`${row.domain}|${row.company}`} row={row} />
           ))}
@@ -417,16 +421,23 @@ export function OpportunitiesPage({
         </div>
       )}
 
+      {/* ── Empty state — Google synced but nothing qualified ─────────────────── */}
       {prospects.length === 0 && contactOpportunities.length === 0 && (
-        <div className="rounded-md border border-dashed border-border px-6 py-8 text-center">
-          <p className="text-[13px] font-medium text-foreground">No prospects discovered yet</p>
-          <p className="mt-1 text-[12px] text-muted-foreground">
-            Prospects are discovered automatically when clients are analysed.{" "}
-            <Link href="/settings" className="underline underline-offset-2 hover:text-foreground transition-colors">
-              Connect Google
-            </Link>{" "}
-            to surface opportunities from your real relationships immediately.
-          </p>
+        <div className="rounded-md border border-dashed border-border px-6 py-8 flex flex-col items-center gap-4 text-center">
+          <div>
+            <p className="text-[13px] font-medium text-foreground mb-1">
+              No high-quality opportunities found yet
+            </p>
+            <p className="text-[12px] text-muted-foreground max-w-sm">
+              Cavro filters out low-signal contacts and companies that don&apos;t fit your target market.
+              Connect more sources, sync Google, or{" "}
+              <Link href="/profile" className="underline underline-offset-2 hover:text-foreground transition-colors">
+                refine your agency profile
+              </Link>{" "}
+              to surface better matches.
+            </p>
+          </div>
+          <RebuildButton />
         </div>
       )}
 
@@ -442,8 +453,71 @@ export function OpportunitiesPage({
 }
 
 // ---------------------------------------------------------------------------
-// Contact opportunity card
+// Rebuild intelligence button + company opportunity card
 // ---------------------------------------------------------------------------
+
+function RebuildButton() {
+  const router                      = useRouter()
+  const [isPending, startTransition] = useTransition()
+  const [state, setState]           = useState<"idle" | "running" | "done" | "error">("idle")
+  const [summary, setSummary]       = useState<string | null>(null)
+
+  async function handleRebuild() {
+    setState("running")
+    setSummary(null)
+    try {
+      const res  = await fetch("/api/intelligence/rebuild", { method: "POST" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? "Rebuild failed")
+
+      const { cleanse, opportunitiesFound, durationMs } = data
+      setSummary(
+        `Removed ${cleanse.deleted} stale contact${cleanse.deleted === 1 ? "" : "s"}, ` +
+        `kept ${cleanse.kept}, ` +
+        `found ${opportunitiesFound} opportunit${opportunitiesFound === 1 ? "y" : "ies"} ` +
+        `(${durationMs}ms)`,
+      )
+      setState("done")
+      // Reload page data with fresh server state
+      startTransition(() => router.refresh())
+    } catch (err) {
+      setSummary(err instanceof Error ? err.message : "Unknown error")
+      setState("error")
+    }
+  }
+
+  const isRunning = state === "running" || isPending
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <button
+        onClick={handleRebuild}
+        disabled={isRunning}
+        className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-[11px] font-medium text-muted-foreground/60 hover:text-foreground hover:border-foreground/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {isRunning ? (
+          <>
+            <span className="h-2.5 w-2.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+            Rebuilding…
+          </>
+        ) : (
+          <>
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+              <path d="M2 8a6 6 0 1 1 1.5 4" strokeLinecap="round"/>
+              <path d="M2 12V8h4" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Rebuild intelligence
+          </>
+        )}
+      </button>
+      {summary && (
+        <p className={`text-[11px] ${state === "error" ? "text-destructive/70" : "text-muted-foreground/50"}`}>
+          {summary}
+        </p>
+      )}
+    </div>
+  )
+}
 
 function FitTierBadge({ tier }: { tier: "high" | "medium" }) {
   if (tier !== "high") return null

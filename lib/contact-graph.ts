@@ -48,22 +48,38 @@ const MAX_OPPORTUNITY_RESULTS = 5
 
 /**
  * Keywords that identify companies unlikely to be a good client fit.
- * Matched as whole words (case-insensitive) against company name + domain.
+ * Matched as whole words (case-insensitive) so "bankrupt" does not match "bank",
+ * and "comparethemarket" does not match "market".
  * Overridden/extended by AgencyProfile.badFitClients when available.
  */
 const DEFAULT_REJECT_KEYWORDS = [
-  "insurance", "bank", "banking", "government", "gov",
-  "enterprise", "ngo", "nonprofit", "non-profit",
+  // Financial services
+  "insurance", "bank", "banking", "financial", "broker", "brokerage",
+  "mortgage", "pension", "wealth",
+  // Public sector
+  "government", "gov", "council", "parliament", "municipality",
+  // Corporate / enterprise signals
+  "enterprise", "corporation", "conglomerate", "holdings",
+  // Non-commercial
+  "ngo", "nonprofit", "non-profit", "charity",
+  // B2C consumer sectors unlikely to hire a B2B agency
+  "retail", "supermarket", "grocery", "pharma", "pharmaceutical",
+  "utilities", "utility", "energy", "telecom", "telecoms", "airline",
 ]
 
 /**
  * Keywords that identify high-fit companies.
- * Matched as substrings (case-insensitive) against company name + domain.
+ * Matched as whole words (case-insensitive) in the company name, and as
+ * substrings in the domain (domain labels like ".ai", "saas-" have no spaces).
+ *
+ * Using whole-word matching in the name prevents "comparethemarket" from
+ * matching "market", and "digitalenterprises.com" from matching "digital".
+ *
  * Overridden/extended by AgencyProfile.idealClientTypes + .industries.
  */
 const DEFAULT_BOOST_KEYWORDS = [
   "ai", "saas", "startup", "tech", "software",
-  "app", "platform", "digital", "cloud",
+  "app", "platform", "digital", "cloud", "agency",
 ]
 
 /** Score multiplier applied to the opportunity score for each fit tier. */
@@ -84,13 +100,20 @@ const FIT_MULTIPLIER: Record<"high" | "medium", number> = {
  *
  * "low" companies are excluded from the opportunity pipeline entirely.
  */
+/** Escapes a string so it is safe to embed inside a RegExp. */
+function escRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
 export function scoreCompanyFit(
   company: { name: string; domain: string },
   profile?: AgencyProfile | null,
 ): "high" | "medium" | "low" {
-  const haystack = `${company.name} ${company.domain}`.toLowerCase()
+  const name   = company.name.toLowerCase()
+  const domain = company.domain.toLowerCase()
 
-  // Build reject terms: profile-specific first (higher authority)
+  // ── Reject pass ────────────────────────────────────────────────────────────
+  // Profile-specific terms are checked first (higher authority than defaults).
   const rejectTerms = [
     ...(profile?.badFitClients ?? []).map((s) => s.toLowerCase().trim()),
     ...DEFAULT_REJECT_KEYWORDS,
@@ -98,13 +121,14 @@ export function scoreCompanyFit(
 
   for (const term of rejectTerms) {
     if (!term) continue
-    // Whole-word match to avoid "bankrupt" → "bank" false positives
-    if (new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(haystack)) {
-      return "low"
-    }
+    // Whole-word match in BOTH name and domain to avoid false positives like
+    // "bankrupt" → "bank" or "comparethemarket" → "market".
+    const re = new RegExp(`\\b${escRe(term)}\\b`, "i")
+    if (re.test(name) || re.test(domain)) return "low"
   }
 
-  // Build boost terms: profile-specific first
+  // ── Boost pass ─────────────────────────────────────────────────────────────
+  // Profile-specific terms first.
   const boostTerms = [
     ...(profile?.idealClientTypes ?? []).map((s) => s.toLowerCase().trim()),
     ...(profile?.industries ?? []).map((s) => s.toLowerCase().trim()),
@@ -113,7 +137,10 @@ export function scoreCompanyFit(
 
   for (const term of boostTerms) {
     if (!term) continue
-    if (haystack.includes(term)) return "high"
+    // Whole-word in the company name (prevents "comparethemarket" → "market").
+    // Substring in the domain label only (handles ".ai", "saas-", "techco.io").
+    const re = new RegExp(`\\b${escRe(term)}\\b`, "i")
+    if (re.test(name) || domain.includes(term)) return "high"
   }
 
   return "medium"
@@ -254,6 +281,26 @@ export interface CompanyOpportunityRow {
 
 /** @deprecated Use CompanyOpportunityRow */
 export type ContactOpportunityRow = CompanyOpportunityRow
+
+/** Per-company debug record emitted by buildContactOpportunitiesWithDebug. */
+export interface OpportunityDebugEntry {
+  /** Company display name. */
+  company:         string
+  domain:          string
+  contactCount:    number
+  /** Sum of contact interaction scores before any multipliers. */
+  baseScore:       number
+  emailSignals:    string[]
+  twitterSignals:  string[]
+  /** Result of scoreCompanyFit. */
+  fitDecision:     "high" | "medium" | "low"
+  /** Why the company was rejected (fitDecision === "low"), or null. */
+  rejectionReason: string | null
+  /** Final score after all boosts + fit multiplier, or 0 if excluded. */
+  finalScore:      number
+  /** Whether this company appears in the output. */
+  included:        boolean
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -736,6 +783,7 @@ export function buildContactOpportunities(
   contacts:     Contact[],
   interactions: ContactInteraction[],
   profile?:     AgencyProfile | null,
+  debugLog?:    OpportunityDebugEntry[],
 ): CompanyOpportunityRow[] {
   if (contacts.length === 0) return []
 
@@ -853,6 +901,27 @@ export function buildContactOpportunities(
       { name: topContact.companyName, domain: topContact.domain },
       profile,
     )
+
+    if (debugLog) {
+      const isLow = fitTier === "low"
+      debugLog.push({
+        company:         topContact.companyName,
+        domain:          topContact.domain,
+        contactCount,
+        baseScore:       Math.round(baseScore * 100) / 100,
+        emailSignals:    emailSignalList,
+        twitterSignals,
+        fitDecision:     fitTier,
+        rejectionReason: isLow
+          ? `scoreCompanyFit returned "low" for "${topContact.companyName}" (${topContact.domain})`
+          : null,
+        finalScore: isLow
+          ? 0
+          : Math.round(raw * recencyMult * depthMult * FIT_MULTIPLIER[fitTier] * 100) / 100,
+        included: !isLow,
+      })
+    }
+
     // Exclude companies that don't fit the agency's target market
     if (fitTier === "low") continue
 
@@ -890,6 +959,26 @@ export function buildContactOpportunities(
   return rows
     .sort((a, b) => b.score - a.score)
     .slice(0, MAX_OPPORTUNITY_RESULTS)
+}
+
+/**
+ * Same as buildContactOpportunities but also returns a per-company debug log
+ * showing fit decisions, rejection reasons, and final scores.
+ * Used by the rebuild endpoint to surface what was filtered and why.
+ */
+export function buildContactOpportunitiesWithDebug(
+  contacts:     Contact[],
+  interactions: ContactInteraction[],
+  profile?:     AgencyProfile | null,
+): { opportunities: CompanyOpportunityRow[]; debug: OpportunityDebugEntry[] } {
+  const debug: OpportunityDebugEntry[] = []
+  const opportunities = buildContactOpportunities(contacts, interactions, profile, debug)
+  // Sort debug: included first (by score desc), then excluded (by baseScore desc)
+  debug.sort((a, b) => {
+    if (a.included !== b.included) return a.included ? -1 : 1
+    return b.finalScore - a.finalScore || b.baseScore - a.baseScore
+  })
+  return { opportunities, debug }
 }
 
 // ---------------------------------------------------------------------------

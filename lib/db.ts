@@ -1181,6 +1181,48 @@ export async function getContactsForEnrichment(userId: string): Promise<Contact[
 }
 
 /**
+ * Deletes a batch of contacts (by email) for a given user.
+ * Also cascades to contact_interactions via a separate delete.
+ */
+export async function deleteContactsByEmails(
+  userId: string,
+  emails: string[],
+): Promise<number> {
+  if (emails.length === 0) return 0
+
+  // Delete interactions first (no FK cascade in all environments)
+  await db()
+    .from("contact_interactions")
+    .delete()
+    .eq("user_id", userId)
+    .in("contact_email", emails)
+
+  const { data, error } = await db()
+    .from("contacts")
+    .delete()
+    .eq("user_id", userId)
+    .in("email", emails)
+    .select("id")
+
+  if (error) throw new Error(`deleteContactsByEmails: ${error.message}`)
+  return data?.length ?? emails.length
+}
+
+/**
+ * Clears twitter_data for all contacts belonging to a user.
+ * Forces re-enrichment on the next enrich run.
+ */
+export async function resetContactTwitterData(userId: string): Promise<void> {
+  const { error } = await db()
+    .from("contacts")
+    .update({ twitter_data: null })
+    .eq("user_id", userId)
+    .not("twitter_data", "is", null)
+
+  if (error) throw new Error(`resetContactTwitterData: ${error.message}`)
+}
+
+/**
  * Persists Twitter enrichment data for a single contact.
  * Only updates the twitter_data column — leaves interaction counts untouched.
  */
