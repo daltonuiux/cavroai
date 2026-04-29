@@ -532,8 +532,15 @@ const EMAIL_SIGNAL_STRENGTH: Record<string, number> = {
 /** Per-confidence level multiplier for Twitter richSignals. */
 const SIGNAL_CONFIDENCE_MULT: Record<string, number> = { high: 1.0, medium: 0.75, low: 0.3 }
 
-/** Minimum score for an opportunity to appear in output. */
+/** Minimum score for a contact-based opportunity to appear in output. */
 const MIN_OPPORTUNITY_SCORE = 5.0
+
+/**
+ * Lower threshold for X/Twitter-backed public-signal opportunities.
+ * These companies have no guaranteed email history so their baseScore is
+ * often near zero; the signal score carries the weight instead.
+ */
+const MIN_PUBLIC_SIGNAL_SCORE = 3.0
 
 // ---------------------------------------------------------------------------
 // Signal-evidence helpers
@@ -568,6 +575,10 @@ function collectTwitterEvidence(contacts: Contact[]): SignalEvidence[] {
 /**
  * Computes the weighted signal score from Twitter richSignals + email signals.
  * Capped at 12 to prevent degenerate over-scoring.
+ *
+ * Falls back to the flat `signals` array (medium confidence) when a contact
+ * has signals stored but no richSignals — handles data synced before the
+ * richSignals field was introduced.
  */
 function computeSignalScore(
   contacts:     Contact[],
@@ -576,11 +587,23 @@ function computeSignalScore(
   // Best richSignal per type (deduplicated)
   const bestRich = new Map<string, number>()
   for (const c of contacts) {
-    for (const r of c.twitterData?.richSignals ?? []) {
-      const str  = TWITTER_SIGNAL_STRENGTH[r.type as TwitterSignal] ?? 0.5
-      const conf = SIGNAL_CONFIDENCE_MULT[r.confidence] ?? 0
-      const pts  = str * conf
-      if ((bestRich.get(r.type) ?? 0) < pts) bestRich.set(r.type, pts)
+    const rich = c.twitterData?.richSignals ?? []
+
+    if (rich.length > 0) {
+      for (const r of rich) {
+        const str  = TWITTER_SIGNAL_STRENGTH[r.type as TwitterSignal] ?? 0.5
+        const conf = SIGNAL_CONFIDENCE_MULT[r.confidence] ?? 0
+        const pts  = str * conf
+        if ((bestRich.get(r.type) ?? 0) < pts) bestRich.set(r.type, pts)
+      }
+    } else {
+      // Fallback: flat signals array — treat each as medium confidence
+      for (const s of c.twitterData?.signals ?? []) {
+        const str  = TWITTER_SIGNAL_STRENGTH[s as TwitterSignal] ?? 0.5
+        const conf = SIGNAL_CONFIDENCE_MULT["medium"]
+        const pts  = str * conf
+        if ((bestRich.get(s) ?? 0) < pts) bestRich.set(s, pts)
+      }
     }
   }
   let score = [...bestRich.values()].reduce((n, v) => n + v, 0)
@@ -1462,8 +1485,8 @@ export function buildPublicSignalOpportunities(
     const raw        = baseScore + signalScore + relationshipScore
     const finalScore = Math.round(raw * recencyMult * fitMult * 100) / 100
 
-    // Apply minimum score gate (same as email pipeline)
-    if (finalScore < MIN_OPPORTUNITY_SCORE) continue
+    // Apply lower threshold — X-backed opps have little/no email baseScore
+    if (finalScore < MIN_PUBLIC_SIGNAL_SCORE) continue
 
     const breakdown: ScoreBreakdown = {
       baseScore,
