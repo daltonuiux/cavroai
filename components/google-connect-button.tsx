@@ -35,7 +35,10 @@ export function GoogleConnectButton({
   const [syncResult, setSyncResult] = useState<{
     contactsUpserted:     number
     interactionsUpserted: number
-    error?: string
+    error?:              string
+    errorStage?:         string
+    errorDetail?:        string
+    missingMigration?:   string
   } | null>(null)
   const [lastSyncedAt, setLastSyncedAt] = useState(syncedAt)
 
@@ -53,12 +56,28 @@ export function GoogleConnectButton({
     try {
       const res  = await fetch("/api/sync/google", { method: "POST" })
       const data = await res.json() as {
+        ok?:                   boolean
+        status?:               string
         contactsUpserted?:     number
         interactionsUpserted?: number
+        // Structured error fields (from the route's SyncErrorBody shape)
+        stage?:                string
+        message?:              string
+        detail?:               string
+        missingMigration?:     string
+        // Legacy flat error (kept for safety)
         error?:                string
       }
-      if (!res.ok || data.error) {
-        setSyncResult({ contactsUpserted: 0, interactionsUpserted: 0, error: data.error ?? "Sync failed" })
+
+      if (!res.ok || data.ok === false) {
+        setSyncResult({
+          contactsUpserted:   0,
+          interactionsUpserted: 0,
+          error:             data.message ?? data.error ?? "Sync failed",
+          errorStage:        data.stage,
+          errorDetail:       data.detail,
+          missingMigration:  data.missingMigration,
+        })
       } else {
         setSyncResult({
           contactsUpserted:     data.contactsUpserted     ?? 0,
@@ -67,7 +86,11 @@ export function GoogleConnectButton({
         setLastSyncedAt(new Date().toISOString())
       }
     } catch {
-      setSyncResult({ contactsUpserted: 0, interactionsUpserted: 0, error: "Network error" })
+      setSyncResult({
+        contactsUpserted:   0,
+        interactionsUpserted: 0,
+        error: "Network error — could not reach the sync endpoint.",
+      })
     } finally {
       setSyncing(false)
     }
@@ -132,10 +155,12 @@ export function GoogleConnectButton({
             </div>
           ) : syncResult ? (
             syncResult.error ? (
-              <div className="mt-2 flex items-center gap-1.5 text-[12px] text-destructive">
-                <AlertCircle className="size-3" />
-                <span>{syncResult.error}</span>
-              </div>
+              <SyncError
+                message={syncResult.error}
+                stage={syncResult.errorStage}
+                detail={syncResult.errorDetail}
+                missingMigration={syncResult.missingMigration}
+              />
             ) : (
               <div className="mt-2 flex items-center gap-1.5 text-[12px] text-emerald-600 dark:text-emerald-400">
                 <CheckCircle className="size-3" />
@@ -181,6 +206,69 @@ export function GoogleConnectButton({
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
+
+/**
+ * Rich error display — shows the stage that failed, the human-readable message,
+ * an optional detail line, and a copyable SQL migration block when the failure
+ * is caused by a missing database column or table.
+ */
+function SyncError({
+  message,
+  stage,
+  detail,
+  missingMigration,
+}: {
+  message:           string
+  stage?:            string
+  detail?:           string
+  missingMigration?: string
+}) {
+  const STAGE_LABELS: Record<string, string> = {
+    auth:              "Authentication",
+    token_refresh:     "Token refresh",
+    fetch_contacts:    "Fetching from Google",
+    save_contacts:     "Saving contacts",
+    save_interactions: "Saving interactions",
+    db:                "Database",
+    unknown:           "Unknown stage",
+  }
+
+  return (
+    <div className="mt-2 flex flex-col gap-2">
+      {/* Primary error line */}
+      <div className="flex items-start gap-1.5 text-[12px] text-destructive">
+        <AlertCircle className="size-3 shrink-0 mt-0.5" />
+        <div className="flex flex-col gap-0.5">
+          {stage && (
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-destructive/60">
+              {STAGE_LABELS[stage] ?? stage}
+            </span>
+          )}
+          <span className="font-medium">{message}</span>
+        </div>
+      </div>
+
+      {/* Detail — raw DB / API message */}
+      {detail && (
+        <p className="text-[11px] text-muted-foreground/60 font-mono leading-snug pl-4 border-l border-border">
+          {detail}
+        </p>
+      )}
+
+      {/* Migration hint — shown when a column or table is missing */}
+      {missingMigration && (
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 flex flex-col gap-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-amber-600 dark:text-amber-400">
+            Run this migration in Supabase SQL editor
+          </p>
+          <pre className="text-[11px] text-foreground/70 font-mono whitespace-pre-wrap break-all leading-relaxed select-all">
+            {missingMigration}
+          </pre>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function Dot() {
   return (

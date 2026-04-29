@@ -1137,7 +1137,19 @@ export async function upsertContacts(
     .upsert(rows, { onConflict: "user_id,email" })
     .select("id")
 
-  if (error) throw new Error(`upsertContacts: ${error.message}`)
+  if (error) {
+    // Attach code + hint so the route can build a migration suggestion
+    const enriched = Object.assign(
+      new Error(`upsertContacts: ${error.message}`),
+      {
+        pgCode:    (error as { code?: string }).code,
+        pgDetail:  (error as { details?: string }).details,
+        pgHint:    (error as { hint?: string }).hint,
+        pgMessage: error.message,
+      },
+    )
+    throw enriched
+  }
   return data?.length ?? 0
 }
 
@@ -1196,7 +1208,18 @@ export async function upsertContactInteractions(
     .upsert(rows, { onConflict: "user_id,contact_email,external_id" })
     .select("id")
 
-  if (error) throw new Error(`upsertContactInteractions: ${error.message}`)
+  if (error) {
+    const enriched = Object.assign(
+      new Error(`upsertContactInteractions: ${error.message}`),
+      {
+        pgCode:    (error as { code?: string }).code,
+        pgDetail:  (error as { details?: string }).details,
+        pgHint:    (error as { hint?: string }).hint,
+        pgMessage: error.message,
+      },
+    )
+    throw enriched
+  }
   return data?.length ?? 0
 }
 
