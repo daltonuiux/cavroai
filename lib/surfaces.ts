@@ -77,6 +77,20 @@ export interface SurfaceSignalSummary {
   count: number
 }
 
+/**
+ * A compact reference to an event that shares people with this surface.
+ * Populated by linkEventsToSurfaces() in the page, not by buildSurfaces().
+ */
+export interface EventRef {
+  id:               string
+  name:             string
+  score:            number
+  estimatedDate:    string | null
+  location:         string | null
+  /** How many people appear in both this surface and this event. */
+  sharedPeopleCount: number
+}
+
 export interface Surface {
   /** Stable ID derived from the bucket key — safe for React keys. */
   id:            string
@@ -113,6 +127,13 @@ export interface Surface {
    * Always an array (empty when no opportunities match).
    */
   relatedOpportunities: SurfaceOpportunity[]
+  /**
+   * Events that share people with this surface.
+   * Populated by linkEventsToSurfaces() in the page after both
+   * buildSurfaces() and buildEventRadar() have run.
+   * Always an array (empty until linked).
+   */
+  relatedEvents: EventRef[]
   /** Quick relationship breakdown — used for the card sub-header. */
   relationshipSummary: {
     warmCount:  number
@@ -488,6 +509,7 @@ export function buildSurfaces(contacts: Contact[]): Surface[] {
       strength,
       whyItMattersParts,
       relatedOpportunities: [],   // filled in by the page after pipeline runs
+      relatedEvents:         [],   // filled in by linkEventsToSurfaces() in the page
       whyItMatters: [
         whyItMattersParts.signal,
         whyItMattersParts.relationship,

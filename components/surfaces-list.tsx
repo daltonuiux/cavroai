@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import type { Surface, ContactInSurface, SurfaceSignalSummary, SurfaceOpportunity } from "@/lib/surfaces"
+import type { Surface, ContactInSurface, SurfaceSignalSummary, SurfaceOpportunity, EventRef } from "@/lib/surfaces"
 import { contactWarmth } from "@/lib/surfaces"
 import type { OpportunityType } from "@/lib/contact-graph"
 
@@ -183,6 +183,82 @@ function PersonRow({ person }: { person: ContactInSurface }) {
         </p>
       )}
     </li>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Related events section — shown inside a surface card
+// ---------------------------------------------------------------------------
+
+function EventScoreBar({ score }: { score: number }) {
+  const colour =
+    score >= 70 ? "bg-emerald-500"
+    : score >= 40 ? "bg-amber-400"
+    : "bg-foreground/20"
+  return (
+    <div className="h-1 w-10 rounded-full bg-foreground/[0.06] overflow-hidden shrink-0" title={`Score: ${score}/100`}>
+      <div className={`h-full rounded-full ${colour}`} style={{ width: `${score}%` }} />
+    </div>
+  )
+}
+
+function RelatedEventRow({ event }: { event: EventRef }) {
+  const meta = [event.estimatedDate, event.location].filter(Boolean).join(" · ")
+  return (
+    <div className="flex items-center gap-2 py-1.5">
+      <EventScoreBar score={event.score} />
+      <div className="flex-1 min-w-0">
+        <span className="text-[12px] font-medium text-foreground/80 truncate block">{event.name}</span>
+        {meta && (
+          <span className="text-[10px] text-muted-foreground/40">{meta}</span>
+        )}
+      </div>
+      <span className="shrink-0 text-[10px] text-muted-foreground/35">
+        {event.sharedPeopleCount} {event.sharedPeopleCount === 1 ? "person" : "people"}
+      </span>
+    </div>
+  )
+}
+
+function RelatedEventsSection({ events }: { events: EventRef[] }) {
+  const [expanded, setExpanded] = useState(false)
+  if (events.length === 0) return null
+
+  const visible = expanded ? events : events.slice(0, 2)
+  const hidden  = events.length - 2
+
+  return (
+    <div className="border-t border-border px-4 py-3 flex flex-col gap-1.5">
+      <div className="flex items-center justify-between mb-0.5">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/30">
+          Related Events
+          {events.length > 0 && (
+            <span className="ml-1.5 font-bold text-foreground/40">{events.length}</span>
+          )}
+        </p>
+        <Link
+          href="/events"
+          className="text-[10px] text-muted-foreground/40 hover:text-foreground transition-colors"
+        >
+          View all →
+        </Link>
+      </div>
+
+      <div className="divide-y divide-border/50">
+        {visible.map((ev) => (
+          <RelatedEventRow key={ev.id} event={ev} />
+        ))}
+      </div>
+
+      {events.length > 2 && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors self-start mt-0.5"
+        >
+          {expanded ? "Show fewer" : `Show ${hidden} more`}
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -402,6 +478,9 @@ function SurfaceCard({ surface }: { surface: Surface }) {
 
       {/* ── Linked opportunities ──────────────────────────────────────────── */}
       <SurfaceOpportunitiesSection opps={surface.relatedOpportunities} />
+
+      {/* ── Related events ────────────────────────────────────────────────── */}
+      <RelatedEventsSection events={surface.relatedEvents} />
 
       {/* ── People (collapsible) ───────────────────────────────────────────── */}
       <div className="border-t border-border px-4 pt-2.5 pb-3">

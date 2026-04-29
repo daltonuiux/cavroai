@@ -15,6 +15,8 @@ import {
 } from "@/lib/contact-graph"
 import { buildSurfaces } from "@/lib/surfaces"
 import type { SurfaceOpportunity } from "@/lib/surfaces"
+import { buildEventRadar } from "@/lib/events-radar"
+import { linkEventsToSurfaces } from "@/lib/cross-link"
 import { SurfacesList } from "@/components/surfaces-list"
 
 export default async function SurfacesPage() {
@@ -114,6 +116,10 @@ export default async function SurfacesPage() {
       relatedOpportunities: relatedOpportunities.sort((a, b) => b.score - a.score),
     }
   })
+
+  // ── Cross-link Events ↔ Surfaces ──────────────────────────────────────────
+  const events = buildEventRadar(contacts)
+  linkEventsToSurfaces(surfaces, events)
 
   return (
     <div>

@@ -46,6 +46,18 @@ export interface EventSignalSummary {
   count: number
 }
 
+/**
+ * A compact reference to a surface (community cluster) that shares people
+ * with this event. Populated by linkEventsToSurfaces() in the page.
+ */
+export interface SurfaceRef {
+  id:               string
+  title:            string
+  strength:         number
+  /** How many people appear in both this event and this surface. */
+  sharedPeopleCount: number
+}
+
 export interface RadarEvent {
   /** Stable ID — normalised name without spaces or punctuation. */
   id:             string
@@ -69,6 +81,12 @@ export interface RadarEvent {
   whyAttend:      string
   /** True when the event was in the curated known-events list. */
   isKnown:        boolean
+  /**
+   * Surface clusters that share people with this event.
+   * Populated by linkEventsToSurfaces() in the page, not by buildEventRadar().
+   * Always an array (empty until linked).
+   */
+  relatedSurfaces: SurfaceRef[]
 }
 
 // ---------------------------------------------------------------------------
@@ -657,6 +675,7 @@ export function buildEventRadar(contacts: Contact[]): RadarEvent[] {
       score,
       whyAttend,
       isKnown,
+      relatedSurfaces: [],   // filled in by linkEventsToSurfaces() in the page
     })
   }
 

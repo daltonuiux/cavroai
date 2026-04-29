@@ -4,6 +4,8 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import { getContactsForUser, MVP_USER_ID } from "@/lib/db"
 import { buildEventRadar } from "@/lib/events-radar"
+import { buildSurfaces } from "@/lib/surfaces"
+import { linkEventsToSurfaces } from "@/lib/cross-link"
 import { EventsRadarList } from "@/components/events-list"
 
 export default async function EventsPage() {
@@ -39,7 +41,9 @@ export default async function EventsPage() {
     )
   }
 
-  const events = buildEventRadar(contacts)
+  const events   = buildEventRadar(contacts)
+  const surfaces = buildSurfaces(contacts)
+  linkEventsToSurfaces(surfaces, events)
 
   return (
     <div>

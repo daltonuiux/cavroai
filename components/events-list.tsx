@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import type { RadarEvent, EventAttendee, EventSignalSummary } from "@/lib/events-radar"
+import Link from "next/link"
+import type { RadarEvent, EventAttendee, EventSignalSummary, SurfaceRef } from "@/lib/events-radar"
 
 // ---------------------------------------------------------------------------
 // Signal colours — matches the scheme used across the app
@@ -281,6 +282,9 @@ function EventCard({ event }: { event: RadarEvent }) {
         </p>
       </div>
 
+      {/* ── Related communities ───────────────────────────────────────────── */}
+      <RelatedCommunitiesSection surfaces={event.relatedSurfaces} />
+
       {/* ── People (collapsible) ───────────────────────────────────────────── */}
       <div className="border-t border-border px-4 pt-2.5 pb-3">
         <button
@@ -300,6 +304,78 @@ function EventCard({ event }: { event: RadarEvent }) {
           </ul>
         )}
       </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Related communities section (inside event card)
+// ---------------------------------------------------------------------------
+
+function SurfaceStrengthBar({ strength }: { strength: number }) {
+  const colour =
+    strength >= 70 ? "bg-emerald-500"
+    : strength >= 40 ? "bg-amber-400"
+    : "bg-foreground/20"
+  return (
+    <div className="h-1 w-10 rounded-full bg-foreground/[0.06] overflow-hidden shrink-0" title={`Strength: ${strength}/100`}>
+      <div className={`h-full rounded-full ${colour}`} style={{ width: `${strength}%` }} />
+    </div>
+  )
+}
+
+function RelatedCommunityRow({ surface }: { surface: SurfaceRef }) {
+  return (
+    <div className="flex items-center gap-2 py-1.5">
+      <SurfaceStrengthBar strength={surface.strength} />
+      <span className="flex-1 text-[12px] font-medium text-foreground/80 truncate min-w-0">
+        {surface.title}
+      </span>
+      <span className="shrink-0 text-[10px] text-muted-foreground/35">
+        {surface.sharedPeopleCount} {surface.sharedPeopleCount === 1 ? "person" : "people"}
+      </span>
+    </div>
+  )
+}
+
+function RelatedCommunitiesSection({ surfaces }: { surfaces: SurfaceRef[] }) {
+  const [expanded, setExpanded] = useState(false)
+  if (surfaces.length === 0) return null
+
+  const visible = expanded ? surfaces : surfaces.slice(0, 2)
+  const hidden  = surfaces.length - 2
+
+  return (
+    <div className="border-t border-border px-4 py-3 flex flex-col gap-1.5">
+      <div className="flex items-center justify-between mb-0.5">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/30">
+          Related Communities
+          {surfaces.length > 0 && (
+            <span className="ml-1.5 font-bold text-foreground/40">{surfaces.length}</span>
+          )}
+        </p>
+        <Link
+          href="/surfaces"
+          className="text-[10px] text-muted-foreground/40 hover:text-foreground transition-colors"
+        >
+          View all →
+        </Link>
+      </div>
+
+      <div className="divide-y divide-border/50">
+        {visible.map((s) => (
+          <RelatedCommunityRow key={s.id} surface={s} />
+        ))}
+      </div>
+
+      {surfaces.length > 2 && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors self-start mt-0.5"
+        >
+          {expanded ? "Show fewer" : `Show ${hidden} more`}
+        </button>
+      )}
     </div>
   )
 }
