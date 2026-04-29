@@ -25,14 +25,28 @@ import type { Contact, TwitterSignal } from "./contact-graph"
 // ---------------------------------------------------------------------------
 
 export interface ContactInSurface {
-  email:         string
-  name:          string | null
-  companyName:   string
-  domain:        string
-  twitterHandle: string
-  signals:       TwitterSignal[]
-  topics:        string[]
-  bio:           string | null
+  email:            string
+  name:             string | null
+  companyName:      string
+  domain:           string
+  twitterHandle:    string
+  signals:          TwitterSignal[]
+  topics:           string[]
+  bio:              string | null
+  /** From Contact.interactionScore — used to classify relationship depth. */
+  interactionScore: number
+  /** From Contact.meetingCount — true "met in person" signal. */
+  meetingCount:     number
+}
+
+/** Warmth tier derived from interaction history. */
+export type RelationshipWarmth = "warm" | "email" | "cold"
+
+/** Returns the warmth tier for a contact in a surface. */
+export function contactWarmth(p: ContactInSurface): RelationshipWarmth {
+  if (p.meetingCount > 0 || p.interactionScore >= 8) return "warm"
+  if (p.interactionScore >= 3)                       return "email"
+  return "cold"
 }
 
 export interface SurfaceSignalSummary {
@@ -61,8 +75,25 @@ export interface Surface {
   topics:        string[]
   /** Normalised strength 0–100. Higher = larger, more signal-rich cluster. */
   strength:      number
-  /** 2–3 sentence "why this matters for your agency" narrative. */
+  /**
+   * Three-part "why this matters" narrative — each sentence covers a distinct angle:
+   *   signal       → what activity is happening in the cluster
+   *   relationship → how the user is already positioned (warm / email / cold)
+   *   action       → what to do given the cluster's bucket
+   */
+  whyItMattersParts: {
+    signal:       string
+    relationship: string
+    action:       string
+  }
+  /** Pre-joined fallback for contexts that consume a single string. */
   whyItMatters:  string
+  /** Quick relationship breakdown — used for the card sub-header. */
+  relationshipSummary: {
+    warmCount:  number
+    emailCount: number
+    coldCount:  number
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -206,36 +237,106 @@ const BUCKET_DESCRIPTIONS: Record<string, string> = {
   "Revenue & Sales":   "Revenue leaders and sales operators actively building pipelines",
 }
 
-const BUCKET_CLOSING: Record<string, string> = {
-  "AI & ML":           "AI moves fast — this cluster is a good window to show up before the moment passes.",
-  "SaaS & Product":    "SaaS teams at this stage frequently need external support for positioning and creative execution.",
+const BUCKET_ACTION: Record<string, string> = {
+  "AI & ML":           "AI moves fast — this is a good window to show up before the moment passes.",
+  "SaaS & Product":    "SaaS teams at this stage frequently need external support for positioning and creative work.",
   "Startup":           "Early founders are receptive to agencies that understand their stage and pace.",
-  "Design & UX":       "Designers in your network are strong referral sources — worth staying visible.",
-  "Marketing & Growth":"Marketers signalling active work often have adjacent budget and clear priorities.",
+  "Design & UX":       "Designers are strong referral sources — staying visible here pays off over time.",
+  "Marketing & Growth":"Marketers with active signal often have adjacent budget and clear priorities.",
   "Web3 & Crypto":     "Web3 activity is cyclical — connect while momentum is high.",
-  "DevTools & Eng":    "Engineering-led companies often under-invest in positioning and go-to-market.",
+  "DevTools & Eng":    "Engineering-led companies often under-invest in positioning and go-to-market — that's a gap you can fill.",
   "Revenue & Sales":   "Revenue leaders actively building pipelines often need creative and brand firepower.",
 }
 
-function buildWhyItMatters(
+/**
+ * Builds a three-part "why this matters" narrative:
+ *  1. signal       — what activity is actually happening
+ *  2. relationship — how the user is already positioned (warm / email / cold)
+ *  3. action       — what to do, tailored to the bucket
+ */
+function buildWhyItMattersParts(
   people:        ContactInSurface[],
   signals:       SurfaceSignalSummary[],
   eventMentions: string[],
   bucket:        string,
-): string {
-  const count      = people.length
-  const topSignal  = signals[0]
-  const closing    = BUCKET_CLOSING[bucket] ?? "This cluster is showing strong activity right now."
+): { signal: string; relationship: string; action: string } {
 
-  const signalPart = topSignal && topSignal.count >= 2
-    ? `, with ${topSignal.count} ${topSignal.label.toLowerCase()}`
-    : ""
+  // ── Warmth tiers ────────────────────────────────────────────────────────────
+  const warmPeople  = people.filter((p) => p.meetingCount > 0 || p.interactionScore >= 8)
+  const emailPeople = people.filter(
+    (p) => p.meetingCount === 0 && p.interactionScore >= 3 && p.interactionScore < 8,
+  )
 
-  const eventPart = eventMentions.length > 0
-    ? ` They're discussing ${eventMentions.slice(0, 2).join(" and ")}.`
-    : ""
+  // ── Signal counts ────────────────────────────────────────────────────────────
+  const sm            = new Map(signals.map((s) => [s.type, s.count]))
+  const launchCount   = sm.get("launching")      ?? 0
+  const fundraCount   = sm.get("fundraising")    ?? 0
+  const hiringCount   = sm.get("hiring")         ?? 0
+  const buildCount    = sm.get("building")       ?? 0
+  const buyingCount   = (sm.get("recommendation") ?? 0) + (sm.get("pain") ?? 0)
 
-  return `${count} ${count === 1 ? "person" : "people"} from your network are active in this space${signalPart}.${eventPart} ${closing}`
+  // ── Part 1: what's happening ─────────────────────────────────────────────────
+  let signal: string
+
+  if (buyingCount >= 2) {
+    signal = `${buyingCount} contacts here have publicly asked for agency or service recommendations — expressed need, not just ambient activity.`
+  } else if (buyingCount === 1) {
+    signal = `One contact has posted looking for agency or service support — a direct signal of expressed need that's easy to act on.`
+  } else if (launchCount >= 2 && fundraCount >= 1) {
+    signal = `${launchCount} contacts are launching and ${fundraCount} are fundraising — two of the highest-receptivity moments for new partnerships, happening simultaneously.`
+  } else if (launchCount >= 2) {
+    signal = `${launchCount} of these contacts are actively launching — exactly the inflection point when teams reach for outside support.`
+  } else if (launchCount === 1 && fundraCount >= 1) {
+    signal = `Someone here is launching and another is raising — both are moments when teams are open to new relationships and spend.`
+  } else if (fundraCount >= 2) {
+    signal = `${fundraCount} contacts are showing fundraising signals — post-raise is when spend decisions accelerate and new vendors get evaluated.`
+  } else if (eventMentions.length > 0 && people.length >= 3) {
+    signal = `This cluster is converging around ${eventMentions[0]} — a shared context that makes showing up in that space unusually high-leverage.`
+  } else if (hiringCount >= 2) {
+    signal = `${hiringCount} companies here are actively hiring — typically a growth phase with more budget and more decisions in motion.`
+  } else if (buildCount >= 3) {
+    signal = `${buildCount} contacts are building in public — strong momentum signal and high receptivity to tools and partnerships.`
+  } else if (people.length >= 5) {
+    signal = `This is one of the denser pockets in your network — ${people.length} people with overlapping interests and consistent signal.`
+  } else {
+    const top = signals[0]
+    signal = top
+      ? `Multiple contacts here are ${top.label.toLowerCase()}, with consistent activity across shared topics.`
+      : `${people.length} people in your network are active here with shared signal and topic overlap.`
+  }
+
+  // ── Part 2: relationship angle ───────────────────────────────────────────────
+  let relationship: string
+
+  const firstName = (p: ContactInSurface) =>
+    p.name?.split(" ")[0] ?? p.email.split("@")[0]
+
+  if (warmPeople.length >= 3) {
+    relationship = `You've already met ${warmPeople.length} of them — warm outreach across this whole cluster is natural and expected.`
+  } else if (warmPeople.length === 2) {
+    const names = warmPeople.map(firstName).join(" and ")
+    relationship = `You've met ${names} personally — a strong foundation for introductions to the rest of the cluster.`
+  } else if (warmPeople.length === 1 && emailPeople.length >= 2) {
+    relationship = `You know ${firstName(warmPeople[0])} personally and have email history with ${emailPeople.length} others — well-positioned to move fast here.`
+  } else if (warmPeople.length === 1) {
+    relationship = `You know ${firstName(warmPeople[0])} personally — a direct entry point that makes reaching the wider cluster far more natural.`
+  } else if (emailPeople.length >= 3) {
+    relationship = `You have email history with ${emailPeople.length} of them — enough existing context to make outreach feel warm, not cold.`
+  } else if (emailPeople.length === 2) {
+    const names = emailPeople.map(firstName).join(" and ")
+    relationship = `You've exchanged emails with ${names} — solid footholds for warm introductions into the cluster.`
+  } else if (emailPeople.length === 1) {
+    relationship = `You've exchanged emails with ${firstName(emailPeople[0])} — a foot in the door for the wider cluster.`
+  } else if (people.length >= 5) {
+    relationship = `These are mostly second-degree connections, but the shared context means a well-timed message will land far better than a cold approach.`
+  } else {
+    relationship = `You don't have existing relationships here yet — but the signal activity makes this a well-timed moment to engage.`
+  }
+
+  // ── Part 3: action prompt ────────────────────────────────────────────────────
+  const action = BUCKET_ACTION[bucket] ?? "Worth showing up here while the signal is strong."
+
+  return { signal, relationship, action }
 }
 
 // ---------------------------------------------------------------------------
@@ -304,14 +405,16 @@ export function buildSurfaces(contacts: Contact[]): Surface[] {
       for (const ev of detectEvents(td.tweetSamples ?? [])) allEvents.add(ev)
 
       return {
-        email:         c.email,
-        name:          c.name,
-        companyName:   c.companyName,
-        domain:        c.domain,
-        twitterHandle: td.handle,
-        signals:       td.signals ?? [],
-        topics:        td.topics ?? [],
-        bio:           td.bio,
+        email:            c.email,
+        name:             c.name,
+        companyName:      c.companyName,
+        domain:           c.domain,
+        twitterHandle:    td.handle,
+        signals:          td.signals ?? [],
+        topics:           td.topics ?? [],
+        bio:              td.bio,
+        interactionScore: c.interactionScore,
+        meetingCount:     c.meetingCount,
       }
     })
 
@@ -340,6 +443,15 @@ export function buildSurfaces(contacts: Contact[]): Surface[] {
     // Normalise to 0–100 (ceiling at ~15 raw feels right for typical cluster sizes)
     const strength      = Math.min(100, Math.round((rawStrength / 15) * 100))
 
+    const whyItMattersParts = buildWhyItMattersParts(people, signals, eventMentions, bucket)
+
+    // Relationship summary — quick counts for the card header
+    const relationshipSummary = {
+      warmCount:  people.filter((p) => p.meetingCount > 0 || p.interactionScore >= 8).length,
+      emailCount: people.filter((p) => p.meetingCount === 0 && p.interactionScore >= 3 && p.interactionScore < 8).length,
+      coldCount:  people.filter((p) => p.interactionScore < 3 && p.meetingCount === 0).length,
+    }
+
     surfaces.push({
       id:           bucket.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
       title:        buildTitle(bucket, dominantSignal, eventMentions),
@@ -349,7 +461,13 @@ export function buildSurfaces(contacts: Contact[]): Surface[] {
       eventMentions,
       topics,
       strength,
-      whyItMatters: buildWhyItMatters(people, signals, eventMentions, bucket),
+      whyItMattersParts,
+      whyItMatters: [
+        whyItMattersParts.signal,
+        whyItMattersParts.relationship,
+        whyItMattersParts.action,
+      ].join(" "),
+      relationshipSummary,
     })
   }
 

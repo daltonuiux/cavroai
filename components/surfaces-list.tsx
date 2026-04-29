@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import type { Surface, ContactInSurface, SurfaceSignalSummary } from "@/lib/surfaces"
+import { contactWarmth } from "@/lib/surfaces"
 
 // ---------------------------------------------------------------------------
 // Signal colour map — mirrors the scheme in opportunities-list
@@ -43,6 +44,43 @@ function EventBadge({ name }: { name: string }) {
   )
 }
 
+function RelationshipSummaryPills({
+  summary,
+}: {
+  summary: Surface["relationshipSummary"]
+}) {
+  const parts: React.ReactNode[] = []
+
+  if (summary.warmCount > 0) {
+    parts.push(
+      <span key="warm" className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+        {summary.warmCount} met
+      </span>
+    )
+  }
+  if (summary.emailCount > 0) {
+    parts.push(
+      <span key="email" className="inline-flex items-center gap-1 text-[10px] text-sky-600 dark:text-sky-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
+        {summary.emailCount} email
+      </span>
+    )
+  }
+  if (summary.coldCount > 0 && (summary.warmCount > 0 || summary.emailCount > 0)) {
+    // Only show cold count if there are also warmer contacts — gives contrast
+    parts.push(
+      <span key="cold" className="inline-flex items-center gap-1 text-[10px] text-foreground/30">
+        <span className="h-1.5 w-1.5 rounded-full bg-foreground/15" />
+        {summary.coldCount} new
+      </span>
+    )
+  }
+
+  if (parts.length === 0) return null
+  return <span className="flex items-center gap-2">{parts}</span>
+}
+
 function StrengthBar({ strength }: { strength: number }) {
   const colour =
     strength >= 70 ? "bg-emerald-500"
@@ -74,16 +112,45 @@ function XIcon() {
 // People list (collapsible)
 // ---------------------------------------------------------------------------
 
+const WARMTH_DOT: Record<string, { className: string; title: string }> = {
+  warm:  { className: "bg-emerald-400",       title: "You've met"        },
+  email: { className: "bg-sky-400",           title: "Email history"     },
+  cold:  { className: "bg-foreground/[0.12]", title: "New connection"    },
+}
+
+const WARMTH_LABEL: Record<string, { text: string; className: string }> = {
+  warm:  { text: "Met",   className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
+  email: { text: "Email", className: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
+  cold:  { text: "New",   className: "bg-foreground/[0.05] text-foreground/35" },
+}
+
 function PersonRow({ person }: { person: ContactInSurface }) {
+  const warmth    = contactWarmth(person)
+  const dot       = WARMTH_DOT[warmth]
+  const wLabel    = WARMTH_LABEL[warmth]
+
   return (
     <li className="flex flex-col gap-0.5">
       <div className="flex items-center gap-2 flex-wrap">
+        {/* Warmth dot */}
+        <span
+          className={`h-1.5 w-1.5 rounded-full shrink-0 ${dot.className}`}
+          title={dot.title}
+        />
+
         <span className="text-[12px] font-medium text-foreground/75">
           {person.name ?? person.email}
         </span>
+
         {person.companyName && (
           <span className="text-[11px] text-muted-foreground/40">{person.companyName}</span>
         )}
+
+        {/* Warmth label */}
+        <span className={`rounded px-1 py-px text-[9px] font-semibold ${wLabel.className}`}>
+          {wLabel.text}
+        </span>
+
         <a
           href={`https://x.com/${person.twitterHandle}`}
           target="_blank"
@@ -94,8 +161,9 @@ function PersonRow({ person }: { person: ContactInSurface }) {
           @{person.twitterHandle}
         </a>
       </div>
+
       {person.signals.length > 0 && (
-        <div className="flex gap-1 flex-wrap">
+        <div className="flex gap-1 flex-wrap pl-3.5">
           {person.signals.map((s) => {
             const colour = SIGNAL_COLOURS[s] ?? "bg-foreground/[0.05] text-foreground/40"
             return (
@@ -106,8 +174,9 @@ function PersonRow({ person }: { person: ContactInSurface }) {
           })}
         </div>
       )}
+
       {person.bio && (
-        <p className="text-[11px] text-muted-foreground/40 leading-snug line-clamp-1">
+        <p className="text-[11px] text-muted-foreground/35 leading-snug line-clamp-1 pl-3.5">
           {person.bio}
         </p>
       )}
@@ -137,10 +206,12 @@ function SurfaceCard({ surface }: { surface: Surface }) {
             <span className="text-[13px] font-semibold text-foreground">{surface.title}</span>
             <StrengthBar strength={surface.strength} />
           </div>
-          {/* People count */}
-          <p className="text-[11px] text-muted-foreground/50">
-            {personLabel} in your network
-          </p>
+
+          {/* People count + relationship summary */}
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[11px] text-muted-foreground/50">{personLabel} in your network</p>
+            <RelationshipSummaryPills summary={surface.relationshipSummary} />
+          </div>
         </div>
 
         {/* Track button — UI only */}
@@ -190,13 +261,34 @@ function SurfaceCard({ surface }: { surface: Surface }) {
       )}
 
       {/* ── Why it matters ─────────────────────────────────────────────────── */}
-      <div className="border-t border-border px-4 py-3">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/30 mb-1.5">
+      <div className="border-t border-border px-4 py-3 flex flex-col gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/30">
           Why this matters
         </p>
-        <p className="text-[13px] leading-snug font-medium text-foreground/80">
-          {surface.whyItMatters}
-        </p>
+
+        {/* Signal — what's happening */}
+        <div className="flex gap-2.5">
+          <span className="mt-[3px] h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400" aria-hidden />
+          <p className="text-[12px] leading-snug text-foreground/80">
+            {surface.whyItMattersParts.signal}
+          </p>
+        </div>
+
+        {/* Relationship — how you're positioned */}
+        <div className="flex gap-2.5">
+          <span className="mt-[3px] h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" aria-hidden />
+          <p className="text-[12px] leading-snug text-foreground/70">
+            {surface.whyItMattersParts.relationship}
+          </p>
+        </div>
+
+        {/* Action — what to do */}
+        <div className="flex gap-2.5">
+          <span className="mt-[3px] h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" aria-hidden />
+          <p className="text-[12px] leading-snug text-muted-foreground/60 italic">
+            {surface.whyItMattersParts.action}
+          </p>
+        </div>
       </div>
 
       {/* ── People (collapsible) ───────────────────────────────────────────── */}
