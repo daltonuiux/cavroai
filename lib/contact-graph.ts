@@ -402,6 +402,25 @@ export interface PublicSignalOpportunityRow {
   scoreBreakdown: ScoreBreakdown
 }
 
+/**
+ * Per-domain debug record emitted by buildPublicSignalOpportunitiesWithDebug.
+ * Every domain that had at least one X signal gets an entry — whether it
+ * became an opportunity or was dropped (with the reason).
+ */
+export interface PublicSignalDebugEntry {
+  company:       string
+  domain:        string
+  contactCount:  number
+  signals:       string[]
+  signalScore:   number
+  baseScore:     number
+  finalScore:    number
+  fitTier:       "high" | "medium" | "low"
+  icpBypassed:   boolean    // true when "low" fit was overridden by X signal
+  included:      boolean
+  skipReason:    string | null
+}
+
 /** Per-company debug record emitted by buildContactOpportunitiesWithDebug. */
 export interface OpportunityDebugEntry {
   /** Company display name. */
@@ -537,10 +556,12 @@ const MIN_OPPORTUNITY_SCORE = 5.0
 
 /**
  * Lower threshold for X/Twitter-backed public-signal opportunities.
- * These companies have no guaranteed email history so their baseScore is
- * often near zero; the signal score carries the weight instead.
+ * Any contact with X signals needed interactionScore >= 5 to get enriched,
+ * so even a single weak signal + base interaction easily clears this bar.
+ * Set deliberately low so the ICP fit gate (not score) does the filtering —
+ * and both gates are visible in the debug log.
  */
-const MIN_PUBLIC_SIGNAL_SCORE = 3.0
+const MIN_PUBLIC_SIGNAL_SCORE = 1.5
 
 // ---------------------------------------------------------------------------
 // Signal-evidence helpers
@@ -1311,7 +1332,7 @@ export function buildContactOpportunitiesWithDebug(
 // ---------------------------------------------------------------------------
 
 /** Max public signal cards to show — kept lower because these are colder leads. */
-const MAX_PUBLIC_SIGNAL_RESULTS = 5
+const MAX_PUBLIC_SIGNAL_RESULTS = 10
 
 /** Intent priority for picking the "primary" signal on a public-signal card. */
 const SIGNAL_PRIORITY_PUBLIC: TwitterSignal[] = [
@@ -1402,17 +1423,21 @@ function narrativePublicSignalWhyNow(ctx: PublicSignalWhyNowCtx): string {
  * Sorted by score desc, capped at MAX_PUBLIC_SIGNAL_RESULTS.
  */
 export function buildPublicSignalOpportunities(
-  contacts:             Contact[],
+  contacts:              Contact[],
   existingOpportunities: CompanyOpportunityRow[],
-  profile?:             AgencyProfile | null,
+  profile?:              AgencyProfile | null,
+  debugLog?:             PublicSignalDebugEntry[],
 ): PublicSignalOpportunityRow[] {
   // Domains already covered by the email-based pipeline
   const coveredDomains = new Set(existingOpportunities.map((o) => o.domain))
 
-  // Group contacts that have Twitter signals by domain
+  // ── Group contacts by domain — include ALL contacts that have X signals ────
+  // No interactionScore gate here — the X-signal is what drives inclusion.
   const domainMap = new Map<string, Contact[]>()
   for (const contact of contacts) {
-    if (!contact.twitterData || contact.twitterData.signals.length === 0) continue
+    const hasSignals =
+      (contact.twitterData?.signals?.length ?? 0) > 0
+    if (!hasSignals) continue
     if (!domainMap.has(contact.domain)) domainMap.set(contact.domain, [])
     domainMap.get(contact.domain)!.push(contact)
   }
@@ -1420,53 +1445,62 @@ export function buildPublicSignalOpportunities(
   const rows: PublicSignalOpportunityRow[] = []
 
   for (const [domain, domainContacts] of domainMap) {
-    // Skip if the email pipeline already covers this company
-    if (coveredDomains.has(domain)) continue
+    // ── Skip if email pipeline already covers this company ─────────────────
+    if (coveredDomains.has(domain)) {
+      debugLog?.push({
+        company:      domainContacts[0]?.companyName ?? domain,
+        domain,
+        contactCount: domainContacts.length,
+        signals:      domainContacts.flatMap((c) => c.twitterData?.signals ?? []),
+        signalScore:  0, baseScore: 0, finalScore: 0,
+        fitTier:      "medium",
+        icpBypassed:  false,
+        included:     false,
+        skipReason:   "covered by email pipeline",
+      })
+      continue
+    }
 
     const sortedContacts = [...domainContacts].sort(
       (a, b) => b.interactionScore - a.interactionScore,
     )
-    const topContact = sortedContacts[0]
-    if (!topContact) continue
+    const topContact = sortedContacts[0]!
 
-    // ── Fit gate ──────────────────────────────────────────────────────────────
-    const fitTier = scoreCompanyFit(
-      { name: topContact.companyName, domain },
-      profile,
-    )
-    if (fitTier === "low") continue
-
-    // ── Aggregate signals + topics across all contacts at domain ──────────────
+    // ── Aggregate signals + topics ─────────────────────────────────────────
     const signalSet = new Set<TwitterSignal>()
     const topicSet  = new Set<string>()
     let confidence: "high" | "medium" = "medium"
 
     for (const c of sortedContacts) {
-      if (!c.twitterData) continue
-      for (const s of c.twitterData.signals) signalSet.add(s)
-      for (const t of c.twitterData.topics)  topicSet.add(t)
-      if (c.twitterData.confidence === "high") confidence = "high"
+      for (const s of c.twitterData?.signals  ?? []) signalSet.add(s)
+      for (const t of c.twitterData?.topics   ?? []) topicSet.add(t)
+      if (c.twitterData?.confidence === "high") confidence = "high"
     }
 
     const allSignals = SIGNAL_PRIORITY_PUBLIC.filter((s) => signalSet.has(s))
-    if (allSignals.length === 0) continue
 
-    const primarySignal = allSignals[0]!
+    // ── ICP fit — "low" is BYPASSED when X signals exist ─────────────────
+    // Explicit intent overrides generic sector rejection: if a company is
+    // actively hiring / launching / fundraising we surface it regardless
+    // of its industry label.  A reduced fitMult (0.6) replaces hard exclusion.
+    const rawFitTier    = scoreCompanyFit({ name: topContact.companyName, domain }, profile)
+    const icpBypassed   = rawFitTier === "low" && allSignals.length > 0
+    const effectiveFit  = icpBypassed ? "medium" : rawFitTier   // treat as medium for scoring
 
-    // ── Proximity ─────────────────────────────────────────────────────────────
-    const hasEmailHistory = sortedContacts.some((c) => c.sentCount + c.receivedCount > 0)
-    const hasMeetings     = sortedContacts.some((c) => c.meetingCount > 0)
-    const emailCount      = sortedContacts.reduce((n, c) => n + c.sentCount + c.receivedCount, 0)
-    const contactCount    = sortedContacts.length
+    // ── Proximity ──────────────────────────────────────────────────────────
+    const hasEmailHistory    = sortedContacts.some((c) => c.sentCount + c.receivedCount > 0)
+    const hasMeetings        = sortedContacts.some((c) => c.meetingCount > 0)
+    const emailCount         = sortedContacts.reduce((n, c) => n + c.sentCount + c.receivedCount, 0)
+    const contactCount       = sortedContacts.length
     const recentInteractions = sortedContacts.filter((c) => {
       if (!c.lastInteraction) return false
       return (Date.now() - new Date(c.lastInteraction).getTime()) / 86_400_000 <= 14
     }).length
 
-    // ── Evidence (best tweet snippet per signal type) ─────────────────────────
+    // ── Evidence ───────────────────────────────────────────────────────────
     const signalEvidence = collectTwitterEvidence(sortedContacts)
 
-    // ── Strength-weighted scoring (Twitter signals only — no email signals) ───
+    // ── Scoring ────────────────────────────────────────────────────────────
     const baseScore         = sortedContacts.reduce((n, c) => n + c.interactionScore, 0)
     const signalScore       = computeSignalScore(sortedContacts, [])
     const totalEmails       = sortedContacts.reduce((n, c) => n + c.sentCount + c.receivedCount, 0)
@@ -1480,13 +1514,13 @@ export function buildPublicSignalOpportunities(
       const daysSince = (Date.now() - latest) / 86_400_000
       return daysSince <= 7 ? 1.25 : daysSince <= 14 ? 1.15 : daysSince <= 30 ? 1.05 : 1.0
     })()
-    const fitMult = FIT_MULTIPLIER[fitTier]
+
+    // ICP-bypassed companies get a reduced multiplier (0.6) — still included
+    // but ranked lower than well-matched companies.
+    const fitMult  = icpBypassed ? 0.6 : FIT_MULTIPLIER[effectiveFit as "high" | "medium"]
 
     const raw        = baseScore + signalScore + relationshipScore
     const finalScore = Math.round(raw * recencyMult * fitMult * 100) / 100
-
-    // Apply lower threshold — X-backed opps have little/no email baseScore
-    if (finalScore < MIN_PUBLIC_SIGNAL_SCORE) continue
 
     const breakdown: ScoreBreakdown = {
       baseScore,
@@ -1497,6 +1531,40 @@ export function buildPublicSignalOpportunities(
       total: finalScore,
     }
 
+    // ── Score gate ─────────────────────────────────────────────────────────
+    if (finalScore < MIN_PUBLIC_SIGNAL_SCORE) {
+      debugLog?.push({
+        company:      topContact.companyName,
+        domain,
+        contactCount,
+        signals:      [...signalSet],
+        signalScore,
+        baseScore,
+        finalScore,
+        fitTier:      rawFitTier,
+        icpBypassed,
+        included:     false,
+        skipReason:   `score ${finalScore} < MIN_PUBLIC_SIGNAL_SCORE (${MIN_PUBLIC_SIGNAL_SCORE})`,
+      })
+      continue
+    }
+
+    debugLog?.push({
+      company:      topContact.companyName,
+      domain,
+      contactCount,
+      signals:      [...signalSet],
+      signalScore,
+      baseScore,
+      finalScore,
+      fitTier:      rawFitTier,
+      icpBypassed,
+      included:     true,
+      skipReason:   null,
+    })
+
+    const primarySignal = allSignals[0] ?? ("building" as TwitterSignal)
+
     rows.push({
       type:       "public_signal",
       company:    topContact.companyName,
@@ -1505,7 +1573,7 @@ export function buildPublicSignalOpportunities(
       signals:    allSignals,
       confidence,
       score:      finalScore,
-      fitTier,
+      fitTier:    effectiveFit as "high" | "medium",
       whyNow:     narrativePublicSignalWhyNow({
         signal: primarySignal,
         signals: allSignals,
@@ -1534,6 +1602,24 @@ export function buildPublicSignalOpportunities(
   return rows
     .sort((a, b) => b.score - a.score)
     .slice(0, MAX_PUBLIC_SIGNAL_RESULTS)
+}
+
+/**
+ * Same as buildPublicSignalOpportunities but also returns a per-domain debug
+ * log showing exactly why each domain was included or dropped.
+ */
+export function buildPublicSignalOpportunitiesWithDebug(
+  contacts:              Contact[],
+  existingOpportunities: CompanyOpportunityRow[],
+  profile?:              AgencyProfile | null,
+): { opportunities: PublicSignalOpportunityRow[]; debug: PublicSignalDebugEntry[] } {
+  const debug: PublicSignalDebugEntry[] = []
+  const opportunities = buildPublicSignalOpportunities(contacts, existingOpportunities, profile, debug)
+  debug.sort((a, b) => {
+    if (a.included !== b.included) return a.included ? -1 : 1
+    return b.finalScore - a.finalScore
+  })
+  return { opportunities, debug }
 }
 
 // ---------------------------------------------------------------------------

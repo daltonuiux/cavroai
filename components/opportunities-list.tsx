@@ -738,6 +738,12 @@ function ProximityBadge({ proximity }: { proximity: PublicSignalOpportunityRow["
 
 function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
   const [showContacts, setShowContacts] = useState(false)
+  const [showScore,    setShowScore]    = useState(false)
+
+  // Best tweet evidence snippet that isn't already in the whyNow
+  const evidenceSnippet = row.signalEvidence?.find(
+    (e) => e.source === "twitter" && e.snippet,
+  )?.snippet
 
   return (
     <div className="card-cavro rounded-md px-4 py-3.5 flex flex-col gap-3">
@@ -760,12 +766,45 @@ function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
             <ProximityBadge proximity={row.proximity} />
           </div>
         </div>
+        {/* Score pill */}
+        <button
+          onClick={() => setShowScore((v) => !v)}
+          title="Show score breakdown"
+          className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground/40 bg-foreground/[0.03] border border-border/60 hover:border-border transition-colors"
+        >
+          {row.score.toFixed(1)}
+        </button>
       </div>
+
+      {/* Score breakdown (revealed on click) */}
+      {showScore && row.scoreBreakdown && (
+        <div className="rounded bg-foreground/[0.025] border border-border/60 px-3 py-2 text-[10px] text-muted-foreground/50 font-mono space-y-0.5">
+          <div className="font-semibold text-muted-foreground/60 mb-1">Score breakdown</div>
+          <div>base (interaction)  {row.scoreBreakdown.baseScore.toFixed(2)}</div>
+          <div>signal strength     +{row.scoreBreakdown.signalScore.toFixed(2)}</div>
+          <div>relationship depth  +{row.scoreBreakdown.relationshipScore.toFixed(2)}</div>
+          <div>recency mult        ×{row.scoreBreakdown.recencyMult.toFixed(2)}</div>
+          <div>fit mult            ×{row.scoreBreakdown.fitMult.toFixed(2)}</div>
+          <div className="border-t border-border/40 pt-0.5 font-semibold text-foreground/40">
+            total               {row.scoreBreakdown.total.toFixed(2)}
+          </div>
+        </div>
+      )}
 
       {/* Why now */}
       <div className="border-t border-border pt-3">
         <p className="text-[13px] leading-snug font-medium text-foreground/85">{row.whyNow}</p>
       </div>
+
+      {/* Tweet evidence — shown when the signal evidence has a snippet that adds
+          context beyond the whyNow narrative */}
+      {evidenceSnippet && !row.whyNow.includes(evidenceSnippet.slice(0, 30)) && (
+        <div className="rounded bg-foreground/[0.025] border-l-2 border-foreground/10 pl-3 pr-2 py-2">
+          <p className="text-[11px] text-muted-foreground/50 italic leading-relaxed">
+            "{evidenceSnippet.slice(0, 200)}{evidenceSnippet.length > 200 ? "…" : ""}"
+          </p>
+        </div>
+      )}
 
       {/* Topics / context */}
       {row.topics.length > 0 && (

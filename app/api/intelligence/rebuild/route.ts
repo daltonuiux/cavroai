@@ -35,7 +35,7 @@ import {
 } from "@/lib/db"
 import {
   buildContactOpportunitiesWithDebug,
-  buildPublicSignalOpportunities,
+  buildPublicSignalOpportunitiesWithDebug,
 } from "@/lib/contact-graph"
 import { shouldSkipContact, domainFromEmail } from "@/lib/contact-filter"
 
@@ -138,13 +138,16 @@ export async function POST() {
   // ── X/Twitter public-signal opportunity pipeline ───────────────────────────
   // Runs on ALL contacts with twitter signals — no minimum interaction score.
   // Deduplicates against the email pipeline so a company only appears once.
-  const publicSignalOpportunities = buildPublicSignalOpportunities(
-    freshContacts,
-    opportunities,
-    profile,
-  )
+  const {
+    opportunities: publicSignalOpportunities,
+    debug:         xDebug,
+  } = buildPublicSignalOpportunitiesWithDebug(freshContacts, opportunities, profile)
 
   const durationMs = Date.now() - started
+
+  const xDroppedByScore = xDebug.filter((e) => !e.included && e.skipReason?.startsWith("score"))
+  const xDroppedByICP   = xDebug.filter((e) => !e.included && !e.skipReason?.startsWith("score") && e.skipReason !== "covered by email pipeline")
+  const xCoveredByEmail = xDebug.filter((e) => e.skipReason === "covered by email pipeline")
 
   // ── Console summary ────────────────────────────────────────────────────────
   console.log(
@@ -156,24 +159,26 @@ export async function POST() {
     `  With X signals:      ${contactsWithXSignals.length}\n` +
     `  With rich signals:   ${contactsWithRichSignals.length}\n` +
     `  Email opps:          ${opportunities.length}\n` +
-    `  X/Twitter opps:      ${publicSignalOpportunities.length}\n` +
+    `  X domains checked:   ${xDebug.length}\n` +
+    `  X opps created:      ${publicSignalOpportunities.length}\n` +
+    `  X dropped (score):   ${xDroppedByScore.length}\n` +
+    `  X dropped (ICP):     ${xDroppedByICP.length}\n` +
+    `  X covered by email:  ${xCoveredByEmail.length}\n` +
     `  Total opps:          ${opportunities.length + publicSignalOpportunities.length}`,
   )
 
-  // Debug: log X-enriched contacts that produced no opportunity
-  const xEnrichedNoop = contactsWithXSignals.filter(
-    (c) =>
-      !opportunities.some((o) => o.domain === c.domain) &&
-      !publicSignalOpportunities.some((o) => o.domain === c.domain),
-  )
-  if (xEnrichedNoop.length > 0) {
+  // Per-domain X debug (full detail)
+  if (xDebug.length > 0) {
     console.log(
-      `REBUILD: X-enriched contacts that produced no opp (${xEnrichedNoop.length}):\n` +
-      xEnrichedNoop
-        .slice(0, 20)
-        .map(
-          (c) =>
-            `  ${c.email} score=${c.interactionScore} signals=[${c.twitterData?.signals?.join(",") ?? ""}]`,
+      `REBUILD X debug (${xDebug.length} domains):\n` +
+      xDebug
+        .slice(0, 30)
+        .map((e) =>
+          `  ${e.included ? "✓" : "✗"} ${e.company} (${e.domain}) ` +
+          `signals=[${e.signals.join(",")}] ` +
+          `base=${e.baseScore.toFixed(1)} sig=${e.signalScore.toFixed(2)} ` +
+          `final=${e.finalScore.toFixed(2)} fit=${e.fitTier}${e.icpBypassed ? "(bypassed)" : ""} ` +
+          (e.skipReason ? `→ ${e.skipReason}` : "→ included"),
         )
         .join("\n"),
     )
@@ -198,12 +203,21 @@ export async function POST() {
       deleteReasons,
     },
 
-    // ── X signal stats ───────────────────────────────────────────────────────
+    // ── Opportunity counts (top-level for quick scan) ────────────────────────
+    totalContacts:           freshContacts.length,
+    contactsWithX:           contactsWithXData.length,
+    contactsWithSignals:     contactsWithXSignals.length,
+    opportunitiesCreated:    opportunities.length + publicSignalOpportunities.length,
+    emailOpportunitiesFound: opportunities.length,
+    xOpportunitiesFound:     publicSignalOpportunities.length,
+    droppedDueToScore:       xDroppedByScore.length,
+    droppedDueToICP:         xDroppedByICP.length,
+
+    // ── X signal detail (per contact) ────────────────────────────────────────
     xStats: {
-      contactsWithXData:      contactsWithXData.length,
-      contactsWithXSignals:   contactsWithXSignals.length,
+      contactsWithXData:       contactsWithXData.length,
+      contactsWithXSignals:    contactsWithXSignals.length,
       contactsWithRichSignals: contactsWithRichSignals.length,
-      // Per-contact breakdown for contacts that have signals
       signalDetail: contactsWithXSignals.slice(0, 50).map((c) => ({
         email:       c.email,
         domain:      c.domain,
@@ -219,10 +233,8 @@ export async function POST() {
       })),
     },
 
-    // ── Opportunity counts ───────────────────────────────────────────────────
-    opportunitiesFound:       opportunities.length + publicSignalOpportunities.length,
-    emailOpportunitiesFound:  opportunities.length,
-    xOpportunitiesFound:      publicSignalOpportunities.length,
+    // ── X pipeline debug (per domain — why included or dropped) ─────────────
+    xDebug,
 
     // ── Email-pipeline debug (per company) ───────────────────────────────────
     debug,
