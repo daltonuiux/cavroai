@@ -4,7 +4,7 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import type { EvidenceItem } from "@/lib/types"
-import type { CompanyOpportunityRow, PublicSignalOpportunityRow } from "@/lib/contact-graph"
+import type { CompanyOpportunityRow, PublicSignalOpportunityRow, CompanySize, BuyerLikelihood } from "@/lib/contact-graph"
 import { signalLabels } from "@/lib/contact-graph"
 
 // ---------------------------------------------------------------------------
@@ -476,16 +476,19 @@ export function OpportunitiesPage({
 // ── Rebuild result state ──────────────────────────────────────────────────────
 
 interface RebuildXDebugEntry {
-  company:     string
-  domain:      string
-  signals:     string[]
-  baseScore:   number
-  signalScore: number
-  finalScore:  number
-  fitTier:     string
-  icpBypassed: boolean
-  included:    boolean
-  skipReason:  string | null
+  company:         string
+  domain:          string
+  signals:         string[]
+  baseScore:       number
+  signalScore:     number
+  finalScore:      number
+  fitTier:         string
+  icpBypassed:     boolean
+  companySize?:    string
+  buyerLikelihood?: string
+  isHouseholdName?: boolean
+  included:        boolean
+  skipReason:      string | null
 }
 
 interface RebuildResult {
@@ -610,7 +613,7 @@ function RebuildButton() {
                         {" "}<span className="font-semibold text-foreground/50">{e.company}</span>
                         {" "}<span className="text-muted-foreground/30">({e.domain})</span>
                       </span>
-                      <span>signals=[{e.signals.join(", ")}] base={e.baseScore.toFixed(1)} sig={e.signalScore.toFixed(2)} score={e.finalScore.toFixed(2)} fit={e.fitTier}{e.icpBypassed ? " (bypassed)" : ""}</span>
+                      <span>signals=[{e.signals.join(", ")}] base={e.baseScore.toFixed(1)} sig={e.signalScore.toFixed(2)} score={e.finalScore.toFixed(2)} fit={e.fitTier}{e.icpBypassed ? " (bypassed)" : ""}{e.companySize ? ` size=${e.companySize}` : ""}{e.buyerLikelihood ? ` buyer=${e.buyerLikelihood}` : ""}{e.isHouseholdName ? " 🏠" : ""}</span>
                       {e.skipReason && <span className="text-destructive/50">→ {e.skipReason}</span>}
                       {e.included && <span className="text-emerald-600/50 dark:text-emerald-400/50">→ included as opportunity</span>}
                     </li>
@@ -803,6 +806,50 @@ function PublicSignalBadge({ signal }: { signal: string }) {
   )
 }
 
+function CompanySizeBadge({ size }: { size: CompanySize }) {
+  if (size === "startup")
+    return (
+      <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400">
+        Startup
+      </span>
+    )
+  if (size === "scaleup")
+    return (
+      <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-violet-500/10 text-violet-600 dark:text-violet-400">
+        Scaleup
+      </span>
+    )
+  if (size === "enterprise")
+    return (
+      <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-foreground/[0.05] text-foreground/40">
+        Enterprise
+      </span>
+    )
+  return null  // "unknown" — don't clutter
+}
+
+function BuyerLikelihoodBadge({ likelihood, reason }: { likelihood: BuyerLikelihood; reason: string }) {
+  if (likelihood === "high")
+    return (
+      <span
+        title={reason}
+        className="rounded px-1.5 py-px text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 cursor-default"
+      >
+        Buyer fit: high
+      </span>
+    )
+  if (likelihood === "low")
+    return (
+      <span
+        title={reason}
+        className="rounded px-1.5 py-px text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 cursor-default"
+      >
+        Buyer fit: low
+      </span>
+    )
+  return null  // "medium" — implicit, no badge needed
+}
+
 function ProximityBadge({ proximity }: { proximity: PublicSignalOpportunityRow["proximity"] }) {
   if (proximity.hasMeetings) {
     return (
@@ -843,6 +890,8 @@ function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
           <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
             <span className="text-[13px] font-semibold text-foreground">{row.company}</span>
             <FitTierBadge tier={row.fitTier} />
+            <CompanySizeBadge size={row.companySize} />
+            <BuyerLikelihoodBadge likelihood={row.buyerLikelihood} reason={row.buyerReason} />
             {row.signals.map((s) => <PublicSignalBadge key={s} signal={s} />)}
           </div>
           <div className="flex items-center gap-1.5">

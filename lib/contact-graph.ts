@@ -155,6 +155,207 @@ export function isTargetCompany(
 }
 
 // ---------------------------------------------------------------------------
+// Buyer-fit classification
+// ---------------------------------------------------------------------------
+
+/**
+ * How big a company appears based on its name and domain.
+ * Used to gate X-signal opportunities so famous/large companies don't flood
+ * the list — they are not realistic buyers of freelance / boutique agency work.
+ */
+export type CompanySize     = "startup" | "scaleup" | "enterprise" | "unknown"
+export type BuyerLikelihood = "high" | "medium" | "low"
+
+export interface BuyerClassification {
+  companySize:     CompanySize
+  buyerLikelihood: BuyerLikelihood
+  /** True for household-name brands (Figma, Stripe, Notion, etc.). */
+  isHouseholdName: boolean
+  /** One-line human-readable reason — shown in debug badges. */
+  reason:          string
+}
+
+/**
+ * Exact domain matches for companies that are too large / too well-known to
+ * realistically buy freelance or boutique agency UI/UX services.
+ *
+ * Matching is against the *registered* domain, e.g. "supabase.com", "vercel.com".
+ * Subdomains are stripped before comparison.
+ */
+const HOUSEHOLD_DOMAINS = new Set<string>([
+  // Big tech
+  "google.com", "apple.com", "microsoft.com", "meta.com", "amazon.com",
+  "netflix.com", "alphabet.com", "samsung.com", "ibm.com", "oracle.com",
+  "sap.com", "cisco.com", "intel.com", "nvidia.com", "qualcomm.com",
+  // Social / comms
+  "twitter.com", "x.com", "linkedin.com", "facebook.com", "instagram.com",
+  "tiktok.com", "bytedance.com", "snapchat.com", "discord.com", "reddit.com",
+  "pinterest.com", "telegram.org", "whatsapp.com", "slack.com", "zoom.us",
+  // Developer tooling / infra
+  "github.com", "gitlab.com", "bitbucket.org", "vercel.com", "netlify.com",
+  "supabase.com", "supabase.io", "heroku.com", "digitalocean.com",
+  "cloudflare.com", "fastly.com", "akamai.com", "mongodb.com",
+  "planetscale.com", "neon.tech", "cockroachlabs.com", "hasura.io",
+  "firebase.com", "render.com", "railway.app", "fly.io",
+  // Design tools
+  "figma.com", "adobe.com", "sketch.com", "canva.com", "invisionapp.com",
+  "framer.com", "webflow.com", "zeplin.io", "marvel.app",
+  // Productivity / PM
+  "notion.so", "asana.com", "monday.com", "clickup.com", "linear.app",
+  "atlassian.com", "basecamp.com", "trello.com", "airtable.com",
+  "coda.io", "miro.com", "loom.com", "mural.co",
+  // Fintech / payments
+  "stripe.com", "paypal.com", "braintreepayments.com", "plaid.com",
+  "square.com", "squareup.com", "coinbase.com", "robinhood.com",
+  "revolut.com", "transferwise.com", "wise.com",
+  // SaaS / CRM / sales
+  "salesforce.com", "hubspot.com", "zendesk.com", "intercom.com",
+  "freshworks.com", "pipedrive.com", "outreach.io", "salesloft.com",
+  "apollo.io", "zoominfo.com", "gong.io", "chorus.ai",
+  // E-commerce / marketplace
+  "shopify.com", "squarespace.com", "wix.com", "wordpress.com",
+  "etsy.com", "ebay.com", "airbnb.com", "uber.com", "lyft.com",
+  "doordash.com", "instacart.com", "grubhub.com",
+  // AI / ML platforms
+  "openai.com", "anthropic.com", "midjourney.com", "stability.ai",
+  "cohere.com", "huggingface.co", "replicate.com",
+  // Analytics / observability
+  "mixpanel.com", "amplitude.com", "datadog.com", "newrelic.com",
+  "sentry.io", "pagerduty.com", "segment.com", "heap.io",
+  // Media / streaming
+  "spotify.com", "youtube.com", "twitch.tv", "soundcloud.com",
+  "medium.com", "substack.com",
+  // Other well-known
+  "dropbox.com", "box.com", "evernote.com", "1password.com",
+  "lastpass.com", "twilio.com", "sendgrid.com", "mailchimp.com",
+  "typeform.com", "surveymonkey.com", "hotjar.com", "fullstory.com",
+  "contentful.com", "sanity.io", "storyblok.com",
+  "retool.com", "bubble.io", "glide.is", "adalo.com",
+])
+
+/**
+ * Company-name words (whole-word, case-insensitive) that identify a household
+ * or well-known brand when the domain isn't already in HOUSEHOLD_DOMAINS.
+ */
+const HOUSEHOLD_NAME_WORDS = new Set<string>([
+  "google", "apple", "microsoft", "meta", "amazon", "netflix", "ibm",
+  "oracle", "salesforce", "sap", "cisco", "intel", "nvidia",
+  "figma", "adobe", "canva", "invision", "sketch",
+  "slack", "zoom", "notion", "stripe", "shopify", "hubspot", "atlassian",
+  "dropbox", "openai", "anthropic", "midjourney",
+  "supabase", "vercel", "netlify", "github", "gitlab",
+  "airbnb", "uber", "lyft", "spotify", "coinbase",
+  "linkedin", "twitter", "discord", "reddit", "tiktok", "snapchat",
+  "paypal", "square", "plaid", "twilio", "sendgrid", "mailchimp",
+  "intercom", "zendesk", "freshworks", "datadog", "sentry", "pagerduty",
+  "webflow", "framer", "miro", "loom", "asana", "notion",
+])
+
+/**
+ * Keywords in a company name that suggest established enterprise scale,
+ * even when not a household name.  Matched as whole words.
+ */
+const ENTERPRISE_SCALE_WORDS = new Set<string>([
+  "corporation", "corp", "incorporated", "inc", "international",
+  "worldwide", "global", "group", "holdings", "conglomerate",
+  "systems", "solutions", "services", "consulting", "consultancy",
+  "partners", "associates", "advisors", "advisory",
+  // Financial / traditional
+  "bank", "insurance", "insurance", "capital", "wealth", "asset",
+  // Large professional services
+  "deloitte", "kpmg", "pwc", "ey", "accenture", "mckinsey", "bcg",
+  "bain", "booz", "capgemini",
+])
+
+/**
+ * Classifies a company's likely size and buyer likelihood for agency/freelance
+ * UI/UX services.
+ *
+ * Resolution order:
+ *  1. Household-domain exact match → enterprise / low
+ *  2. Household-name word match    → enterprise / low
+ *  3. Enterprise-scale word match  → enterprise / low
+ *  4. Startup-positive signals     → startup / high
+ *  5. Default                      → unknown / medium
+ */
+export function classifyBuyer(
+  company: { name: string; domain: string },
+): BuyerClassification {
+  const nameLower   = company.name.toLowerCase()
+  const domainLower = company.domain.toLowerCase()
+
+  // Strip subdomain to get registered domain for blocklist check
+  const domainParts     = domainLower.split(".")
+  const registeredDomain = domainParts.length >= 2
+    ? domainParts.slice(-2).join(".")   // e.g. "sub.figma.com" → "figma.com"
+    : domainLower
+
+  // ── 1. Household domain match ─────────────────────────────────────────────
+  if (HOUSEHOLD_DOMAINS.has(registeredDomain)) {
+    return {
+      companySize:     "enterprise",
+      buyerLikelihood: "low",
+      isHouseholdName: true,
+      reason:          `Household-name brand (${registeredDomain}) — too large to realistically engage a boutique agency`,
+    }
+  }
+
+  // ── 2. Household name word match ──────────────────────────────────────────
+  const nameWords = nameLower.replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean)
+  for (const word of nameWords) {
+    if (HOUSEHOLD_NAME_WORDS.has(word)) {
+      return {
+        companySize:     "enterprise",
+        buyerLikelihood: "low",
+        isHouseholdName: true,
+        reason:          `Name contains well-known brand "${word}" — unlikely boutique buyer`,
+      }
+    }
+  }
+
+  // ── 3. Enterprise-scale word match ───────────────────────────────────────
+  for (const word of nameWords) {
+    if (ENTERPRISE_SCALE_WORDS.has(word)) {
+      return {
+        companySize:     "enterprise",
+        buyerLikelihood: "low",
+        isHouseholdName: false,
+        reason:          `Name suggests large/traditional org ("${word}") — low agency buying likelihood`,
+      }
+    }
+  }
+
+  // ── 4. Startup-positive signals ───────────────────────────────────────────
+  // .io / .ai / .co domains are disproportionately startup-heavy.
+  const isStartupTld = /\.(io|ai|co|app|dev|xyz|so|gg|me)$/.test(domainLower)
+  // "labs", "hq", "works", "craft", "studio" in name = startup culture
+  const hasStartupWord = /\b(labs?|hq|works|craft|studio|forge|ship|make|co)\b/.test(nameLower)
+  // Short, novel company names (≤ 15 chars, single word) skew startup
+  const isShortName    = company.name.replace(/\s+/g, "").length <= 15
+
+  if (isStartupTld || hasStartupWord || isShortName) {
+    return {
+      companySize:     "startup",
+      buyerLikelihood: "high",
+      isHouseholdName: false,
+      reason:          [
+        isStartupTld    ? `startup-leaning domain (.${domainLower.split(".").pop()})` : null,
+        hasStartupWord  ? "startup culture keyword in name"                            : null,
+        isShortName     ? "compact brand name"                                         : null,
+      ].filter(Boolean).join(", "),
+    }
+  }
+
+  // ── 5. Default — not enough signal to classify definitively ──────────────
+  return {
+    companySize:     "unknown",
+    buyerLikelihood: "medium",
+    isHouseholdName: false,
+    reason:          "No strong signals — treating as potential mid-market buyer",
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Twitter enrichment types
 // ---------------------------------------------------------------------------
 
@@ -400,6 +601,10 @@ export interface PublicSignalOpportunityRow {
   /** Best tweet snippet per signal type — powers "why now" narrative. */
   signalEvidence: SignalEvidence[]
   scoreBreakdown: ScoreBreakdown
+  /** Buyer-fit classification derived from company name + domain heuristics. */
+  companySize:     CompanySize
+  buyerLikelihood: BuyerLikelihood
+  buyerReason:     string
 }
 
 /**
@@ -416,9 +621,12 @@ export interface PublicSignalDebugEntry {
   baseScore:     number
   finalScore:    number
   fitTier:       "high" | "medium" | "low"
-  icpBypassed:   boolean    // true when "low" fit was overridden by X signal
-  included:      boolean
-  skipReason:    string | null
+  icpBypassed:     boolean    // true when "low" fit was overridden by X signal
+  companySize:     CompanySize
+  buyerLikelihood: BuyerLikelihood
+  isHouseholdName: boolean
+  included:        boolean
+  skipReason:      string | null
 }
 
 /** Per-company debug record emitted by buildContactOpportunitiesWithDebug. */
@@ -1357,10 +1565,17 @@ interface PublicSignalWhyNowCtx {
   hasMeetings:     boolean
   confidence:      "high" | "medium"
   signalEvidence:  SignalEvidence[]
+  /** Used to generate buyer-aware narrative copy. */
+  companyName:     string
+  companySize:     CompanySize
+  buyerLikelihood: BuyerLikelihood
 }
 
 function narrativePublicSignalWhyNow(ctx: PublicSignalWhyNowCtx): string {
-  const { signal, signals, hasEmailHistory, hasMeetings, confidence, signalEvidence } = ctx
+  const {
+    signal, signals, hasEmailHistory, hasMeetings, confidence, signalEvidence,
+    companyName, companySize, buyerLikelihood,
+  } = ctx
 
   // ── Direct buying / pain signals: quote the actual tweet ─────────────────
   const directEvidence = signalEvidence.find(
@@ -1395,7 +1610,26 @@ function narrativePublicSignalWhyNow(ctx: PublicSignalWhyNowCtx): string {
   // Capitalise first char
   activity = activity.charAt(0).toUpperCase() + activity.slice(1)
 
-  // ── Proximity closing ─────────────────────────────────────────────────────
+  // ── Buyer-aware closing ───────────────────────────────────────────────────
+  // Low-likelihood companies only reach here when hasMeetings=true (hard gate
+  // filtered everyone else).  Make the narrative reflect the exception.
+  if (buyerLikelihood === "low") {
+    return `${activity} — ${companyName} is a larger org, not typical agency territory, but you have an existing relationship here. A selective, targeted conversation makes sense given the signal.`
+  }
+
+  // Startup companies get company-specific framing — makes the card feel grounded.
+  if (companySize === "startup") {
+    if (hasMeetings) {
+      return `${companyName} is a small team and you've already met — ${activity.charAt(0).toLowerCase() + activity.slice(1)}. Reconnect while momentum is high.`
+    }
+    if (hasEmailHistory) {
+      return `${companyName} is a small team — realistic agency territory. ${activity}. You're already in their inbox, so a well-timed note lands well.`
+    }
+    const urgency = confidence === "high" ? "reach out now" : "worth a cold introduction"
+    return `${companyName} is a small team — realistic agency territory. ${activity} — ${urgency}.`
+  }
+
+  // Standard proximity closing
   let closing: string
   if (hasMeetings) {
     closing = "you have a warm relationship here — reconnect while momentum is high"
@@ -1448,15 +1682,18 @@ export function buildPublicSignalOpportunities(
     // ── Skip if email pipeline already covers this company ─────────────────
     if (coveredDomains.has(domain)) {
       debugLog?.push({
-        company:      domainContacts[0]?.companyName ?? domain,
+        company:         domainContacts[0]?.companyName ?? domain,
         domain,
-        contactCount: domainContacts.length,
-        signals:      domainContacts.flatMap((c) => c.twitterData?.signals ?? []),
-        signalScore:  0, baseScore: 0, finalScore: 0,
-        fitTier:      "medium",
-        icpBypassed:  false,
-        included:     false,
-        skipReason:   "covered by email pipeline",
+        contactCount:    domainContacts.length,
+        signals:         domainContacts.flatMap((c) => c.twitterData?.signals ?? []),
+        signalScore:     0, baseScore: 0, finalScore: 0,
+        fitTier:         "medium",
+        icpBypassed:     false,
+        companySize:     "unknown",
+        buyerLikelihood: "medium",
+        isHouseholdName: false,
+        included:        false,
+        skipReason:      "covered by email pipeline",
       })
       continue
     }
@@ -1487,6 +1724,13 @@ export function buildPublicSignalOpportunities(
     const icpBypassed   = rawFitTier === "low" && allSignals.length > 0
     const effectiveFit  = icpBypassed ? "medium" : rawFitTier   // treat as medium for scoring
 
+    // ── Buyer classification ───────────────────────────────────────────────
+    // Hard gate: household/enterprise brands without a personal relationship
+    // are almost certainly not hiring a boutique agency — exclude them so they
+    // don't dilute the list.  A buyerMult then prioritises startups above
+    // unknown/medium companies in the final ranking.
+    const buyerClass = classifyBuyer({ name: topContact.companyName, domain })
+
     // ── Proximity ──────────────────────────────────────────────────────────
     const hasEmailHistory    = sortedContacts.some((c) => c.sentCount + c.receivedCount > 0)
     const hasMeetings        = sortedContacts.some((c) => c.meetingCount > 0)
@@ -1496,6 +1740,28 @@ export function buildPublicSignalOpportunities(
       if (!c.lastInteraction) return false
       return (Date.now() - new Date(c.lastInteraction).getTime()) / 86_400_000 <= 14
     }).length
+
+    // ── Buyer hard gate ────────────────────────────────────────────────────
+    // Household-name / enterprise companies are excluded unless the user has
+    // met with someone there.  Without a personal relationship these companies
+    // are unrealistic buyers for a boutique agency.
+    if (buyerClass.buyerLikelihood === "low" && !hasMeetings) {
+      debugLog?.push({
+        company:         topContact.companyName,
+        domain,
+        contactCount,
+        signals:         [...signalSet],
+        signalScore:     0, baseScore: 0, finalScore: 0,
+        fitTier:         rawFitTier,
+        icpBypassed:     false,
+        companySize:     buyerClass.companySize,
+        buyerLikelihood: buyerClass.buyerLikelihood,
+        isHouseholdName: buyerClass.isHouseholdName,
+        included:        false,
+        skipReason:      `buyer gate: ${buyerClass.reason}`,
+      })
+      continue
+    }
 
     // ── Evidence ───────────────────────────────────────────────────────────
     const signalEvidence = collectTwitterEvidence(sortedContacts)
@@ -1517,7 +1783,13 @@ export function buildPublicSignalOpportunities(
 
     // ICP-bypassed companies get a reduced multiplier (0.6) — still included
     // but ranked lower than well-matched companies.
-    const fitMult  = icpBypassed ? 0.6 : FIT_MULTIPLIER[effectiveFit as "high" | "medium"]
+    const icpMult   = icpBypassed ? 0.6 : FIT_MULTIPLIER[effectiveFit as "high" | "medium"]
+    // Startups are boosted (most likely boutique buyers); low-likelihood orgs
+    // with meetings are demoted but not excluded (personal relationship saved them).
+    const buyerMult = buyerClass.buyerLikelihood === "high"   ? 1.3
+                    : buyerClass.buyerLikelihood === "medium" ? 1.0
+                    :                                           0.4
+    const fitMult   = icpMult * buyerMult
 
     const raw        = baseScore + signalScore + relationshipScore
     const finalScore = Math.round(raw * recencyMult * fitMult * 100) / 100
@@ -1534,33 +1806,39 @@ export function buildPublicSignalOpportunities(
     // ── Score gate ─────────────────────────────────────────────────────────
     if (finalScore < MIN_PUBLIC_SIGNAL_SCORE) {
       debugLog?.push({
-        company:      topContact.companyName,
+        company:         topContact.companyName,
         domain,
         contactCount,
-        signals:      [...signalSet],
+        signals:         [...signalSet],
         signalScore,
         baseScore,
         finalScore,
-        fitTier:      rawFitTier,
+        fitTier:         rawFitTier,
         icpBypassed,
-        included:     false,
-        skipReason:   `score ${finalScore} < MIN_PUBLIC_SIGNAL_SCORE (${MIN_PUBLIC_SIGNAL_SCORE})`,
+        companySize:     buyerClass.companySize,
+        buyerLikelihood: buyerClass.buyerLikelihood,
+        isHouseholdName: buyerClass.isHouseholdName,
+        included:        false,
+        skipReason:      `score ${finalScore} < MIN_PUBLIC_SIGNAL_SCORE (${MIN_PUBLIC_SIGNAL_SCORE})`,
       })
       continue
     }
 
     debugLog?.push({
-      company:      topContact.companyName,
+      company:         topContact.companyName,
       domain,
       contactCount,
-      signals:      [...signalSet],
+      signals:         [...signalSet],
       signalScore,
       baseScore,
       finalScore,
-      fitTier:      rawFitTier,
+      fitTier:         rawFitTier,
       icpBypassed,
-      included:     true,
-      skipReason:   null,
+      companySize:     buyerClass.companySize,
+      buyerLikelihood: buyerClass.buyerLikelihood,
+      isHouseholdName: buyerClass.isHouseholdName,
+      included:        true,
+      skipReason:      null,
     })
 
     const primarySignal = allSignals[0] ?? ("building" as TwitterSignal)
@@ -1575,12 +1853,15 @@ export function buildPublicSignalOpportunities(
       score:      finalScore,
       fitTier:    effectiveFit as "high" | "medium",
       whyNow:     narrativePublicSignalWhyNow({
-        signal: primarySignal,
-        signals: allSignals,
+        signal:          primarySignal,
+        signals:         allSignals,
         hasEmailHistory,
         hasMeetings,
         confidence,
         signalEvidence,
+        companyName:     topContact.companyName,
+        companySize:     buyerClass.companySize,
+        buyerLikelihood: buyerClass.buyerLikelihood,
       }),
       contacts:   sortedContacts
         .filter((c) => c.twitterData)
@@ -1592,10 +1873,13 @@ export function buildPublicSignalOpportunities(
           bio:            c.twitterData!.bio,
           topics:         c.twitterData!.topics,
         })),
-      proximity:      { hasEmailHistory, hasMeetings, emailCount },
-      topics:         [...topicSet],
+      proximity:       { hasEmailHistory, hasMeetings, emailCount },
+      topics:          [...topicSet],
       signalEvidence,
-      scoreBreakdown: breakdown,
+      scoreBreakdown:  breakdown,
+      companySize:     buyerClass.companySize,
+      buyerLikelihood: buyerClass.buyerLikelihood,
+      buyerReason:     buyerClass.reason,
     })
   }
 
