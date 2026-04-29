@@ -186,6 +186,12 @@ export interface ContactTwitterData {
   source?:         "person" | "company"
   /** How confident we are that this handle matches the contact. */
   matchConfidence?: "high" | "medium" | "low"
+  /**
+   * Loose keyword matches that didn't meet the threshold for a full TwitterSignal.
+   * Used for debug/display — not counted in opportunity scoring.
+   * Examples: "event", "product", "waitlist", "conference"
+   */
+  weakSignals?: string[]
 }
 
 // ---------------------------------------------------------------------------

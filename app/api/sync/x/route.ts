@@ -104,15 +104,28 @@ export async function POST() {
 
   const durationMs = Date.now() - started
 
+  // ── Console summary ────────────────────────────────────────────────────────
+  const debugLines = result.debug.map((d) => {
+    const status = d.saved
+      ? `✓ saved  signals:[${d.signals.join(",")}] weak:[${d.weakMatches.join(",")}]`
+      : `✗ skip   ${d.skipReason ?? "unknown"}`
+    const tweetInfo = d.apiError
+      ? `API ${d.apiStatus} ERROR: ${d.apiError.slice(0, 80)}`
+      : `${d.tweetCount} tweets`
+    return `  [${d.source}] @${d.handle} (${d.domain}) | ${tweetInfo} | ${status}`
+  })
+
   console.log(
     `X SYNC [${userId}] complete — ${durationMs}ms\n` +
     `  Attempted:       ${result.contactsAttempted}\n` +
     `  Person matches:  ${result.handlesVerified}\n` +
     `  Company matches: ${result.companyMatchesFound}\n` +
     `  Not found:       ${result.handlesNotFound}\n` +
+    `  Tweets checked:  ${result.tweetsChecked}\n` +
     `  Signals:         ${result.signalsFound}\n` +
-    `  Saved:           ${result.savedCount}` +
-    (result.errors.length > 0 ? `\n  Errors:    ${result.errors.join(", ")}` : ""),
+    `  Saved:           ${result.savedCount}\n` +
+    debugLines.join("\n") +
+    (result.errors.length > 0 ? `\n  Errors: ${result.errors.join(", ")}` : ""),
   )
 
   return NextResponse.json({

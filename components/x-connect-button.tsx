@@ -33,6 +33,7 @@ export function XConnectButton({
   const [syncResult,  setSyncResult]  = useState<{
     handlesVerified:     number
     companyMatchesFound: number
+    tweetsChecked:       number
     signalsFound:        number
     savedCount:          number
     error?:              string
@@ -56,23 +57,25 @@ export function XConnectButton({
       const data = await res.json() as {
         handlesVerified?:     number
         companyMatchesFound?: number
+        tweetsChecked?:       number
         signalsFound?:        number
         savedCount?:          number
         error?:               string
       }
       if (!res.ok || data.error) {
-        setSyncResult({ handlesVerified: 0, companyMatchesFound: 0, signalsFound: 0, savedCount: 0, error: data.error ?? "Sync failed" })
+        setSyncResult({ handlesVerified: 0, companyMatchesFound: 0, tweetsChecked: 0, signalsFound: 0, savedCount: 0, error: data.error ?? "Sync failed" })
       } else {
         setSyncResult({
           handlesVerified:     data.handlesVerified     ?? 0,
           companyMatchesFound: data.companyMatchesFound ?? 0,
+          tweetsChecked:       data.tweetsChecked       ?? 0,
           signalsFound:        data.signalsFound        ?? 0,
           savedCount:          data.savedCount          ?? 0,
         })
         setLastSyncedAt(new Date().toISOString())
       }
     } catch {
-      setSyncResult({ handlesVerified: 0, companyMatchesFound: 0, signalsFound: 0, savedCount: 0, error: "Network error" })
+      setSyncResult({ handlesVerified: 0, companyMatchesFound: 0, tweetsChecked: 0, signalsFound: 0, savedCount: 0, error: "Network error" })
     } finally {
       setSyncing(false)
     }
@@ -163,7 +166,9 @@ export function XConnectButton({
               <div className="mt-2 flex items-center gap-1.5 text-[12px] text-emerald-600 dark:text-emerald-400">
                 <CheckCircle className="size-3" />
                 <span>
-                  Synced — {syncResult.handlesVerified} personal{syncResult.companyMatchesFound > 0 ? `, ${syncResult.companyMatchesFound} company` : ""} accounts matched,{" "}
+                  Synced — {syncResult.handlesVerified} personal
+                  {syncResult.companyMatchesFound > 0 ? `, ${syncResult.companyMatchesFound} company` : ""} accounts matched,{" "}
+                  {syncResult.tweetsChecked} tweets checked,{" "}
                   {syncResult.signalsFound} intent signals found.{" "}
                   <a href="/opportunities" className="underline underline-offset-2">
                     View opportunities →
