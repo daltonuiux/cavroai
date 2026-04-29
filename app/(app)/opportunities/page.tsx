@@ -14,7 +14,7 @@ import { confidenceFromScore } from "@/lib/scoring"
 import { createClient } from "@/lib/supabase/server"
 import type { ClientOpportunityRow, ProspectOpportunityRow } from "@/components/opportunities-list"
 import { buildContactOpportunities } from "@/lib/contact-graph"
-import type { ContactOpportunityRow } from "@/lib/contact-graph"
+import type { CompanyOpportunityRow } from "@/lib/contact-graph"
 
 function deriveScore(analysis: Analysis): number {
   if (analysis.fitScore !== undefined) return analysis.fitScore
@@ -45,7 +45,7 @@ export default async function OpportunitiesRoute() {
   let agencyProfile = null
   let prospectRows: ProspectOpportunityRow[]  = []
   let clientRows: ClientOpportunityRow[]      = []
-  let contactOpps: ContactOpportunityRow[]    = []
+  let contactOpps: CompanyOpportunityRow[]     = []
 
   try {
     const [profile, clients, enrichmentProspects, contacts, interactions] = await Promise.all([

@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import type { EvidenceItem } from "@/lib/types"
-import type { ContactOpportunityRow } from "@/lib/contact-graph"
+import type { CompanyOpportunityRow } from "@/lib/contact-graph"
 import { signalLabels } from "@/lib/contact-graph"
 
 // ---------------------------------------------------------------------------
@@ -384,7 +384,7 @@ export function OpportunitiesPage({
 }: {
   prospects:             ProspectOpportunityRow[]
   clientRows:            ClientOpportunityRow[]
-  contactOpportunities?: ContactOpportunityRow[]
+  contactOpportunities?: CompanyOpportunityRow[]
 }) {
   const [dismissedClients, setDismissedClients] = useState<Set<string>>(new Set())
 
@@ -400,7 +400,7 @@ export function OpportunitiesPage({
             People you should message this week
           </p>
           {contactOpportunities.map((row) => (
-            <ContactOpportunityCard key={`${row.domain}|${row.contactEmail}`} row={row} />
+            <CompanyOpportunityCard key={`${row.domain}|${row.company}`} row={row} />
           ))}
         </div>
       )}
@@ -469,73 +469,54 @@ const TWITTER_SIGNAL_LABELS: Record<string, string> = {
   announcing:  "Announcing",
 }
 
-function TwitterBadge({ handle, signals }: { handle: string; signals?: string[] }) {
-  return (
-    <div className="flex items-center gap-1.5 flex-wrap">
-      <a
-        href={`https://x.com/${handle}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1 rounded px-1.5 py-px text-[10px] font-semibold bg-foreground/[0.06] text-foreground/60 hover:text-foreground transition-colors"
-      >
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-        </svg>
-        @{handle}
-      </a>
-      {signals?.map((s) => (
-        <span
-          key={s}
-          className="rounded px-1.5 py-px text-[10px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400"
-        >
-          {TWITTER_SIGNAL_LABELS[s] ?? s}
-        </span>
-      ))}
-    </div>
-  )
-}
 
-function ContactOpportunityCard({ row }: { row: ContactOpportunityRow }) {
+function CompanyOpportunityCard({ row }: { row: CompanyOpportunityRow }) {
   const [showContacts, setShowContacts] = useState(false)
 
-  const daysSince = Math.floor(
-    (Date.now() - new Date(row.mostRecent).getTime()) / (1000 * 60 * 60 * 24),
-  )
-  const recencyLabel = daysSince === 0 ? "today" : daysSince === 1 ? "yesterday" : `${daysSince}d ago`
+  const daysSince = row.mostRecent
+    ? Math.floor((Date.now() - new Date(row.mostRecent).getTime()) / (1000 * 60 * 60 * 24))
+    : null
+  const recencyLabel = daysSince === null
+    ? null
+    : daysSince === 0 ? "today"
+    : daysSince === 1 ? "yesterday"
+    : `${daysSince}d ago`
 
   return (
     <div className="card-cavro rounded-md px-4 py-3.5 flex flex-col gap-3">
-      {/* Header — company + signals + recency */}
+
+      {/* Header — company name + contact count + signals + recency */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
-            <span className="text-[13px] font-semibold text-foreground">{row.companyName}</span>
+            <span className="text-[13px] font-semibold text-foreground">{row.company}</span>
+            {row.contactCount > 1 && (
+              <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-foreground/[0.06] text-foreground/50">
+                {row.contactCount} contacts
+              </span>
+            )}
             {row.signals.map((s) => <SignalBadge key={s} signal={s} />)}
           </div>
-          <p className="text-[11px] text-muted-foreground/45">{recencyLabel}</p>
+          {recencyLabel && (
+            <p className="text-[11px] text-muted-foreground/45">{recencyLabel}</p>
+          )}
         </div>
+
+        {/* Activity indicator — shown when multiple recent interactions */}
+        {row.recentInteractions >= 2 && (
+          <div className="flex items-center gap-1 shrink-0 mt-0.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <span className="text-[10px] text-muted-foreground/40">Active</span>
+          </div>
+        )}
       </div>
 
       {/* Why now — lead statement */}
-      <div className="border-t border-border pt-3 flex flex-col gap-2">
+      <div className="border-t border-border pt-3">
         <p className="text-[13px] leading-snug font-medium text-foreground/85">{row.whyNow}</p>
-        <div className="flex flex-col gap-0.5">
-          <p className="text-[11px] leading-snug text-muted-foreground/55">{row.whyThisPerson}</p>
-          <p className="text-[11px] leading-snug text-muted-foreground/45">{row.whyItMatters}</p>
-        </div>
       </div>
 
-      {/* Twitter enrichment — handle + tweet signals */}
-      {row.twitterHandle && (
-        <div className="border-t border-border pt-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/35 mb-1.5">
-            Twitter signals
-          </p>
-          <TwitterBadge handle={row.twitterHandle} signals={row.twitterSignals} />
-        </div>
-      )}
-
-      {/* Signal evidence — top subject line */}
+      {/* Signal evidence — top matching subject line */}
       {row.subjects[0] && (
         <div className="rounded-md bg-foreground/[0.03] border border-border/60 px-3 py-2">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/35 mb-1">
@@ -547,29 +528,59 @@ function ContactOpportunityCard({ row }: { row: ContactOpportunityRow }) {
         </div>
       )}
 
-      {/* Multiple contacts — expandable */}
-      {row.allContacts.length > 1 && (
-        <div className="border-t border-border pt-2">
-          <button
-            onClick={() => setShowContacts(!showContacts)}
-            className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors"
-          >
-            {showContacts
-              ? "Hide contacts"
-              : `${row.allContacts.length} contacts at this company`}
-          </button>
-          {showContacts && (
-            <ul className="mt-2 space-y-1">
-              {row.allContacts.map((c) => (
-                <li key={c.email} className="flex items-center gap-2 text-[11px]">
-                  <span className="text-foreground/65">{c.name ?? c.email}</span>
-                  {c.name && <span className="text-muted-foreground/35">{c.email}</span>}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      {/* Contacts — always expandable */}
+      <div className="border-t border-border pt-2">
+        <button
+          onClick={() => setShowContacts(!showContacts)}
+          className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors"
+        >
+          {showContacts
+            ? "Hide contacts"
+            : row.contactCount === 1
+            ? "1 contact"
+            : `${row.contactCount} contacts at this company`}
+        </button>
+
+        {showContacts && (
+          <ul className="mt-2.5 space-y-2.5">
+            {row.contacts.map((c) => (
+              <li key={c.email} className="flex flex-col gap-0.5">
+                <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                  <span className="text-foreground/70 font-medium">{c.name ?? c.email}</span>
+                  {c.name && (
+                    <span className="text-muted-foreground/35">{c.email}</span>
+                  )}
+                  {c.twitterHandle && (
+                    <a
+                      href={`https://x.com/${c.twitterHandle}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-0.5 text-muted-foreground/40 hover:text-foreground transition-colors"
+                    >
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                      </svg>
+                      @{c.twitterHandle}
+                    </a>
+                  )}
+                </div>
+                {c.twitterSignals && c.twitterSignals.length > 0 && (
+                  <div className="flex gap-1 flex-wrap">
+                    {c.twitterSignals.map((s) => (
+                      <span
+                        key={s}
+                        className="rounded px-1.5 py-px text-[10px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400"
+                      >
+                        {TWITTER_SIGNAL_LABELS[s] ?? s}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   )
 }
