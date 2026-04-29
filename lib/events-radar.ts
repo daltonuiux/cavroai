@@ -538,26 +538,57 @@ function buildWhyAttend(
 // ---------------------------------------------------------------------------
 
 /**
- * Selects up to maxSnippets representative tweet snippets for card-level display.
- * Priority: speaker → warm → email → cold.
- * Deduplicates by first 60 characters to avoid near-duplicate quotes.
+ * Selects up to 2 representative tweet snippets for card-level evidence display.
+ *
+ * Priority buckets (first match wins per slot):
+ *   0. Tweets with a date AND location (most concrete — acts as proof)
+ *   1. Tweets with date OR location (partial ground truth)
+ *   2. Speakers (high-intent attendance signal)
+ *   3. Warm contacts (existing relationship)
+ *   4. Email contacts
+ *   5. Cold contacts (weakest, but still a mention)
+ *
+ * Deduplicates by the first 60 characters to avoid near-duplicate quotes.
+ * Shows up to 280 characters — full tweet length — so nothing is hidden.
  */
 function collectSourceEvidence(
-  mentions:  Array<{ tweet: string; contactEmail: string }>,
-  attendees: EventAttendee[],
+  mentions:       Array<{ tweet: string; contactEmail: string }>,
+  attendees:      EventAttendee[],
+  estimatedDate:  string | null,
+  location:       string | null,
   maxSnippets = 2,
 ): string[] {
   const attendeeByEmail = new Map(attendees.map((a) => [a.email, a]))
 
-  const buckets: Array<{ tweet: string; contactEmail: string }[]> = [[], [], [], []]
+  // Six priority buckets
+  const buckets: Array<{ tweet: string; contactEmail: string }[]> = [
+    [], // 0: has date + location
+    [], // 1: has date OR location
+    [], // 2: speaker
+    [], // 3: warm
+    [], // 4: email
+    [], // 5: cold
+  ]
 
   for (const m of mentions) {
     const a = attendeeByEmail.get(m.contactEmail)
     if (!a) continue
-    if (a.role === "speaker")          buckets[0].push(m)
-    else if (attendeeWarmth(a) === "warm")  buckets[1].push(m)
-    else if (attendeeWarmth(a) === "email") buckets[2].push(m)
-    else                               buckets[3].push(m)
+
+    const tweetLower     = m.tweet.toLowerCase()
+    const hasTweetDate   = estimatedDate
+      ? tweetLower.includes(estimatedDate.toLowerCase().slice(0, 3))  // e.g. "jan"
+        || /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|next\s+week|this\s+week)\b/i.test(m.tweet)
+      : false
+    const hasTweetLoc    = location
+      ? tweetLower.includes(location.toLowerCase())
+      : false
+
+    if (hasTweetDate && hasTweetLoc) buckets[0].push(m)
+    else if (hasTweetDate || hasTweetLoc) buckets[1].push(m)
+    else if (a.role === "speaker")        buckets[2].push(m)
+    else if (attendeeWarmth(a) === "warm")  buckets[3].push(m)
+    else if (attendeeWarmth(a) === "email") buckets[4].push(m)
+    else                                   buckets[5].push(m)
   }
 
   const ordered = buckets.flat()
@@ -566,7 +597,9 @@ function collectSourceEvidence(
 
   for (const m of ordered) {
     if (results.length >= maxSnippets) break
-    const snippet = m.tweet.length > 200 ? m.tweet.slice(0, 200) + "…" : m.tweet
+    // Show up to 280 chars — full tweet length, never truncate mid-sentence
+    const raw     = m.tweet.trim()
+    const snippet = raw.length > 280 ? raw.slice(0, 277) + "…" : raw
     const key     = snippet.slice(0, 60).toLowerCase()
     if (!seen.has(key)) {
       seen.add(key)
@@ -582,16 +615,10 @@ function collectSourceEvidence(
 // ---------------------------------------------------------------------------
 
 /**
- * Minimum distinct contacts required for an *unknown* event to surface.
- * Known events use a different validation path (see below).
- */
-const MIN_UNKNOWN_CONTACTS = 2
-
-/**
  * Minimum computed score an event must reach to be included.
  * Drops technically-valid but very weak events before the list is returned.
  */
-const MIN_SCORE = 15
+const MIN_SCORE = 20
 
 /** Cap on returned events — keeps the list curated and actionable. */
 const MAX_EVENTS = 10
@@ -746,18 +773,21 @@ export function buildEventRadar(contacts: Contact[]): RadarEvent[] {
 
     if (attendees.length === 0) continue
 
-    // ── Validation ──────────────────────────────────────────────────────────
-    const hasWarmOrEmail = attendees.some((a) => attendeeWarmth(a) !== "cold")
     const distinctCount  = uniqueEmails.size
+    const hasWarmOrEmail = attendees.some((a) => attendeeWarmth(a) !== "cold")
 
-    if (isKnown) {
-      // Known events: require ≥2 distinct contacts OR ≥1 warm/email contact.
-      // A single cold contact mentioning "SXSW" in passing is not enough signal.
-      if (distinctCount < 2 && !hasWarmOrEmail) continue
-    } else {
-      // Unknown events: must be independently mentioned by ≥2 contacts.
-      if (distinctCount < MIN_UNKNOWN_CONTACTS) continue
-    }
+    // ── Date / location — extracted early so the validation gate can use them ─
+    const allText       = mentions.map((m) => m.tweet).join(" ")
+    const estimatedDate = extractDate(allText)
+    const location      = extractLocation(allText)
+    const hasDateOrLocation = estimatedDate !== null || location !== null
+
+    // ── Validation gate ──────────────────────────────────────────────────────
+    // An event is only surfaced if there is hard social proof (2+ distinct people
+    // independently mentioning it) OR concrete ground-truth evidence (an explicit
+    // date or location in the tweets).  A single person mentioning an event name
+    // with no supporting detail is indistinguishable from noise.
+    if (distinctCount < 2 && !hasDateOrLocation) continue
 
     // ── Sort attendees warm-first ────────────────────────────────────────────
     attendees.sort((a, b) => {
@@ -777,22 +807,17 @@ export function buildEventRadar(contacts: Contact[]): RadarEvent[] {
         count,
       }))
 
-    // ── Date / location / score / narrative ──────────────────────────────────
-    const allText      = mentions.map((m) => m.tweet).join(" ")
-    const estimatedDate = extractDate(allText)
-    const location      = extractLocation(allText)
-    const score         = computeScore(attendees, signals)
-
-    // Minimum score gate — drops technically-valid but very weak events
+    // ── Score gate ───────────────────────────────────────────────────────────
+    const score = computeScore(attendees, signals)
     if (score < MIN_SCORE) continue
 
-    const whyAttend     = buildWhyAttend(attendees, signals, canonical)
+    const whyAttend = buildWhyAttend(attendees, signals, canonical)
 
     // ── Confidence ───────────────────────────────────────────────────────────
-    // high: ≥2 contacts of any warmth AND at least one warm/email
-    //       OR: ≥3 contacts regardless of warmth (density signal)
+    // high: 2+ people AND (known date/location OR ≥1 warm contact), or 3+ people
+    // medium: single person with date/location, or 2+ cold-only without date
     const confidence: "high" | "medium" =
-      (distinctCount >= 2 && hasWarmOrEmail) || distinctCount >= 3
+      (distinctCount >= 2 && (hasDateOrLocation || hasWarmOrEmail)) || distinctCount >= 3
         ? "high"
         : "medium"
 
@@ -800,7 +825,7 @@ export function buildEventRadar(contacts: Contact[]): RadarEvent[] {
     const description = DESCRIPTION_BY_CANONICAL.get(canonical) ?? null
 
     // ── Source evidence ───────────────────────────────────────────────────────
-    const sourceEvidence = collectSourceEvidence(mentions, attendees)
+    const sourceEvidence = collectSourceEvidence(mentions, attendees, estimatedDate, location)
 
     events.push({
       id:            key.replace(/\s+/g, "-"),

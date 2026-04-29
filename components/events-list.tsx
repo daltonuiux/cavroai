@@ -198,9 +198,15 @@ function RelSummaryPills({ people }: { people: EventAttendee[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Source evidence — tweet snippets that triggered detection
+// Source evidence — actual tweets that triggered detection
 // ---------------------------------------------------------------------------
 
+/**
+ * Shows the 1–2 actual tweets that caused this event to be detected.
+ * Attribution matches by mentionContext (the stored snippet per attendee).
+ * Rendered BEFORE the "Why attend" narrative so readers see real evidence
+ * before they see the AI-generated summary.
+ */
 function SourceEvidenceSection({
   evidence,
   people,
@@ -210,37 +216,49 @@ function SourceEvidenceSection({
 }) {
   if (evidence.length === 0) return null
 
-  // Build a name map for attributing quotes
-  const nameBySnippet = new Map<string, string>()
+  // Map mentionContext → first name / handle for attribution
+  const nameByContext = new Map<string, string>()
   for (const person of people) {
-    const snippet = person.mentionContext
-    if (snippet && !nameBySnippet.has(snippet)) {
-      nameBySnippet.set(
-        snippet,
+    const ctx = person.mentionContext
+    if (ctx && !nameByContext.has(ctx)) {
+      nameByContext.set(
+        ctx,
         person.name?.split(" ")[0] ?? `@${person.twitterHandle}`,
       )
     }
   }
 
+  // Also try to match by leading 60 chars in case snippets were truncated
+  function findAuthor(snippet: string): string | undefined {
+    if (nameByContext.has(snippet)) return nameByContext.get(snippet)
+    const prefix = snippet.slice(0, 60).toLowerCase()
+    for (const [ctx, name] of nameByContext) {
+      if (ctx.slice(0, 60).toLowerCase() === prefix) return name
+    }
+    return undefined
+  }
+
   return (
     <div className="border-t border-border px-4 py-3 flex flex-col gap-2">
       <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/30">
-        Detected from
+        {evidence.length === 1 ? "Example tweet" : "Example tweets"}
       </p>
       <div className="flex flex-col gap-2">
         {evidence.map((snippet, i) => {
-          const author = nameBySnippet.get(snippet)
+          const author = findAuthor(snippet)
           return (
             <div
               key={i}
-              className="rounded-md bg-foreground/[0.025] border-l-2 border-foreground/10 pl-3 pr-3 py-2"
+              className="rounded-md bg-foreground/[0.025] border-l-2 border-foreground/[0.12] pl-3 pr-3 py-2.5"
             >
-              <p className="text-[11px] text-muted-foreground/55 italic leading-relaxed line-clamp-3">
-                &ldquo;{snippet}&rdquo;
-              </p>
               {author && (
-                <p className="mt-0.5 text-[10px] text-muted-foreground/35">— {author}</p>
+                <p className="text-[10px] font-semibold text-muted-foreground/50 mb-1">
+                  {author}
+                </p>
               )}
+              <p className="text-[12px] text-foreground/65 leading-relaxed">
+                {snippet}
+              </p>
             </div>
           )
         })}
@@ -319,6 +337,9 @@ function EventCard({ event }: { event: RadarEvent }) {
         </button>
       </div>
 
+      {/* ── Example tweets — real evidence BEFORE the AI summary ──────────── */}
+      <SourceEvidenceSection evidence={event.sourceEvidence} people={event.people} />
+
       {/* ── Why attend ─────────────────────────────────────────────────────── */}
       <div className="border-t border-border px-4 py-3">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/30 mb-1.5">
@@ -328,9 +349,6 @@ function EventCard({ event }: { event: RadarEvent }) {
           {event.whyAttend}
         </p>
       </div>
-
-      {/* ── Source evidence (tweet snippets that triggered detection) ──────── */}
-      <SourceEvidenceSection evidence={event.sourceEvidence} people={event.people} />
 
       {/* ── Signals ────────────────────────────────────────────────────────── */}
       {event.signals.length > 0 && (
