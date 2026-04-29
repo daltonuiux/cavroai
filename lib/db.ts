@@ -37,6 +37,12 @@
 // Migration — add twitter_data column to existing contacts table:
 //   ALTER TABLE contacts ADD COLUMN IF NOT EXISTS twitter_data jsonb;
 //
+// Migration — relationship graph fields (run once):
+//   ALTER TABLE contacts ADD COLUMN IF NOT EXISTS thread_count integer NOT NULL DEFAULT 0;
+//   ALTER TABLE contacts ADD COLUMN IF NOT EXISTS avg_reply_time_hours numeric;
+//   ALTER TABLE contacts ADD COLUMN IF NOT EXISTS who_initiates text;
+//   ALTER TABLE contacts ADD COLUMN IF NOT EXISTS relationship_strength text NOT NULL DEFAULT 'cold';
+//
 // X (Twitter) OAuth connections:
 //   CREATE TABLE IF NOT EXISTS x_connections (
 //     id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1056,6 +1062,24 @@ import type { Contact, ContactInteraction } from "./contact-graph"
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToContact(row: any): Contact {
+  // Relationship strength — falls back to computing from raw counts for contacts
+  // that were synced before the relationship_strength column was added.
+  const sentCount    = row.sent_count     ?? 0
+  const receivedCount= row.received_count ?? 0
+  const meetingCount = row.meeting_count  ?? 0
+  const lastInteraction = row.last_interaction ?? null
+
+  let relationshipStrength: import("./contact-graph").RelationshipStrength =
+    row.relationship_strength ?? null
+
+  if (!relationshipStrength) {
+    // Lazy back-fill: compute from raw counts so existing rows work immediately
+    const { computeRelationshipStrength } = require("./contact-graph") as typeof import("./contact-graph")
+    relationshipStrength = computeRelationshipStrength({
+      sentCount, receivedCount, meetingCount, lastInteraction,
+    })
+  }
+
   return {
     id:               row.id,
     userId:           row.user_id,
@@ -1063,14 +1087,19 @@ function rowToContact(row: any): Contact {
     name:             row.name ?? null,
     domain:           row.domain,
     companyName:      row.company_name,
-    sentCount:        row.sent_count ?? 0,
-    receivedCount:    row.received_count ?? 0,
-    meetingCount:     row.meeting_count ?? 0,
-    lastInteraction:  row.last_interaction ?? null,
+    sentCount,
+    receivedCount,
+    meetingCount,
+    lastInteraction,
     firstInteraction: row.first_interaction ?? null,
     interactionScore: Number(row.interaction_score ?? 0),
     createdAt:        row.created_at,
     twitterData:      row.twitter_data ?? null,
+    // Relationship graph fields
+    threadCount:          row.thread_count          ?? 0,
+    avgReplyTimeHours:    row.avg_reply_time_hours   ?? null,
+    whoInitiates:         row.who_initiates          ?? null,
+    relationshipStrength,
   }
 }
 
@@ -1086,17 +1115,21 @@ export async function upsertContacts(
   if (contacts.length === 0) return 0
 
   const rows = contacts.map((c) => ({
-    user_id:          userId,
-    email:            c.email,
-    name:             c.name,
-    domain:           c.domain,
-    company_name:     c.companyName,
-    sent_count:       c.sentCount,
-    received_count:   c.receivedCount,
-    meeting_count:    c.meetingCount,
-    first_interaction: c.firstInteraction,
-    last_interaction:  c.lastInteraction,
-    interaction_score: c.interactionScore,
+    user_id:               userId,
+    email:                 c.email,
+    name:                  c.name,
+    domain:                c.domain,
+    company_name:          c.companyName,
+    sent_count:            c.sentCount,
+    received_count:        c.receivedCount,
+    meeting_count:         c.meetingCount,
+    first_interaction:     c.firstInteraction,
+    last_interaction:      c.lastInteraction,
+    interaction_score:     c.interactionScore,
+    thread_count:          c.threadCount,
+    avg_reply_time_hours:  c.avgReplyTimeHours,
+    who_initiates:         c.whoInitiates,
+    relationship_strength: c.relationshipStrength,
   }))
 
   const { data, error } = await db()

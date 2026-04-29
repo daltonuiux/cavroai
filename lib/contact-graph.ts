@@ -445,6 +445,52 @@ export interface ScoreBreakdown {
   actionTotal?:      number   // final action score (0–100)
 }
 
+// ---------------------------------------------------------------------------
+// Relationship strength
+// ---------------------------------------------------------------------------
+
+/**
+ * Three-tier classification of how strong the relationship between
+ * the user and a contact is, derived from Gmail + Calendar data.
+ *
+ *   strong — high-frequency + recent, or has met in person recently
+ *   warm   — some history, moderate recency, or ever met
+ *   cold   — minimal interaction or very old
+ */
+export type RelationshipStrength = "strong" | "warm" | "cold"
+
+/**
+ * Derives a relationship strength tier from raw interaction counts and recency.
+ * Pure function — safe to call both at sync time and at read time.
+ */
+export function computeRelationshipStrength(params: {
+  sentCount:       number
+  receivedCount:   number
+  meetingCount:    number
+  lastInteraction: string | null
+}): RelationshipStrength {
+  const { sentCount, receivedCount, meetingCount, lastInteraction } = params
+  const total     = sentCount + receivedCount
+  const daysAgo   = lastInteraction
+    ? (Date.now() - new Date(lastInteraction).getTime()) / 86_400_000
+    : 999
+
+  // ── Strong ──────────────────────────────────────────────────────────────────
+  if (meetingCount > 0 && daysAgo <= 30)                 return "strong"
+  if (meetingCount > 0 && total >= 10 && daysAgo <= 60)  return "strong"
+  if (total >= 20 && daysAgo <= 30)                      return "strong"
+  if (total >= 15 && daysAgo <= 14)                      return "strong"
+
+  // ── Warm ────────────────────────────────────────────────────────────────────
+  if (meetingCount > 0)                                  return "warm"
+  if (total >= 5 && daysAgo <= 90)                       return "warm"
+  if (total >= 10)                                       return "warm"   // solid history
+  if (daysAgo <= 30 && total >= 2)                       return "warm"
+
+  // ── Cold ────────────────────────────────────────────────────────────────────
+  return "cold"
+}
+
 /**
  * Twitter/X data attached to a contact after enrichment.
  * Stored as JSONB in the contacts.twitter_data column.
@@ -503,6 +549,24 @@ export interface Contact {
   createdAt:        string
   /** Present when the contact has been enriched via the Twitter layer. */
   twitterData?:     ContactTwitterData | null
+  // ── Relationship graph fields (populated during sync) ──────────────────────
+  /** Number of unique Gmail threads with this contact. */
+  threadCount:          number
+  /**
+   * Average time in hours between sends within a conversation thread.
+   * Null when there is not enough two-way thread data to compute it.
+   */
+  avgReplyTimeHours:    number | null
+  /**
+   * Who tends to start conversations:
+   *   "user"  — the account holder initiates >70% of threads
+   *   "them"  — the contact initiates >70% of threads
+   *   "mixed" — roughly balanced
+   * Null when there is not enough thread data.
+   */
+  whoInitiates:         "user" | "them" | "mixed" | null
+  /** Three-tier relationship classification derived from interaction depth + recency. */
+  relationshipStrength: RelationshipStrength
 }
 
 export interface ContactInteraction {
@@ -548,12 +612,13 @@ export interface CompanyOpportunityRow {
   whyNow:             string
   /** All qualifying contacts sorted by score desc. */
   contacts:           Array<{
-    email:           string
-    name:            string | null
-    score:           number
-    lastInteraction: string | null
-    twitterHandle?:  string
-    twitterSignals?: TwitterSignal[]
+    email:                string
+    name:                 string | null
+    score:                number
+    lastInteraction:      string | null
+    twitterHandle?:       string
+    twitterSignals?:      TwitterSignal[]
+    relationshipStrength: RelationshipStrength
   }>
   /** Up to 3 unique subject lines as signal evidence. */
   subjects:           string[]
@@ -934,15 +999,17 @@ const ACTION_SIGNAL_WEIGHTS: Record<string, number> = {
 }
 
 interface ActionScoreInput {
-  hasMeetings:        boolean
-  totalEmails:        number
-  contactCount:       number
-  recentInteractions: number
-  daysSince:          number
-  emailSignals:       string[]
-  twitterSignals:     TwitterSignal[]
-  buyerLikelihood:    BuyerLikelihood
-  fitTier:            "high" | "medium"
+  hasMeetings:         boolean
+  totalEmails:         number
+  contactCount:        number
+  recentInteractions:  number
+  daysSince:           number
+  emailSignals:        string[]
+  twitterSignals:      TwitterSignal[]
+  buyerLikelihood:     BuyerLikelihood
+  fitTier:             "high" | "medium"
+  /** Pre-computed relationship tier — used as the primary relationship signal. */
+  relationshipStrength: RelationshipStrength
 }
 
 /**
@@ -950,7 +1017,7 @@ interface ActionScoreInput {
  * "Can I realistically act on this right now?"
  *
  * Weighting priority (in order):
- *   1. Relationship strength (DOMINANT — met > emailed > cold)
+ *   1. Relationship strength (DOMINANT — strong > warm > cold)
  *   2. Recency (heavy multiplier, 1.0–3.0×)
  *   3. Signal type (launching / buying = high; building = low)
  *   4. Multi-signal stacking (1.0–1.5×)
@@ -969,16 +1036,19 @@ function computeActionScore(input: ActionScoreInput): {
 } {
   const {
     hasMeetings, totalEmails, contactCount, recentInteractions, daysSince,
-    emailSignals, twitterSignals, buyerLikelihood, fitTier,
+    emailSignals, twitterSignals, buyerLikelihood, fitTier, relationshipStrength,
   } = input
 
   // ── 1. Relationship score (0–65, DOMINANT) ───────────────────────────────────
+  // relationshipStrength is the primary driver — it already encodes meeting history,
+  // email frequency, and recency into a single tier.  hasMeetings adds a further
+  // boost when we know a face-to-face meeting occurred.
   let relScore: number
-  if      (hasMeetings)       relScore = 50
-  else if (totalEmails > 20)  relScore = 35
-  else if (totalEmails > 5)   relScore = 25
-  else if (totalEmails > 0)   relScore = 15
-  else                        relScore = 4   // X-signal only, no email history
+  if      (hasMeetings && relationshipStrength === "strong") relScore = 62
+  else if (hasMeetings || relationshipStrength === "strong") relScore = 50
+  else if (relationshipStrength === "warm")                  relScore = 30
+  else if (totalEmails > 0)                                  relScore = 10  // cold but some email
+  else                                                       relScore = 4   // pure X-signal, no email
 
   // Multi-contact bonus (additional people at same company = wider access)
   relScore += Math.min(15, (contactCount - 1) * 5)
@@ -1668,16 +1738,29 @@ export function buildContactOpportunities(
     const opportunityType = classifyOpportunityType(buyerClass.buyerLikelihood, allSignals)
 
     // ── Action Score ──────────────────────────────────────────────────────────
+    // Derive relationship strength from the top contact's stored tier, falling
+    // back to computing it from raw counts (handles contacts synced before the
+    // relationship_strength column was added).
+    const topRelStrength: RelationshipStrength =
+      topContact.relationshipStrength ??
+      computeRelationshipStrength({
+        sentCount:       topContact.sentCount,
+        receivedCount:   topContact.receivedCount,
+        meetingCount:    topContact.meetingCount,
+        lastInteraction: topContact.lastInteraction,
+      })
+
     const { actionScore, breakdown: actionBreakdown } = computeActionScore({
       hasMeetings,
       totalEmails,
       contactCount,
       recentInteractions,
       daysSince,
-      emailSignals:    emailSignalList,
+      emailSignals:        emailSignalList,
       twitterSignals,
-      buyerLikelihood: buyerClass.buyerLikelihood,
-      fitTier:         fitTier as "high" | "medium",
+      buyerLikelihood:     buyerClass.buyerLikelihood,
+      fitTier:             fitTier as "high" | "medium",
+      relationshipStrength: topRelStrength,
     })
 
     const actionReason = buildContactActionReason({
@@ -1710,12 +1793,13 @@ export function buildContactOpportunities(
         signalEvidence,
       }),
       contacts:           sortedContacts.map((c) => ({
-        email:           c.email,
-        name:            c.name,
-        score:           c.interactionScore,
-        lastInteraction: c.lastInteraction,
-        twitterHandle:   c.twitterData?.handle,
-        twitterSignals:  c.twitterData?.signals,
+        email:                c.email,
+        name:                 c.name,
+        score:                c.interactionScore,
+        lastInteraction:      c.lastInteraction,
+        twitterHandle:        c.twitterData?.handle,
+        twitterSignals:       c.twitterData?.signals,
+        relationshipStrength: c.relationshipStrength,
       })),
       subjects:           [...new Set(subjects)].slice(0, 3),
       mostRecent,
@@ -2063,21 +2147,40 @@ export function buildPublicSignalOpportunities(
     const primarySignal = allSignals[0] ?? ("building" as TwitterSignal)
 
     // ── Action Score ────────────────────────────────────────────────────────
+    const pubDaysSince = (() => {
+      const latest = sortedContacts
+        .map((c) => c.lastInteraction ? new Date(c.lastInteraction).getTime() : 0)
+        .reduce((a, b) => Math.max(a, b), 0)
+      return latest ? Math.floor((Date.now() - latest) / 86_400_000) : 999
+    })()
+
+    // Best relationship strength across all contacts at this domain
+    const pubRelStrength: RelationshipStrength = (() => {
+      const strengths = sortedContacts.map((c) =>
+        c.relationshipStrength ??
+        computeRelationshipStrength({
+          sentCount:       c.sentCount,
+          receivedCount:   c.receivedCount,
+          meetingCount:    c.meetingCount,
+          lastInteraction: c.lastInteraction,
+        }),
+      )
+      if (strengths.includes("strong")) return "strong"
+      if (strengths.includes("warm"))   return "warm"
+      return "cold"
+    })()
+
     const { actionScore, breakdown: actionBreakdown } = computeActionScore({
       hasMeetings,
-      totalEmails:     emailCount,
-      contactCount:    sortedContacts.length,
+      totalEmails:         emailCount,
+      contactCount:        sortedContacts.length,
       recentInteractions,
-      daysSince:       (() => {
-        const latest = sortedContacts
-          .map((c) => c.lastInteraction ? new Date(c.lastInteraction).getTime() : 0)
-          .reduce((a, b) => Math.max(a, b), 0)
-        return latest ? Math.floor((Date.now() - latest) / 86_400_000) : 999
-      })(),
-      emailSignals:    [],
-      twitterSignals:  allSignals,
-      buyerLikelihood: buyerClass.buyerLikelihood,
-      fitTier:         effectiveFit as "high" | "medium",
+      daysSince:           pubDaysSince,
+      emailSignals:        [],
+      twitterSignals:      allSignals,
+      buyerLikelihood:     buyerClass.buyerLikelihood,
+      fitTier:             effectiveFit as "high" | "medium",
+      relationshipStrength: pubRelStrength,
     })
 
     const actionReason = buildPublicSignalActionReason({
@@ -2085,12 +2188,7 @@ export function buildPublicSignalOpportunities(
       signals:         allSignals,
       hasMeetings,
       hasEmailHistory,
-      daysSince:       (() => {
-        const latest = sortedContacts
-          .map((c) => c.lastInteraction ? new Date(c.lastInteraction).getTime() : 0)
-          .reduce((a, b) => Math.max(a, b), 0)
-        return latest ? Math.floor((Date.now() - latest) / 86_400_000) : 999
-      })(),
+      daysSince:       pubDaysSince,
     })
 
     rows.push({

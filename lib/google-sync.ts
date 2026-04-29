@@ -22,6 +22,7 @@ import {
   shouldSkipContact,
   domainFromEmail,
 } from "./contact-filter"
+import { computeRelationshipStrength } from "./contact-graph"
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -121,25 +122,43 @@ export function domainToCompanyName(domain: string): string {
 // Contact accumulator
 // ---------------------------------------------------------------------------
 
+/**
+ * One message in a Gmail thread that is relevant to a contact.
+ * Used to compute reply-time and who-initiates metrics.
+ */
+interface ThreadMessage {
+  /** True when the account holder sent this message; false when the contact did. */
+  senderIsUser: boolean
+  /** Unix milliseconds — from internalDate. */
+  timestamp: number
+}
+
 interface ContactAccum {
-  email:           string
-  name:            string | null
-  domain:          string
-  companyName:     string
-  sentCount:       number
-  receivedCount:   number
-  meetingCount:    number
+  email:            string
+  name:             string | null
+  domain:           string
+  companyName:      string
+  sentCount:        number
+  receivedCount:    number
+  meetingCount:     number
   firstInteraction: Date
-  lastInteraction: Date
+  lastInteraction:  Date
+  /**
+   * Thread-level message sequences, keyed by Gmail threadId.
+   * Populated only for email (not meetings) and only when threadId is available.
+   * Used to derive threadCount, avgReplyTimeHours, and whoInitiates.
+   */
+  threads:          Map<string, ThreadMessage[]>
 }
 
 type ContactMap = Map<string, ContactAccum>
 
 function touchContact(
-  map:     ContactMap,
-  addr:    ParsedAddress,
-  when:    Date,
-  type:    "sent" | "received" | "meeting",
+  map:          ContactMap,
+  addr:         ParsedAddress,
+  when:         Date,
+  type:         "sent" | "received" | "meeting",
+  threadInfo?:  { threadId: string; senderIsUser: boolean },
 ): void {
   const email = addr.email.toLowerCase()
   const domain = domainFromEmail(email)
@@ -153,19 +172,109 @@ function touchContact(
     if (when < existing.firstInteraction) existing.firstInteraction = when
     if (when > existing.lastInteraction)  existing.lastInteraction  = when
     if (!existing.name && addr.name) existing.name = addr.name
+
+    // Append to thread message list
+    if (threadInfo) {
+      const msgs = existing.threads.get(threadInfo.threadId) ?? []
+      msgs.push({ senderIsUser: threadInfo.senderIsUser, timestamp: when.getTime() })
+      existing.threads.set(threadInfo.threadId, msgs)
+    }
   } else {
+    const threads = new Map<string, ThreadMessage[]>()
+    if (threadInfo) {
+      threads.set(threadInfo.threadId, [
+        { senderIsUser: threadInfo.senderIsUser, timestamp: when.getTime() },
+      ])
+    }
     map.set(email, {
       email,
-      name:            addr.name,
+      name:             addr.name,
       domain,
-      companyName:     domainToCompanyName(domain),
-      sentCount:       type === "sent"     ? 1 : 0,
-      receivedCount:   type === "received" ? 1 : 0,
-      meetingCount:    type === "meeting"  ? 1 : 0,
+      companyName:      domainToCompanyName(domain),
+      sentCount:        type === "sent"     ? 1 : 0,
+      receivedCount:    type === "received" ? 1 : 0,
+      meetingCount:     type === "meeting"  ? 1 : 0,
       firstInteraction: when,
       lastInteraction:  when,
+      threads,
     })
   }
+}
+
+// ---------------------------------------------------------------------------
+// Thread-derived relationship metrics
+// ---------------------------------------------------------------------------
+
+/**
+ * Derives `threadCount`, `avgReplyTimeHours`, and `whoInitiates` from
+ * the per-thread message sequences captured during Gmail processing.
+ *
+ * Reply-time algorithm:
+ *   For each thread with ≥2 messages, sort by timestamp, then find consecutive
+ *   message pairs where the sender alternates (user ↔ contact).  The time gap
+ *   between each alternating pair is one "reply event".  Average all reply
+ *   events across all threads for this contact.
+ *
+ * Who-initiates algorithm:
+ *   The first message in each thread identifies the initiator.
+ *   If >70% of threads were started by the user → "user"
+ *   If >70% of threads were started by the contact → "them"
+ *   Otherwise → "mixed"
+ */
+function computeThreadMetrics(threads: Map<string, ThreadMessage[]>): {
+  threadCount:       number
+  avgReplyTimeHours: number | null
+  whoInitiates:      "user" | "them" | "mixed" | null
+} {
+  const threadCount = threads.size
+  if (threadCount === 0) {
+    return { threadCount: 0, avgReplyTimeHours: null, whoInitiates: null }
+  }
+
+  const replyDelaysMs: number[] = []
+  let userInitiated = 0
+  let themInitiated = 0
+
+  for (const msgs of threads.values()) {
+    if (msgs.length < 1) continue
+
+    // Sort chronologically
+    const sorted = [...msgs].sort((a, b) => a.timestamp - b.timestamp)
+
+    // Who-initiates: first message in thread
+    if (sorted[0].senderIsUser) userInitiated++
+    else                        themInitiated++
+
+    // Reply-time: consecutive pairs where sender alternates
+    if (sorted.length < 2) continue
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1]
+      const curr = sorted[i]
+      // Only count when sender flips (genuine reply, not two back-to-back from same side)
+      if (prev.senderIsUser !== curr.senderIsUser) {
+        replyDelaysMs.push(curr.timestamp - prev.timestamp)
+      }
+    }
+  }
+
+  const avgReplyTimeHours =
+    replyDelaysMs.length > 0
+      ? Math.round(
+          (replyDelaysMs.reduce((a, b) => a + b, 0) / replyDelaysMs.length / 3_600_000) * 10,
+        ) / 10
+      : null
+
+  const totalThreadsWithKnownInitiator = userInitiated + themInitiated
+  let whoInitiates: "user" | "them" | "mixed" | null = null
+  if (totalThreadsWithKnownInitiator > 0) {
+    const userRatio = userInitiated / totalThreadsWithKnownInitiator
+    whoInitiates =
+      userRatio >= 0.7 ? "user"
+      : userRatio <= 0.3 ? "them"
+      : "mixed"
+  }
+
+  return { threadCount, avgReplyTimeHours, whoInitiates }
 }
 
 // ---------------------------------------------------------------------------
@@ -232,6 +341,7 @@ async function listGmailMessageIds(
 
 interface GmailMetadata {
   id:           string
+  threadId?:    string   // always returned by Gmail API — captures conversation threads
   internalDate: string
   payload?: {
     headers?: Array<{ name: string; value: string }>
@@ -311,16 +421,21 @@ async function fetchCalendarEvents(
 // ---------------------------------------------------------------------------
 
 export interface ContactRow {
-  email:            string
-  name:             string | null
-  domain:           string
-  companyName:      string
-  sentCount:        number
-  receivedCount:    number
-  meetingCount:     number
-  firstInteraction: string  // ISO
-  lastInteraction:  string  // ISO
-  interactionScore: number
+  email:             string
+  name:              string | null
+  domain:            string
+  companyName:       string
+  sentCount:         number
+  receivedCount:     number
+  meetingCount:      number
+  firstInteraction:  string  // ISO
+  lastInteraction:   string  // ISO
+  interactionScore:  number
+  // ── Relationship graph fields ─────────────────────────────────────────────
+  threadCount:       number
+  avgReplyTimeHours: number | null
+  whoInitiates:      "user" | "them" | "mixed" | null
+  relationshipStrength: "strong" | "warm" | "cold"
 }
 
 export interface ContactInteractionRow {
@@ -424,7 +539,9 @@ export async function syncGoogleData(
 
       for (const addr of toAddrs) {
         if (shouldSkipContact(addr.email, userDomain)) continue
-        touchContact(contactMap, addr, when, "sent")
+        touchContact(contactMap, addr, when, "sent", meta.threadId
+          ? { threadId: meta.threadId, senderIsUser: true }
+          : undefined)
         if (!gmailEmailsKept.has(addr.email)) {
           gmailEmailsKept.add(addr.email)
           gmailSentKept++
@@ -476,7 +593,9 @@ export async function syncGoogleData(
 
       for (const addr of from) {
         if (shouldSkipContact(addr.email, userDomain)) continue
-        touchContact(contactMap, addr, when, "received")
+        touchContact(contactMap, addr, when, "received", meta.threadId
+          ? { threadId: meta.threadId, senderIsUser: false }
+          : undefined)
         if (!gmailEmailsKept.has(addr.email)) {
           gmailEmailsKept.add(addr.email)
           gmailRecvKept++
@@ -537,17 +656,29 @@ export async function syncGoogleData(
   // ── Build contact rows ─────────────────────────────────────────────────────
   const contacts: ContactRow[] = []
   for (const [, accum] of contactMap) {
+    const { threadCount, avgReplyTimeHours, whoInitiates } = computeThreadMetrics(accum.threads)
+    const lastInteractionISO = accum.lastInteraction.toISOString()
+
     contacts.push({
-      email:            accum.email,
-      name:             accum.name,
-      domain:           accum.domain,
-      companyName:      accum.companyName,
-      sentCount:        accum.sentCount,
-      receivedCount:    accum.receivedCount,
-      meetingCount:     accum.meetingCount,
-      firstInteraction: accum.firstInteraction.toISOString(),
-      lastInteraction:  accum.lastInteraction.toISOString(),
-      interactionScore: computeInteractionScore(accum),
+      email:             accum.email,
+      name:              accum.name,
+      domain:            accum.domain,
+      companyName:       accum.companyName,
+      sentCount:         accum.sentCount,
+      receivedCount:     accum.receivedCount,
+      meetingCount:      accum.meetingCount,
+      firstInteraction:  accum.firstInteraction.toISOString(),
+      lastInteraction:   lastInteractionISO,
+      interactionScore:  computeInteractionScore(accum),
+      threadCount,
+      avgReplyTimeHours,
+      whoInitiates,
+      relationshipStrength: computeRelationshipStrength({
+        sentCount:       accum.sentCount,
+        receivedCount:   accum.receivedCount,
+        meetingCount:    accum.meetingCount,
+        lastInteraction: lastInteractionISO,
+      }),
     })
   }
 

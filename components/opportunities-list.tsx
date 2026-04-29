@@ -4,7 +4,7 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import type { EvidenceItem } from "@/lib/types"
-import type { CompanyOpportunityRow, PublicSignalOpportunityRow, CompanySize, BuyerLikelihood, OpportunityType } from "@/lib/contact-graph"
+import type { CompanyOpportunityRow, PublicSignalOpportunityRow, CompanySize, BuyerLikelihood, OpportunityType, RelationshipStrength } from "@/lib/contact-graph"
 import { signalLabels } from "@/lib/contact-graph"
 
 // ---------------------------------------------------------------------------
@@ -696,6 +696,8 @@ function CompanyOpportunityCard({ row }: { row: CompanyOpportunityRow }) {
     : daysSince === 1 ? "yesterday"
     : `${daysSince}d ago`
 
+  const relStrength = deriveRelStrength(row.contacts)
+
   return (
     <div className="card-cavro rounded-md px-4 py-3.5 flex flex-col gap-3">
 
@@ -705,6 +707,7 @@ function CompanyOpportunityCard({ row }: { row: CompanyOpportunityRow }) {
           <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
             <span className="text-[13px] font-semibold text-foreground">{row.company}</span>
             <OpportunityTypeBadge type={row.opportunityType} />
+            {relStrength && <RelationshipStrengthBadge strength={relStrength} />}
             <CompanySizeBadge size={row.companySize} />
             <BuyerLikelihoodBadge likelihood={row.buyerLikelihood} reason={row.buyerReason} />
             {row.contactCount > 1 && (
@@ -899,6 +902,46 @@ function BuyerLikelihoodBadge({ likelihood, reason }: { likelihood: BuyerLikelih
   return null  // "medium" — implicit, no badge needed
 }
 
+/**
+ * Derives the best relationship strength across all contacts in an opportunity.
+ * Falls back to inferring from proximity flags when the field isn't available.
+ */
+function deriveRelStrength(
+  contacts: Array<{ relationshipStrength?: RelationshipStrength }> | null | undefined,
+  hasMeetings?: boolean,
+  hasEmailHistory?: boolean,
+): RelationshipStrength | null {
+  if (contacts && contacts.length > 0) {
+    if (contacts.some((c) => c.relationshipStrength === "strong")) return "strong"
+    if (contacts.some((c) => c.relationshipStrength === "warm"))   return "warm"
+    if (contacts.some((c) => c.relationshipStrength === "cold"))   return "cold"
+  }
+  // Fallback for older data without relationshipStrength
+  if (hasMeetings) return "strong"
+  if (hasEmailHistory) return "warm"
+  return null
+}
+
+function RelationshipStrengthBadge({ strength }: { strength: RelationshipStrength }) {
+  if (strength === "strong") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded px-1.5 py-px text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden />
+        Strong relationship
+      </span>
+    )
+  }
+  if (strength === "warm") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded px-1.5 py-px text-[10px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-sky-400" aria-hidden />
+        Warm intro
+      </span>
+    )
+  }
+  return null  // cold — no badge, keeps header clean
+}
+
 function ProximityBadge({ proximity }: { proximity: PublicSignalOpportunityRow["proximity"] }) {
   if (proximity.hasMeetings) {
     return (
@@ -925,6 +968,8 @@ function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
   const [showContacts, setShowContacts] = useState(false)
   const [showScore,    setShowScore]    = useState(false)
 
+  const relStrength = deriveRelStrength(null, row.proximity.hasMeetings, row.proximity.hasEmailHistory)
+
   // Best tweet evidence snippet that isn't already in the whyNow
   const evidenceSnippet = row.signalEvidence?.find(
     (e) => e.source === "twitter" && e.snippet,
@@ -939,6 +984,7 @@ function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
           <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
             <span className="text-[13px] font-semibold text-foreground">{row.company}</span>
             <OpportunityTypeBadge type={row.opportunityType} />
+            {relStrength && <RelationshipStrengthBadge strength={relStrength} />}
             <CompanySizeBadge size={row.companySize} />
             <BuyerLikelihoodBadge likelihood={row.buyerLikelihood} reason={row.buyerReason} />
             {row.signals.map((s) => <PublicSignalBadge key={s} signal={s} />)}
