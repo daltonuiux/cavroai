@@ -2044,26 +2044,89 @@ export function buildPublicSignalOpportunities(
       return (Date.now() - new Date(c.lastInteraction).getTime()) / 86_400_000 <= 14
     }).length
 
-    // ── Buyer hard gate ────────────────────────────────────────────────────
-    // Household-name / enterprise companies are excluded unless the user has
-    // met with someone there.  Without a personal relationship these companies
-    // are unrealistic buyers for a boutique agency.
-    if (buyerClass.buyerLikelihood === "low" && !hasMeetings) {
-      debugLog?.push({
-        company:         topContact.companyName,
-        domain,
-        contactCount,
-        signals:         [...signalSet],
-        signalScore:     0, baseScore: 0, finalScore: 0,
-        fitTier:         rawFitTier,
-        icpBypassed:     false,
-        companySize:     buyerClass.companySize,
-        buyerLikelihood: buyerClass.buyerLikelihood,
-        isHouseholdName: buyerClass.isHouseholdName,
-        included:        false,
-        skipReason:      `buyer gate: ${buyerClass.reason}`,
-      })
+    // ── Signal age — best proxy for "how fresh is this intent signal?" ─────
+    // enrichedAt records when we last fetched the contact's Twitter data.
+    // Per-tweet timestamps are not stored in the current data model, so
+    // enrichedAt is the earliest date we can use for signal freshness.
+    const latestEnrichedAt = sortedContacts
+      .map((c) => c.twitterData?.enrichedAt ? new Date(c.twitterData.enrichedAt).getTime() : 0)
+      .reduce((a, b) => Math.max(a, b), 0)
+    const signalAgeDays = latestEnrichedAt
+      ? Math.floor((Date.now() - latestEnrichedAt) / 86_400_000)
+      : 999
+
+    // ── Relationship strength — computed early so all gates can use it ─────
+    const pubRelStrength: RelationshipStrength = (() => {
+      const strengths = sortedContacts.map((c) =>
+        c.relationshipStrength ??
+        computeRelationshipStrength({
+          sentCount:       c.sentCount,
+          receivedCount:   c.receivedCount,
+          meetingCount:    c.meetingCount,
+          lastInteraction: c.lastInteraction,
+        }),
+      )
+      if (strengths.includes("strong")) return "strong"
+      if (strengths.includes("warm"))   return "warm"
+      return "cold"
+    })()
+
+    const hasRelationship = pubRelStrength === "strong" || pubRelStrength === "warm"
+
+    // Shared debug shape for pre-scoring drops (no score values yet)
+    const makeDropDebug = (skipReason: string): PublicSignalDebugEntry => ({
+      company:         topContact.companyName,
+      domain,
+      contactCount,
+      signals:         [...signalSet],
+      signalScore:     0, baseScore: 0, finalScore: 0,
+      fitTier:         rawFitTier,
+      icpBypassed,
+      companySize:     buyerClass.companySize,
+      buyerLikelihood: buyerClass.buyerLikelihood,
+      isHouseholdName: buyerClass.isHouseholdName,
+      included:        false,
+      skipReason,
+    })
+
+    // ── Gate 1: Stale signal ───────────────────────────────────────────────
+    // Drop any opportunity where the enrichment data is older than 21 days —
+    // the intent signal is effectively stale and may no longer reflect reality.
+    if (signalAgeDays > 21) {
+      debugLog?.push(makeDropDebug("stale signal"))
       continue
+    }
+
+    // ── Gate 2: Enterprise / household brand ───────────────────────────────
+    // Household-name companies are excluded unless the user has an actual
+    // relationship (warm or strong) there.  Without a personal connection,
+    // these companies are unrealistic buyers of boutique agency services.
+    if (buyerClass.isHouseholdName && !hasRelationship) {
+      debugLog?.push(makeDropDebug("enterprise filtered"))
+      continue
+    }
+
+    // ── Gate 3: Buyer likelihood ───────────────────────────────────────────
+    // Low buyer likelihood AND no calendar meetings → drop.  A meeting
+    // represents a real personal connection that can override the heuristic;
+    // without one, low-likelihood companies are not worth surfacing.
+    if (buyerClass.buyerLikelihood === "low" && !hasMeetings) {
+      debugLog?.push(makeDropDebug("low buyer likelihood"))
+      continue
+    }
+
+    // ── Gate 4: Relationship OR strong signal ─────────────────────────────
+    // Without a warm/strong relationship we require concrete buying intent:
+    //   - "launching" signal within 14 days (peak receptivity window)
+    //   - OR at least 2 distinct signals (multi-signal stacking)
+    // A single vague signal from a cold contact is indistinguishable from noise.
+    if (!hasRelationship) {
+      const hasLaunchingRecent = allSignals.includes("launching" as TwitterSignal) && signalAgeDays <= 14
+      const hasMultiSignal     = allSignals.length >= 2
+      if (!hasLaunchingRecent && !hasMultiSignal) {
+        debugLog?.push(makeDropDebug("no relationship + weak signal"))
+        continue
+      }
     }
 
     // ── Evidence ───────────────────────────────────────────────────────────
@@ -2152,22 +2215,6 @@ export function buildPublicSignalOpportunities(
         .map((c) => c.lastInteraction ? new Date(c.lastInteraction).getTime() : 0)
         .reduce((a, b) => Math.max(a, b), 0)
       return latest ? Math.floor((Date.now() - latest) / 86_400_000) : 999
-    })()
-
-    // Best relationship strength across all contacts at this domain
-    const pubRelStrength: RelationshipStrength = (() => {
-      const strengths = sortedContacts.map((c) =>
-        c.relationshipStrength ??
-        computeRelationshipStrength({
-          sentCount:       c.sentCount,
-          receivedCount:   c.receivedCount,
-          meetingCount:    c.meetingCount,
-          lastInteraction: c.lastInteraction,
-        }),
-      )
-      if (strengths.includes("strong")) return "strong"
-      if (strengths.includes("warm"))   return "warm"
-      return "cold"
     })()
 
     const { actionScore, breakdown: actionBreakdown } = computeActionScore({
