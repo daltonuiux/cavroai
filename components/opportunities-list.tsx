@@ -402,15 +402,15 @@ export function OpportunitiesPage({
     ...publicSignalOpportunities.map((row): TaggedOpp => ({ kind: "signal", row })),
   ]
 
-  // "client" + "hybrid" → sell section, sorted by deal likelihood (score desc)
+  // "client" + "hybrid" → sell section, sorted by actionability (actionScore desc)
   const clientOpps = allOpps
     .filter((o) => o.row.opportunityType !== "network")
-    .sort((a, b) => b.row.score - a.row.score)
+    .sort((a, b) => b.row.actionScore - a.row.actionScore)
 
-  // "network" → connect section, sorted by influence proxy (score desc)
+  // "network" → connect section, sorted by actionability (actionScore desc)
   const networkOpps = allOpps
     .filter((o) => o.row.opportunityType === "network")
-    .sort((a, b) => b.row.score - a.row.score)
+    .sort((a, b) => b.row.actionScore - a.row.actionScore)
 
   const hasContactOpps = clientOpps.length > 0 || networkOpps.length > 0
 
@@ -728,9 +728,14 @@ function CompanyOpportunityCard({ row }: { row: CompanyOpportunityRow }) {
         )}
       </div>
 
-      {/* Why now — lead statement */}
-      <div className="border-t border-border pt-3">
-        <p className="text-[13px] leading-snug font-medium text-foreground/85">{row.whyNow}</p>
+      {/* Action reason — primary verdict line */}
+      <div className="border-t border-border pt-3 flex flex-col gap-2">
+        <p className="text-[13px] leading-snug font-semibold text-foreground/90">{row.actionReason}</p>
+
+        {/* Why now — fuller context, slightly muted */}
+        {row.whyNow !== row.actionReason && (
+          <p className="text-[12px] leading-snug text-muted-foreground/60">{row.whyNow}</p>
+        )}
       </div>
 
       {/* Signal evidence — top matching subject line */}
@@ -948,34 +953,39 @@ function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
             <ProximityBadge proximity={row.proximity} />
           </div>
         </div>
-        {/* Score pill */}
+        {/* Action score pill */}
         <button
           onClick={() => setShowScore((v) => !v)}
-          title="Show score breakdown"
+          title="Show action score breakdown"
           className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground/40 bg-foreground/[0.03] border border-border/60 hover:border-border transition-colors"
         >
-          {row.score.toFixed(1)}
+          {row.actionScore}
         </button>
       </div>
 
       {/* Score breakdown (revealed on click) */}
       {showScore && row.scoreBreakdown && (
         <div className="rounded bg-foreground/[0.025] border border-border/60 px-3 py-2 text-[10px] text-muted-foreground/50 font-mono space-y-0.5">
-          <div className="font-semibold text-muted-foreground/60 mb-1">Score breakdown</div>
-          <div>base (interaction)  {row.scoreBreakdown.baseScore.toFixed(2)}</div>
-          <div>signal strength     +{row.scoreBreakdown.signalScore.toFixed(2)}</div>
-          <div>relationship depth  +{row.scoreBreakdown.relationshipScore.toFixed(2)}</div>
-          <div>recency mult        ×{row.scoreBreakdown.recencyMult.toFixed(2)}</div>
-          <div>fit mult            ×{row.scoreBreakdown.fitMult.toFixed(2)}</div>
+          <div className="font-semibold text-muted-foreground/60 mb-1">Action Score breakdown</div>
+          <div>relationship        {row.scoreBreakdown.actionRelScore?.toFixed(1) ?? "–"}</div>
+          <div>signal weight       +{row.scoreBreakdown.actionSigScore?.toFixed(1) ?? "–"}</div>
+          <div>recency mult        ×{row.scoreBreakdown.actionRecencyMult?.toFixed(2) ?? "–"}</div>
+          <div>multi-signal boost  ×{row.scoreBreakdown.actionMultiSig?.toFixed(2) ?? "–"}</div>
+          <div>buyer mult          ×{row.scoreBreakdown.actionBuyerMult?.toFixed(2) ?? "–"}</div>
           <div className="border-t border-border/40 pt-0.5 font-semibold text-foreground/40">
-            total               {row.scoreBreakdown.total.toFixed(2)}
+            action score        {row.actionScore}
           </div>
         </div>
       )}
 
-      {/* Why now */}
-      <div className="border-t border-border pt-3">
-        <p className="text-[13px] leading-snug font-medium text-foreground/85">{row.whyNow}</p>
+      {/* Action reason — primary verdict line */}
+      <div className="border-t border-border pt-3 flex flex-col gap-2">
+        <p className="text-[13px] leading-snug font-semibold text-foreground/90">{row.actionReason}</p>
+
+        {/* Why now — fuller context, slightly muted */}
+        {row.whyNow !== row.actionReason && (
+          <p className="text-[12px] leading-snug text-muted-foreground/60">{row.whyNow}</p>
+        )}
       </div>
 
       {/* Tweet evidence — shown when the signal evidence has a snippet that adds

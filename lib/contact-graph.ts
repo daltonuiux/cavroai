@@ -436,6 +436,13 @@ export interface ScoreBreakdown {
   recencyMult:       number
   fitMult:           number
   total:             number
+  // Action score components (new)
+  actionRelScore?:   number   // relationship strength (0–65)
+  actionSigScore?:   number   // signal weight (0–20)
+  actionRecencyMult?: number  // heavy recency multiplier (1.0–3.0)
+  actionMultiSig?:   number   // multi-signal boost (1.0–1.5)
+  actionBuyerMult?:  number   // buyer likelihood (0.2–2.0)
+  actionTotal?:      number   // final action score (0–100)
 }
 
 /**
@@ -525,8 +532,18 @@ export interface CompanyOpportunityRow {
   recentInteractions: number
   /** Combined email + Twitter signals, deduped, email-priority ordered. */
   signals:            string[]
-  /** Aggregated score with multi-contact, recency, and signal boosts. */
+  /** Legacy aggregated score — kept for backward compatibility. */
   score:              number
+  /**
+   * Actionability score (0–100). Heavily weights relationship depth + recency.
+   * Use this for sorting and display — it answers "can I act on this right now?"
+   */
+  actionScore:        number
+  /**
+   * One-line actionability verdict in the format "[context] — [implication]".
+   * Replaces whyNow as the primary display line.
+   */
+  actionReason:       string
   /** 1–2 sentence company-cluster "why now" narrative. */
   whyNow:             string
   /** All qualifying contacts sorted by score desc. */
@@ -587,7 +604,18 @@ export interface PublicSignalOpportunityRow {
   signals:    TwitterSignal[]
   /** Highest confidence level across all enriched contacts at this domain. */
   confidence: "high" | "medium"
+  /** Legacy score — kept for backward compatibility. */
   score:      number
+  /**
+   * Actionability score (0–100). Heavily weights relationship depth + recency.
+   * Use this for sorting and display.
+   */
+  actionScore: number
+  /**
+   * One-line actionability verdict in the format "[context] — [implication]".
+   * Replaces whyNow as the primary display line.
+   */
+  actionReason: string
   fitTier:    "high" | "medium"
   /** 1–2 sentence "why now" narrative. */
   whyNow:     string
@@ -876,6 +904,308 @@ function computeRelationshipScore(
   if (recentInteractions >= 3) score += 1.0
   else if (recentInteractions >= 1) score += 0.5
   return score
+}
+
+// ---------------------------------------------------------------------------
+// Action Score — actionability-first scoring
+// ---------------------------------------------------------------------------
+
+/**
+ * Signal weights for the Action Score.
+ * Launching and direct buying signals rank highest because they indicate
+ * immediate execution pressure — the moment when teams reach for outside help.
+ */
+const ACTION_SIGNAL_WEIGHTS: Record<string, number> = {
+  // Twitter signals — ordered highest→lowest intent
+  recommendation: 5.0,   // "any good agencies?" — explicit ask
+  pain:           4.5,   // "struggling with X" — expressed need
+  launching:      4.5,   // highest commercial receptivity moment
+  fundraising:    4.0,   // capital = willingness to spend
+  hiring:         3.0,   // growth phase, adjacent budget
+  growth:         2.0,
+  announcing:     1.5,
+  building:       1.0,
+  // Email signals
+  agency:         5.0,
+  budget:         4.5,
+  project:        3.0,
+  launch:         3.0,
+  // fallback for unlisted signals
+}
+
+interface ActionScoreInput {
+  hasMeetings:        boolean
+  totalEmails:        number
+  contactCount:       number
+  recentInteractions: number
+  daysSince:          number
+  emailSignals:       string[]
+  twitterSignals:     TwitterSignal[]
+  buyerLikelihood:    BuyerLikelihood
+  fitTier:            "high" | "medium"
+}
+
+/**
+ * Computes an actionability score (0–100) that answers:
+ * "Can I realistically act on this right now?"
+ *
+ * Weighting priority (in order):
+ *   1. Relationship strength (DOMINANT — met > emailed > cold)
+ *   2. Recency (heavy multiplier, 1.0–3.0×)
+ *   3. Signal type (launching / buying = high; building = low)
+ *   4. Multi-signal stacking (1.0–1.5×)
+ *   5. Buyer likelihood (increased impact, 0.2–2.0×)
+ */
+function computeActionScore(input: ActionScoreInput): {
+  actionScore: number
+  breakdown: {
+    actionRelScore:    number
+    actionSigScore:    number
+    actionRecencyMult: number
+    actionMultiSig:    number
+    actionBuyerMult:   number
+    actionTotal:       number
+  }
+} {
+  const {
+    hasMeetings, totalEmails, contactCount, recentInteractions, daysSince,
+    emailSignals, twitterSignals, buyerLikelihood, fitTier,
+  } = input
+
+  // ── 1. Relationship score (0–65, DOMINANT) ───────────────────────────────────
+  let relScore: number
+  if      (hasMeetings)       relScore = 50
+  else if (totalEmails > 20)  relScore = 35
+  else if (totalEmails > 5)   relScore = 25
+  else if (totalEmails > 0)   relScore = 15
+  else                        relScore = 4   // X-signal only, no email history
+
+  // Multi-contact bonus (additional people at same company = wider access)
+  relScore += Math.min(15, (contactCount - 1) * 5)
+
+  // Recent-interaction bonus (conversations currently in motion)
+  if      (recentInteractions >= 3) relScore += 5
+  else if (recentInteractions >= 1) relScore += 2
+
+  // ── 2. Signal score (0–20) ───────────────────────────────────────────────────
+  const allSignals = [...new Set([...twitterSignals, ...emailSignals])]
+  let sigScore = 0
+  for (const s of allSignals) {
+    sigScore += ACTION_SIGNAL_WEIGHTS[s] ?? 0.5
+  }
+  sigScore = Math.min(20, sigScore)
+
+  // ── 3. Recency multiplier (HEAVY — up to 3× for 7-day activity) ─────────────
+  const actionRecencyMult =
+    daysSince <= 7  ? 3.0
+    : daysSince <= 14 ? 2.0
+    : daysSince <= 30 ? 1.4
+    : 1.0
+
+  // ── 4. Multi-signal boost ────────────────────────────────────────────────────
+  const actionMultiSig =
+    allSignals.length >= 4 ? 1.5
+    : allSignals.length >= 3 ? 1.35
+    : allSignals.length >= 2 ? 1.2
+    : 1.0
+
+  // ── 5. Buyer likelihood (higher impact than before) ──────────────────────────
+  const actionBuyerMult =
+    buyerLikelihood === "high"   ? 2.0
+    : buyerLikelihood === "medium" ? 1.0
+    : 0.2
+
+  // Fit multiplier (same gate as legacy scoring)
+  const actionFitMult = fitTier === "high" ? 1.5 : 1.0
+
+  const raw = (relScore + sigScore) * actionRecencyMult * actionMultiSig * actionBuyerMult * actionFitMult
+
+  // Normalise — max theoretical raw ≈ (50+15+5+20) × 3.0 × 1.5 × 2.0 × 1.5 = 1350
+  const actionScore = Math.min(100, Math.round((raw / 1350) * 100))
+
+  return {
+    actionScore,
+    breakdown: {
+      actionRelScore:    Math.round(relScore * 10) / 10,
+      actionSigScore:    Math.round(sigScore * 10) / 10,
+      actionRecencyMult,
+      actionMultiSig,
+      actionBuyerMult,
+      actionTotal:       actionScore,
+    },
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Action Reason — one-line actionability verdict
+// ---------------------------------------------------------------------------
+
+interface ContactActionReasonCtx {
+  hasMeetings:      boolean
+  daysSince:        number
+  totalEmails:      number
+  emailSignals:     string[]
+  twitterSignals:   TwitterSignal[]
+  signalCount:      number
+  contactCount:     number
+  recentInteractions: number
+}
+
+/**
+ * Generates a short, punchy "[context] — [implication]" verdict for a
+ * contact-based opportunity.  Priority waterfall — first match wins.
+ *
+ * Examples:
+ *   "You spoke this week and they're launching — high response likelihood."
+ *   "Warm contact + actively looking for help — act now."
+ *   "Multiple signals but no relationship — lower priority."
+ */
+function buildContactActionReason(ctx: ContactActionReasonCtx): string {
+  const {
+    hasMeetings, daysSince, totalEmails, emailSignals, twitterSignals,
+    signalCount, contactCount, recentInteractions,
+  } = ctx
+
+  const isVeryRecent = daysSince <= 7
+  const isRecent     = daysSince <= 30
+  const hasEmail     = totalEmails > 0
+  const allSigs      = [...new Set([...twitterSignals, ...emailSignals])]
+
+  const hasBuying    = allSigs.some((s) => ["recommendation", "pain", "agency", "budget"].includes(s))
+  const hasLaunching = allSigs.some((s) => ["launching", "launch"].includes(s))
+  const hasFund      = allSigs.includes("fundraising")
+  const hasHiring    = allSigs.includes("hiring")
+
+  // ── Met + very recent ─────────────────────────────────────────────────────────
+  if (hasMeetings && isVeryRecent && hasBuying) {
+    return "You spoke this week and they're actively looking for support — act now."
+  }
+  if (hasMeetings && isVeryRecent && hasLaunching) {
+    return "You met this week and they're launching — high response likelihood."
+  }
+  if (hasMeetings && isVeryRecent) {
+    return `Spoke this week and ${signalCount >= 2 ? "multiple signals are active" : "there's an active signal"} — ideal timing.`
+  }
+
+  // ── Met + any signal ─────────────────────────────────────────────────────────
+  if (hasMeetings && hasBuying) {
+    return "Warm contact actively looking for help — strong timing regardless of recency."
+  }
+  if (hasMeetings && hasLaunching) {
+    return "Warm contact + launching product — high response likelihood."
+  }
+  if (hasMeetings && hasFund) {
+    return "You've met and they're fundraising — post-raise is a receptive window."
+  }
+  if (hasMeetings && signalCount >= 2) {
+    return `Warm relationship and ${signalCount} active signals — worth prioritising.`
+  }
+  if (hasMeetings) {
+    return "You've met before and there's active signal — reach out while it's fresh."
+  }
+
+  // ── Strong email history + recent + strong signal ────────────────────────────
+  if (hasEmail && isVeryRecent && hasBuying) {
+    return "You're in their inbox and they're looking for help — reach out now."
+  }
+  if (hasEmail && isVeryRecent && hasLaunching) {
+    return "Recent email contact and they're launching — timely moment to reach out."
+  }
+  if (hasEmail && isRecent && signalCount >= 2) {
+    return "Multiple signals with recent email history — worth prioritising."
+  }
+
+  // ── Email history + signal ────────────────────────────────────────────────────
+  if (hasEmail && hasBuying) {
+    return "They're looking for support and you have history — warm outreach."
+  }
+  if (hasEmail && hasLaunching) {
+    return "Email history + launching — good window to reconnect."
+  }
+  if (hasEmail && signalCount >= 3) {
+    return `${signalCount} signals with existing email history — strong combination.`
+  }
+
+  // ── Multiple contacts ─────────────────────────────────────────────────────────
+  if (contactCount >= 2 && recentInteractions >= 2) {
+    return `${contactCount} active contacts here with overlapping signals — broader reach.`
+  }
+
+  // ── Strong signal, cold ───────────────────────────────────────────────────────
+  if (hasBuying) {
+    return "Direct buying signal but no prior relationship — cold outreach if the signal is specific."
+  }
+  if (hasLaunching && signalCount >= 2) {
+    return "Multiple signals but no relationship — lower priority than warm contacts."
+  }
+  if (hasHiring && isVeryRecent) {
+    return "Actively hiring this week — growth phase, but relationship is cold."
+  }
+
+  return `Active signal in your network — ${isRecent ? "reach out while it's fresh" : "worth monitoring"}.`
+}
+
+interface PublicSignalActionReasonCtx {
+  primarySignal:   TwitterSignal
+  signals:         TwitterSignal[]
+  hasMeetings:     boolean
+  hasEmailHistory: boolean
+  daysSince:       number
+}
+
+/**
+ * Generates a one-line verdict for a public-signal (X/Twitter) opportunity.
+ */
+function buildPublicSignalActionReason(ctx: PublicSignalActionReasonCtx): string {
+  const { primarySignal, signals, hasMeetings, hasEmailHistory, daysSince } = ctx
+
+  const isVeryRecent = daysSince <= 7
+  const isRecent     = daysSince <= 30
+  const signalCount  = signals.length
+
+  const hasBuying    = signals.some((s) => ["recommendation", "pain"].includes(s))
+  const hasLaunching = signals.includes("launching")
+  const hasFund      = signals.includes("fundraising")
+
+  if (hasMeetings && hasBuying) {
+    return "Warm contact actively looking for support — reconnect now."
+  }
+  if (hasMeetings && hasLaunching && isRecent) {
+    return "You've met and they're launching — warm conversation while momentum is high."
+  }
+  if (hasMeetings && isVeryRecent) {
+    return "Recent contact with active X signal — well-positioned to reach out."
+  }
+  if (hasMeetings) {
+    return `Warm contact + ${primarySignal} signal — outreach will land well.`
+  }
+
+  if (hasEmailHistory && hasBuying) {
+    return "You're in their inbox and they're looking for help — reach out while the need is fresh."
+  }
+  if (hasEmailHistory && hasLaunching) {
+    return "Email history + launching publicly — a well-timed note will land."
+  }
+  if (hasEmailHistory && signalCount >= 2) {
+    return `${signalCount} signals with an existing contact — better positioned than cold.`
+  }
+
+  if (hasBuying && isVeryRecent) {
+    return "Active buying signal this week — cold outreach justified by explicit need."
+  }
+  if (hasBuying) {
+    return "Direct buying signal but no relationship — cold outreach worth considering."
+  }
+  if (hasLaunching && hasFund) {
+    return "Launching and fundraising simultaneously — high activity, but no relationship yet."
+  }
+  if (signalCount >= 3) {
+    return `${signalCount} converging signals — high activity but no prior contact.`
+  }
+  if (signalCount >= 2) {
+    return "Multiple signals but no relationship — lower priority than warm contacts."
+  }
+  return `${primarySignal} signal with no prior relationship — monitor for entry point.`
 }
 
 // ---------------------------------------------------------------------------
@@ -1337,6 +1667,30 @@ export function buildContactOpportunities(
     const buyerClass     = classifyBuyer({ name: topContact.companyName, domain: topContact.domain })
     const opportunityType = classifyOpportunityType(buyerClass.buyerLikelihood, allSignals)
 
+    // ── Action Score ──────────────────────────────────────────────────────────
+    const { actionScore, breakdown: actionBreakdown } = computeActionScore({
+      hasMeetings,
+      totalEmails,
+      contactCount,
+      recentInteractions,
+      daysSince,
+      emailSignals:    emailSignalList,
+      twitterSignals,
+      buyerLikelihood: buyerClass.buyerLikelihood,
+      fitTier:         fitTier as "high" | "medium",
+    })
+
+    const actionReason = buildContactActionReason({
+      hasMeetings,
+      daysSince,
+      totalEmails,
+      emailSignals:     emailSignalList,
+      twitterSignals,
+      signalCount:      allSignals.length,
+      contactCount,
+      recentInteractions,
+    })
+
     rows.push({
       company:            topContact.companyName,
       domain:             topContact.domain,
@@ -1344,6 +1698,8 @@ export function buildContactOpportunities(
       recentInteractions,
       signals:            allSignals,
       score:              finalScore,
+      actionScore,
+      actionReason,
       whyNow:             narrativeCompanyWhyNow({
         contactCount,
         recentInteractions,
@@ -1365,7 +1721,7 @@ export function buildContactOpportunities(
       mostRecent,
       fitTier,
       signalEvidence,
-      scoreBreakdown:     breakdown,
+      scoreBreakdown:     { ...breakdown, ...actionBreakdown },
       companySize:        buyerClass.companySize,
       buyerLikelihood:    buyerClass.buyerLikelihood,
       buyerReason:        buyerClass.reason,
@@ -1374,7 +1730,7 @@ export function buildContactOpportunities(
   }
 
   return rows
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => b.actionScore - a.actionScore)
     .slice(0, MAX_OPPORTUNITY_RESULTS)
 }
 
@@ -1706,16 +2062,49 @@ export function buildPublicSignalOpportunities(
 
     const primarySignal = allSignals[0] ?? ("building" as TwitterSignal)
 
+    // ── Action Score ────────────────────────────────────────────────────────
+    const { actionScore, breakdown: actionBreakdown } = computeActionScore({
+      hasMeetings,
+      totalEmails:     emailCount,
+      contactCount:    sortedContacts.length,
+      recentInteractions,
+      daysSince:       (() => {
+        const latest = sortedContacts
+          .map((c) => c.lastInteraction ? new Date(c.lastInteraction).getTime() : 0)
+          .reduce((a, b) => Math.max(a, b), 0)
+        return latest ? Math.floor((Date.now() - latest) / 86_400_000) : 999
+      })(),
+      emailSignals:    [],
+      twitterSignals:  allSignals,
+      buyerLikelihood: buyerClass.buyerLikelihood,
+      fitTier:         effectiveFit as "high" | "medium",
+    })
+
+    const actionReason = buildPublicSignalActionReason({
+      primarySignal,
+      signals:         allSignals,
+      hasMeetings,
+      hasEmailHistory,
+      daysSince:       (() => {
+        const latest = sortedContacts
+          .map((c) => c.lastInteraction ? new Date(c.lastInteraction).getTime() : 0)
+          .reduce((a, b) => Math.max(a, b), 0)
+        return latest ? Math.floor((Date.now() - latest) / 86_400_000) : 999
+      })(),
+    })
+
     rows.push({
-      type:       "public_signal",
-      company:    topContact.companyName,
+      type:         "public_signal",
+      company:      topContact.companyName,
       domain,
-      signal:     primarySignal,
-      signals:    allSignals,
+      signal:       primarySignal,
+      signals:      allSignals,
       confidence,
-      score:      finalScore,
-      fitTier:    effectiveFit as "high" | "medium",
-      whyNow:     narrativePublicSignalWhyNow({
+      score:        finalScore,
+      actionScore,
+      actionReason,
+      fitTier:      effectiveFit as "high" | "medium",
+      whyNow:       narrativePublicSignalWhyNow({
         signal:          primarySignal,
         signals:         allSignals,
         hasEmailHistory,
@@ -1739,7 +2128,7 @@ export function buildPublicSignalOpportunities(
       proximity:       { hasEmailHistory, hasMeetings, emailCount },
       topics:          [...topicSet],
       signalEvidence,
-      scoreBreakdown:  breakdown,
+      scoreBreakdown:  { ...breakdown, ...actionBreakdown },
       companySize:     buyerClass.companySize,
       buyerLikelihood: buyerClass.buyerLikelihood,
       buyerReason:     buyerClass.reason,
@@ -1748,7 +2137,7 @@ export function buildPublicSignalOpportunities(
   }
 
   return rows
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => b.actionScore - a.actionScore)
     .slice(0, MAX_PUBLIC_SIGNAL_RESULTS)
 }
 
