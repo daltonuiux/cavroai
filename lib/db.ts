@@ -37,6 +37,20 @@
 // Migration — add twitter_data column to existing contacts table:
 //   ALTER TABLE contacts ADD COLUMN IF NOT EXISTS twitter_data jsonb;
 //
+// X (Twitter) OAuth connections:
+//   CREATE TABLE IF NOT EXISTS x_connections (
+//     id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+//     user_id       uuid NOT NULL UNIQUE,
+//     x_user_id     text NOT NULL,
+//     x_username    text NOT NULL,
+//     x_name        text,
+//     access_token  text NOT NULL,
+//     refresh_token text,
+//     token_expiry  timestamptz NOT NULL,
+//     synced_at     timestamptz,
+//     created_at    timestamptz NOT NULL DEFAULT now()
+//   );
+//
 // Contact interactions with opportunity signals:
 //   CREATE TABLE IF NOT EXISTS contact_interactions (
 //     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1019,6 +1033,105 @@ export async function getGoogleConnection(userId: string): Promise<GoogleConnect
 
   if (error) throw new Error(`getGoogleConnection: ${error.message}`)
   return data ? rowToGoogleConnection(data) : null
+}
+
+// ---------------------------------------------------------------------------
+// X (Twitter) connections
+// ---------------------------------------------------------------------------
+
+export interface XConnection {
+  id:           string
+  userId:       string
+  xUserId:      string
+  xUsername:    string
+  xName:        string | null
+  accessToken:  string
+  refreshToken: string | null
+  tokenExpiry:  string
+  syncedAt:     string | null
+  createdAt:    string
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToXConnection(row: any): XConnection {
+  return {
+    id:           row.id,
+    userId:       row.user_id,
+    xUserId:      row.x_user_id,
+    xUsername:    row.x_username,
+    xName:        row.x_name ?? null,
+    accessToken:  row.access_token,
+    refreshToken: row.refresh_token ?? null,
+    tokenExpiry:  row.token_expiry,
+    syncedAt:     row.synced_at ?? null,
+    createdAt:    row.created_at,
+  }
+}
+
+export async function saveXConnection(
+  userId: string,
+  data: {
+    xUserId:      string
+    xUsername:    string
+    xName:        string | null
+    accessToken:  string
+    refreshToken: string | null
+    tokenExpiry:  string
+  },
+): Promise<void> {
+  const { error } = await db()
+    .from("x_connections")
+    .upsert(
+      {
+        user_id:       userId,
+        x_user_id:     data.xUserId,
+        x_username:    data.xUsername,
+        x_name:        data.xName,
+        access_token:  data.accessToken,
+        refresh_token: data.refreshToken,
+        token_expiry:  data.tokenExpiry,
+      },
+      { onConflict: "user_id" },
+    )
+  if (error) throw new Error(`saveXConnection: ${error.message}`)
+}
+
+export async function updateXAccessToken(
+  userId:      string,
+  accessToken: string,
+  tokenExpiry: string,
+): Promise<void> {
+  const { error } = await db()
+    .from("x_connections")
+    .update({ access_token: accessToken, token_expiry: tokenExpiry })
+    .eq("user_id", userId)
+  if (error) throw new Error(`updateXAccessToken: ${error.message}`)
+}
+
+export async function markXSynced(userId: string): Promise<void> {
+  const { error } = await db()
+    .from("x_connections")
+    .update({ synced_at: new Date().toISOString() })
+    .eq("user_id", userId)
+  if (error) throw new Error(`markXSynced: ${error.message}`)
+}
+
+export async function getXConnection(userId: string): Promise<XConnection | null> {
+  const { data, error } = await db()
+    .from("x_connections")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle()
+  if (error) throw new Error(`getXConnection: ${error.message}`)
+  return data ? rowToXConnection(data) : null
+}
+
+export async function deleteXConnection(userId: string): Promise<void> {
+  const { error } = await db()
+    .from("x_connections")
+    .delete()
+    .eq("user_id", userId)
+  if (error) throw new Error(`deleteXConnection: ${error.message}`)
 }
 
 // ---------------------------------------------------------------------------

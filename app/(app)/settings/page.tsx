@@ -2,13 +2,19 @@ export const dynamic = "force-dynamic"
 
 import type { Metadata } from "next"
 import { GoogleConnectButton } from "@/components/google-connect-button"
-import { getGoogleConnection, MVP_USER_ID } from "@/lib/db"
+import { XConnectButton } from "@/components/x-connect-button"
+import { getGoogleConnection, getXConnection, MVP_USER_ID } from "@/lib/db"
 import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = { title: "Settings" }
 
 interface Props {
-  searchParams: Promise<{ google_connected?: string; google_error?: string }>
+  searchParams: Promise<{
+    google_connected?: string
+    google_error?:     string
+    x_connected?:      string
+    x_error?:          string
+  }>
 }
 
 export default async function SettingsPage({ searchParams }: Props) {
@@ -18,7 +24,10 @@ export default async function SettingsPage({ searchParams }: Props) {
   const { data: { user } } = await supabase.auth.getUser()
   const userId = user?.id ?? MVP_USER_ID
 
-  const connection = await getGoogleConnection(userId).catch(() => null)
+  const [connection, xConnection] = await Promise.all([
+    getGoogleConnection(userId).catch(() => null),
+    getXConnection(userId).catch(() => null),
+  ])
 
   return (
     <div>
@@ -31,7 +40,7 @@ export default async function SettingsPage({ searchParams }: Props) {
         </p>
       </div>
 
-      {/* Error banner */}
+      {/* Error banners */}
       {params.google_error && (
         <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3">
           <p className="text-[13px] font-medium text-destructive">Google connection failed</p>
@@ -47,15 +56,40 @@ export default async function SettingsPage({ searchParams }: Props) {
         </div>
       )}
 
+      {params.x_error && (
+        <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <p className="text-[13px] font-medium text-destructive">X connection failed</p>
+          <p className="mt-0.5 text-[12px] text-destructive/70">
+            {params.x_error === "missing_params"   && "Missing OAuth parameters — please try again."}
+            {params.x_error === "missing_verifier" && "PKCE verifier cookie missing — please try again."}
+            {params.x_error === "invalid_state"    && "OAuth state was invalid or expired — please try again."}
+            {params.x_error === "token_exchange"   && "Could not exchange the authorization code — please try again."}
+            {params.x_error === "userinfo"         && "Could not fetch your X profile — please try again."}
+            {params.x_error === "db"               && "Failed to save the connection — check your database configuration."}
+            {!["missing_params","missing_verifier","invalid_state","token_exchange","userinfo","db"].includes(params.x_error) &&
+              `Error: ${params.x_error}`}
+          </p>
+        </div>
+      )}
+
       <div className="max-w-xl space-y-6">
         <section>
           <h2 className="mb-3 text-[13px] font-semibold text-foreground">Integrations</h2>
-          <GoogleConnectButton
-            connected={!!connection}
-            googleEmail={connection?.googleEmail ?? null}
-            syncedAt={connection?.syncedAt ?? null}
-            justConnected={params.google_connected === "true"}
-          />
+          <div className="space-y-3">
+            <GoogleConnectButton
+              connected={!!connection}
+              googleEmail={connection?.googleEmail ?? null}
+              syncedAt={connection?.syncedAt ?? null}
+              justConnected={params.google_connected === "true"}
+            />
+            <XConnectButton
+              connected={!!xConnection}
+              xUsername={xConnection?.xUsername ?? null}
+              xName={xConnection?.xName ?? null}
+              syncedAt={xConnection?.syncedAt ?? null}
+              justConnected={params.x_connected === "true"}
+            />
+          </div>
         </section>
 
         {/* Placeholder for future settings */}
