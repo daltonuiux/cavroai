@@ -1,8 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import type { Surface, ContactInSurface, SurfaceSignalSummary } from "@/lib/surfaces"
+import Link from "next/link"
+import type { Surface, ContactInSurface, SurfaceSignalSummary, SurfaceOpportunity } from "@/lib/surfaces"
 import { contactWarmth } from "@/lib/surfaces"
+import type { OpportunityType } from "@/lib/contact-graph"
 
 // ---------------------------------------------------------------------------
 // Signal colour map — mirrors the scheme in opportunities-list
@@ -185,6 +187,113 @@ function PersonRow({ person }: { person: ContactInSurface }) {
 }
 
 // ---------------------------------------------------------------------------
+// Opportunity type display config
+// ---------------------------------------------------------------------------
+
+const OPP_TYPE_CONFIG: Record<OpportunityType, { label: string; className: string }> = {
+  client:  { label: "Client",  className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
+  network: { label: "Network", className: "bg-violet-500/10 text-violet-600 dark:text-violet-400"   },
+  hybrid:  { label: "Hybrid",  className: "bg-sky-500/10 text-sky-600 dark:text-sky-400"            },
+}
+
+// ---------------------------------------------------------------------------
+// Compact opportunity row — shown inside a surface card
+// ---------------------------------------------------------------------------
+
+function SurfaceOpportunityRow({ opp }: { opp: SurfaceOpportunity }) {
+  const typeCfg    = OPP_TYPE_CONFIG[opp.opportunityType]
+  const signalCol  = SIGNAL_COLOURS[opp.primarySignal.toLowerCase()] ?? "bg-foreground/[0.05] text-foreground/40"
+
+  return (
+    <div className="rounded-md border border-border/50 bg-background px-3 py-2.5 flex flex-col gap-1.5">
+      {/* Company + badges */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[12px] font-semibold text-foreground">{opp.company}</span>
+
+        {/* Opportunity type */}
+        <span className={`rounded px-1.5 py-px text-[9px] font-semibold ${typeCfg.className}`}>
+          {typeCfg.label}
+        </span>
+
+        {/* Pipeline source */}
+        <span className={`rounded px-1.5 py-px text-[9px] font-medium ${
+          opp.source === "contact"
+            ? "bg-foreground/[0.05] text-foreground/40"
+            : "bg-sky-500/10 text-sky-500"
+        }`}>
+          {opp.source === "contact" ? "Email" : "X"}
+        </span>
+
+        {/* Primary signal */}
+        {opp.primarySignal && (
+          <span className={`rounded px-1.5 py-px text-[9px] font-semibold ${signalCol}`}>
+            {opp.primarySignal}
+          </span>
+        )}
+      </div>
+
+      {/* Why now — truncated */}
+      <p className="text-[11px] text-muted-foreground/55 leading-snug line-clamp-2">
+        {opp.whyNow}
+      </p>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Opportunities section — rendered inside a surface card
+// ---------------------------------------------------------------------------
+
+function SurfaceOpportunitiesSection({ opps }: { opps: SurfaceOpportunity[] }) {
+  const [expanded, setExpanded] = useState(false)
+
+  if (opps.length === 0) return null
+
+  // Show 2 by default; expand to show all
+  const visible = expanded ? opps : opps.slice(0, 2)
+  const hidden  = opps.length - 2
+
+  return (
+    <div className="border-t border-border px-4 py-3 flex flex-col gap-2.5">
+      {/* Section header */}
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/30">
+          Opportunities from this surface
+          {opps.length > 0 && (
+            <span className="ml-1.5 font-bold text-foreground/40">{opps.length}</span>
+          )}
+        </p>
+        <Link
+          href="/opportunities"
+          className="text-[10px] text-muted-foreground/40 hover:text-foreground transition-colors"
+        >
+          View all →
+        </Link>
+      </div>
+
+      {/* Opportunity rows */}
+      <div className="flex flex-col gap-1.5">
+        {visible.map((opp) => (
+          <SurfaceOpportunityRow key={opp.domain} opp={opp} />
+        ))}
+      </div>
+
+      {/* Show more / collapse */}
+      {opps.length > 2 && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors self-start"
+        >
+          {expanded
+            ? "Show fewer"
+            : `Show ${hidden} more opportunit${hidden === 1 ? "y" : "ies"}`}
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Surface card
 // ---------------------------------------------------------------------------
 
@@ -290,6 +399,9 @@ function SurfaceCard({ surface }: { surface: Surface }) {
           </p>
         </div>
       </div>
+
+      {/* ── Linked opportunities ──────────────────────────────────────────── */}
+      <SurfaceOpportunitiesSection opps={surface.relatedOpportunities} />
 
       {/* ── People (collapsible) ───────────────────────────────────────────── */}
       <div className="border-t border-border px-4 pt-2.5 pb-3">

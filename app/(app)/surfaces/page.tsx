@@ -2,8 +2,19 @@ export const dynamic = "force-dynamic"
 
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
-import { getContactsForUser, MVP_USER_ID } from "@/lib/db"
+import {
+  getContactsForUser,
+  getContactInteractionsForUser,
+  getAgencyProfile,
+  MVP_USER_ID,
+} from "@/lib/db"
+import {
+  buildContactOpportunities,
+  buildPublicSignalOpportunities,
+  signalLabel,
+} from "@/lib/contact-graph"
 import { buildSurfaces } from "@/lib/surfaces"
+import type { SurfaceOpportunity } from "@/lib/surfaces"
 import { SurfacesList } from "@/components/surfaces-list"
 
 export default async function SurfacesPage() {
@@ -11,9 +22,17 @@ export default async function SurfacesPage() {
   const { data: { user } } = await supabase.auth.getUser()
   const userId = user?.id ?? MVP_USER_ID
 
-  let contacts: Awaited<ReturnType<typeof getContactsForUser>> = []
+  // ── Fetch all data in parallel ─────────────────────────────────────────────
+  let contacts:     Awaited<ReturnType<typeof getContactsForUser>>             = []
+  let interactions: Awaited<ReturnType<typeof getContactInteractionsForUser>>  = []
+  let profile:      Awaited<ReturnType<typeof getAgencyProfile>> | null        = null
+
   try {
-    contacts = await getContactsForUser(userId)
+    ;[contacts, interactions, profile] = await Promise.all([
+      getContactsForUser(userId),
+      getContactInteractionsForUser(userId).catch(() => []),
+      getAgencyProfile().catch(() => null),
+    ])
   } catch {
     return (
       <div>
@@ -29,17 +48,77 @@ export default async function SurfacesPage() {
   }
 
   const enrichedCount = contacts.filter((c) => c.twitterData != null).length
-  const surfaces      = buildSurfaces(contacts)
+
+  if (enrichedCount === 0) {
+    return (
+      <div>
+        <PageHeader />
+        <NoXDataState />
+      </div>
+    )
+  }
+
+  // ── Run opportunity pipelines ──────────────────────────────────────────────
+  const contactOpps      = buildContactOpportunities(contacts, interactions, profile)
+  const publicSignalOpps = buildPublicSignalOpportunities(contacts, contactOpps, profile)
+
+  // ── Build domain → SurfaceOpportunity map ─────────────────────────────────
+  const oppsByDomain = new Map<string, SurfaceOpportunity[]>()
+
+  for (const opp of contactOpps) {
+    const so: SurfaceOpportunity = {
+      company:         opp.company,
+      domain:          opp.domain,
+      primarySignal:   signalLabel(opp.signals[0] ?? ""),
+      score:           opp.score,
+      source:          "contact",
+      opportunityType: opp.opportunityType,
+      whyNow:          opp.whyNow,
+    }
+    if (!oppsByDomain.has(opp.domain)) oppsByDomain.set(opp.domain, [])
+    oppsByDomain.get(opp.domain)!.push(so)
+  }
+
+  for (const opp of publicSignalOpps) {
+    const so: SurfaceOpportunity = {
+      company:         opp.company,
+      domain:          opp.domain,
+      primarySignal:   signalLabel(opp.signal),
+      score:           opp.score,
+      source:          "public_signal",
+      opportunityType: opp.opportunityType,
+      whyNow:          opp.whyNow,
+    }
+    if (!oppsByDomain.has(opp.domain)) oppsByDomain.set(opp.domain, [])
+    oppsByDomain.get(opp.domain)!.push(so)
+  }
+
+  // ── Build surfaces, then link related opportunities ────────────────────────
+  const surfaces = buildSurfaces(contacts).map((surface) => {
+    const surfaceDomains = new Set(surface.people.map((p) => p.domain))
+    const seen           = new Set<string>()
+    const relatedOpportunities: SurfaceOpportunity[] = []
+
+    for (const domain of surfaceDomains) {
+      for (const opp of oppsByDomain.get(domain) ?? []) {
+        // One entry per domain — prefer contact-sourced (higher signal fidelity)
+        if (!seen.has(domain)) {
+          seen.add(domain)
+          relatedOpportunities.push(opp)
+        }
+      }
+    }
+
+    return {
+      ...surface,
+      relatedOpportunities: relatedOpportunities.sort((a, b) => b.score - a.score),
+    }
+  })
 
   return (
     <div>
       <PageHeader />
-
-      {enrichedCount === 0 ? (
-        <NoXDataState />
-      ) : (
-        <SurfacesList surfaces={surfaces} enrichedCount={enrichedCount} />
-      )}
+      <SurfacesList surfaces={surfaces} enrichedCount={enrichedCount} />
     </div>
   )
 }

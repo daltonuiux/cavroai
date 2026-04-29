@@ -18,7 +18,7 @@
  * No DB writes. Pure read-time computation over Contact[] from the DB.
  */
 
-import type { Contact, TwitterSignal } from "./contact-graph"
+import type { Contact, TwitterSignal, OpportunityType } from "./contact-graph"
 
 // ---------------------------------------------------------------------------
 // Output types
@@ -47,6 +47,25 @@ export function contactWarmth(p: ContactInSurface): RelationshipWarmth {
   if (p.meetingCount > 0 || p.interactionScore >= 8) return "warm"
   if (p.interactionScore >= 3)                       return "email"
   return "cold"
+}
+
+/**
+ * A compact representation of one opportunity that is linked to a Surface
+ * because a contact in the surface's cluster works at that company.
+ * Built in the page from CompanyOpportunityRow | PublicSignalOpportunityRow.
+ */
+export interface SurfaceOpportunity {
+  company:         string
+  domain:          string
+  /** Human-readable label of the top signal (e.g. "Launching", "Fundraising"). */
+  primarySignal:   string
+  score:           number
+  /** Which pipeline surfaced this opportunity. */
+  source:          "contact" | "public_signal"
+  /** Recommended action type derived from buyer + signal classification. */
+  opportunityType: OpportunityType
+  /** The "why now" narrative from the opportunity pipeline. */
+  whyNow:          string
 }
 
 export interface SurfaceSignalSummary {
@@ -88,6 +107,12 @@ export interface Surface {
   }
   /** Pre-joined fallback for contexts that consume a single string. */
   whyItMatters:  string
+  /**
+   * Opportunities linked to this surface by domain.
+   * Populated by the page after both opportunity pipelines have run.
+   * Always an array (empty when no opportunities match).
+   */
+  relatedOpportunities: SurfaceOpportunity[]
   /** Quick relationship breakdown — used for the card sub-header. */
   relationshipSummary: {
     warmCount:  number
@@ -462,6 +487,7 @@ export function buildSurfaces(contacts: Contact[]): Surface[] {
       topics,
       strength,
       whyItMattersParts,
+      relatedOpportunities: [],   // filled in by the page after pipeline runs
       whyItMatters: [
         whyItMattersParts.signal,
         whyItMattersParts.relationship,
