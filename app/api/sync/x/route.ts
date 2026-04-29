@@ -106,8 +106,11 @@ export async function POST() {
 
   // ── Console summary ────────────────────────────────────────────────────────
   const debugLines = result.debug.map((d) => {
+    const richSummary = d.richSignals.length > 0
+      ? d.richSignals.map((r) => `${r.type}[${r.confidence[0]}]="${r.matchedText}"`).join(" ")
+      : "—"
     const status = d.saved
-      ? `✓ saved  signals:[${d.signals.join(",")}] weak:[${d.weakMatches.join(",")}]`
+      ? `✓ saved  ${richSummary}`
       : `✗ skip   ${d.skipReason ?? "unknown"}`
     const tweetInfo = d.apiError
       ? `API ${d.apiStatus} ERROR: ${d.apiError.slice(0, 80)}`

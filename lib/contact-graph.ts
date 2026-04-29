@@ -159,7 +159,23 @@ export function isTargetCompany(
 // ---------------------------------------------------------------------------
 
 /** Signals extracted from recent tweets. */
-export type TwitterSignal = "launching" | "hiring" | "building" | "fundraising" | "announcing"
+export type TwitterSignal = "launching" | "hiring" | "building" | "fundraising" | "announcing" | "growth"
+
+/** Signal confidence tier. */
+export type SignalConfidence = "high" | "medium" | "low"
+
+/**
+ * A single detected intent signal with evidence.
+ * Stored in ContactTwitterData.richSignals for full debug detail.
+ */
+export interface RichSignal {
+  type:        TwitterSignal
+  confidence:  SignalConfidence
+  /** The specific phrase or token that triggered the match. */
+  matchedText: string
+  /** The tweet text where the match was found (truncated to 280 chars). */
+  tweetText:   string
+}
 
 /**
  * Twitter/X data attached to a contact after enrichment.
@@ -187,11 +203,16 @@ export interface ContactTwitterData {
   /** How confident we are that this handle matches the contact. */
   matchConfidence?: "high" | "medium" | "low"
   /**
-   * Loose keyword matches that didn't meet the threshold for a full TwitterSignal.
-   * Used for debug/display — not counted in opportunity scoring.
-   * Examples: "event", "product", "waitlist", "conference"
+   * Low-confidence keyword matches stored for debug/display only.
+   * Not counted in opportunity scoring.
    */
   weakSignals?: string[]
+  /**
+   * Full signal evidence with confidence tier and tweet provenance.
+   * richSignals is the source of truth; signals[] is derived from it
+   * (medium + high confidence only) for backward-compatible scoring.
+   */
+  richSignals?: RichSignal[]
 }
 
 // ---------------------------------------------------------------------------
@@ -409,6 +430,7 @@ const TWITTER_PHRASES: Record<string, string> = {
   fundraising: "closing a funding round",
   hiring:      "expanding the team",
   announcing:  "about to make a big announcement",
+  growth:      "showing strong growth and traction",
 }
 
 /** When email and Twitter signals point at the same underlying intent. */
@@ -1053,7 +1075,7 @@ const MAX_PUBLIC_SIGNAL_RESULTS = 5
 
 /** Intent priority for picking the "primary" signal on a public-signal card. */
 const SIGNAL_PRIORITY_PUBLIC: TwitterSignal[] = [
-  "fundraising", "launching", "announcing", "hiring", "building",
+  "fundraising", "launching", "announcing", "hiring", "growth", "building",
 ]
 
 const PUBLIC_SIGNAL_DESCRIPTIONS: Record<TwitterSignal, string> = {
@@ -1061,6 +1083,7 @@ const PUBLIC_SIGNAL_DESCRIPTIONS: Record<TwitterSignal, string> = {
   launching:   "about to launch publicly",
   announcing:  "about to make a major announcement",
   hiring:      "expanding their team",
+  growth:      "showing strong growth and traction",
   building:    "actively building something new",
 }
 
