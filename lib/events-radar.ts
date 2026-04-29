@@ -7,13 +7,16 @@
  * ─────────
  * 1. Scan each enriched contact's tweetSamples for event mentions:
  *    a. Known events — match against a curated alias table (high precision)
- *    b. Unknown events — extract capitalized phrases after attendance verbs
+ *    b. Unknown events — extract capitalised phrases after attendance verbs
  * 2. Normalise candidate names (strip years, lowercase for dedup key)
  * 3. Group mentions by normalised key
- *    - Known events: surface with ≥1 contact
- *    - Unknown events: require ≥2 distinct contacts (noise filter)
- * 4. For each event, collect attendees, aggregate signals, detect date/location
- * 5. Score and sort — cap at MAX_EVENTS
+ * 4. Validate:
+ *    - Known events:   ≥2 distinct contacts OR ≥1 warm/email contact
+ *    - Unknown events: ≥2 distinct contacts (noise filter)
+ *    - All events:     score ≥ MIN_SCORE after computation
+ * 5. For each event, collect attendees, aggregate signals, detect date/location
+ * 6. Compute confidence (high | medium) and collect source evidence snippets
+ * 7. Score and sort — cap at MAX_EVENTS
  *
  * No DB writes. Pure computation over Contact[].
  */
@@ -82,6 +85,23 @@ export interface RadarEvent {
   /** True when the event was in the curated known-events list. */
   isKnown:        boolean
   /**
+   * Confidence tier:
+   * - "high":   known event with ≥1 warm contact, or ≥2 contacts of any warmth
+   * - "medium": known event, 1 contact, or unknown event with all-cold contacts
+   * Low-confidence events are dropped before they reach this type.
+   */
+  confidence:     "high" | "medium"
+  /**
+   * Short "what is this event" description (curated for known events, null for
+   * unknown events extracted from tweet text).
+   */
+  description:    string | null
+  /**
+   * Top 1–2 verbatim tweet snippets that triggered this event's detection,
+   * ordered: speaker > warm > email > cold. Used for card-level evidence display.
+   */
+  sourceEvidence: string[]
+  /**
    * Surface clusters that share people with this event.
    * Populated by linkEventsToSurfaces() in the page, not by buildEventRadar().
    * Always an array (empty until linked).
@@ -94,105 +114,135 @@ export interface RadarEvent {
 // ---------------------------------------------------------------------------
 
 interface KnownEvent {
-  canonical: string
+  canonical:    string
+  /** Short "what is this" blurb shown in the card. */
+  description:  string
   /** All strings that should map to this event (lowercase). */
-  aliases:   string[]
+  aliases:      string[]
 }
 
 const KNOWN_EVENTS: KnownEvent[] = [
   {
-    canonical: "SXSW",
-    aliases:   ["sxsw", "south by southwest", "south by", "southbysouthwest"],
+    canonical:   "SXSW",
+    description: "Annual arts, music, and tech festival in Austin — where startups launch and deals get made.",
+    aliases:     ["sxsw", "south by southwest", "south by", "southbysouthwest"],
   },
   {
-    canonical: "Config",
-    aliases:   ["figma config", "config", "config sf", "config 2025", "config 2026"],
+    canonical:   "Config",
+    description: "Figma's annual design conference — the gathering point for product designers, PMs, and design-led founders.",
+    aliases:     ["figma config", "config", "config sf", "config 2025", "config 2026"],
   },
   {
-    canonical: "Product Hunt",
-    aliases:   ["product hunt", "producthunt"],
+    canonical:   "Product Hunt",
+    description: "Online platform where new products launch and get voted on — a high-visibility moment for startups.",
+    aliases:     ["product hunt", "producthunt"],
   },
   {
-    canonical: "TC Disrupt",
-    aliases:   ["techcrunch disrupt", "tc disrupt", "disrupt sf", "techcrunch"],
+    canonical:   "TC Disrupt",
+    description: "TechCrunch's flagship startup competition — investors, press, and founders in one room.",
+    aliases:     ["techcrunch disrupt", "tc disrupt", "disrupt sf", "techcrunch"],
   },
   {
-    canonical: "Y Combinator",
-    aliases:   ["y combinator", "ycombinator", "yc demo day", "yc demoday", "demo day"],
+    canonical:   "Y Combinator",
+    description: "YC's demo day — a batch of funded startups pitching to investors, alumni, and press.",
+    aliases:     ["y combinator", "ycombinator", "yc demo day", "yc demoday", "demo day"],
   },
   {
-    canonical: "Web Summit",
-    aliases:   ["web summit", "websummit"],
+    canonical:   "Web Summit",
+    description: "One of Europe's largest tech conferences in Lisbon — 70K+ attendees, global startup ecosystem.",
+    aliases:     ["web summit", "websummit"],
   },
   {
-    canonical: "Apple WWDC",
-    aliases:   ["wwdc", "apple wwdc"],
+    canonical:   "Apple WWDC",
+    description: "Apple's annual developer conference — platform announcements, SDK changes, and design system updates.",
+    aliases:     ["wwdc", "apple wwdc"],
   },
   {
-    canonical: "Google I/O",
-    aliases:   ["google i/o", "google io"],
+    canonical:   "Google I/O",
+    description: "Google's annual developer conference — AI, Android, and platform updates.",
+    aliases:     ["google i/o", "google io"],
   },
   {
-    canonical: "AWS re:Invent",
-    aliases:   ["aws reinvent", "aws re:invent", "reinvent"],
+    canonical:   "AWS re:Invent",
+    description: "Amazon's annual cloud conference in Las Vegas — enterprise infra, tooling, and partner ecosystem.",
+    aliases:     ["aws reinvent", "aws re:invent", "reinvent"],
   },
   {
-    canonical: "NeurIPS",
-    aliases:   ["neurips", "nips conference"],
+    canonical:   "NeurIPS",
+    description: "Leading AI/ML research conference — cutting-edge papers and the researchers who write them.",
+    aliases:     ["neurips", "nips conference"],
   },
   {
-    canonical: "Dreamforce",
-    aliases:   ["dreamforce"],
+    canonical:   "Dreamforce",
+    description: "Salesforce's annual conference in San Francisco — enterprise sales, CRM, and partner network.",
+    aliases:     ["dreamforce"],
   },
   {
-    canonical: "SaaStr Annual",
-    aliases:   ["saastr", "saastr annual"],
+    canonical:   "SaaStr Annual",
+    description: "The world's largest SaaS community event — revenue operators, founders, and investors.",
+    aliases:     ["saastr", "saastr annual"],
   },
   {
-    canonical: "Collision",
-    aliases:   ["collision conf", "collision conference", "collision"],
+    canonical:   "Collision",
+    description: "Fast-growing North American tech conference — a mix of investors, founders, and enterprise buyers.",
+    aliases:     ["collision conf", "collision conference", "collision"],
   },
   {
-    canonical: "Slush",
-    aliases:   ["slush", "slush helsinki"],
+    canonical:   "Slush",
+    description: "Nordic startup conference in Helsinki — strong European VC and deep-tech ecosystem.",
+    aliases:     ["slush", "slush helsinki"],
   },
   {
-    canonical: "VivaTech",
-    aliases:   ["vivatech", "viva technology"],
+    canonical:   "VivaTech",
+    description: "Europe's biggest startup and tech event in Paris — 150K+ visitors, corporate innovation focus.",
+    aliases:     ["vivatech", "viva technology"],
   },
   {
-    canonical: "CES",
-    aliases:   ["ces", "consumer electronics show"],
+    canonical:   "CES",
+    description: "World's largest consumer electronics show in Las Vegas — product launches at global scale.",
+    aliases:     ["ces", "consumer electronics show"],
   },
   {
-    canonical: "Cannes Lions",
-    aliases:   ["cannes lions", "cannes"],
+    canonical:   "Cannes Lions",
+    description: "International advertising and creativity festival — agencies, brands, and media companies.",
+    aliases:     ["cannes lions", "cannes"],
   },
   {
-    canonical: "AngelConf",
-    aliases:   ["angelconf", "angel conf"],
+    canonical:   "AngelConf",
+    description: "Early-stage investor conference — angels, pre-seed founders, and scouts.",
+    aliases:     ["angelconf", "angel conf"],
   },
   {
-    canonical: "Signal",
-    aliases:   ["signal conference", "signal conf"],
+    canonical:   "Signal",
+    description: "Annual messaging and product conference — developer and product-focused talks.",
+    aliases:     ["signal conference", "signal conf"],
   },
   {
-    canonical: "Seed Summit",
-    aliases:   ["seed summit"],
+    canonical:   "Seed Summit",
+    description: "Early-stage fundraising event in London — pre-seed and seed founders meeting investors.",
+    aliases:     ["seed summit"],
   },
   {
-    canonical: "TNW",
-    aliases:   ["tnw", "the next web"],
+    canonical:   "TNW",
+    description: "The Next Web conference in Amsterdam — European tech and startup ecosystem.",
+    aliases:     ["tnw", "the next web"],
   },
   {
-    canonical: "Figma Config",
-    aliases:   ["figma config 2025", "figma config 2026"],
+    canonical:   "Figma Config",
+    description: "Figma's flagship design conference — design tools, systems, and the future of product design.",
+    aliases:     ["figma config 2025", "figma config 2026"],
   },
   {
-    canonical: "Intersect",
-    aliases:   ["intersect festival", "intersect conf"],
+    canonical:   "Intersect",
+    description: "Design and tech conference — where product, engineering, and design communities meet.",
+    aliases:     ["intersect festival", "intersect conf"],
   },
 ]
+
+/** Fast lookup: canonical name → description for known events. */
+const DESCRIPTION_BY_CANONICAL = new Map<string, string>(
+  KNOWN_EVENTS.map(({ canonical, description }) => [canonical, description]),
+)
 
 // ---------------------------------------------------------------------------
 // Attendance patterns — extract unknown events from tweet text
@@ -200,7 +250,7 @@ const KNOWN_EVENTS: KnownEvent[] = [
 
 /**
  * Each regex has exactly one capture group containing the event-name candidate.
- * Pattern: attendance verb → capitalized phrase (1–3 words).
+ * Pattern: attendance verb → capitalised phrase (1–3 words).
  *
  * [A-Z][A-Za-z0-9']+ — starts uppercase, min 2 chars total (avoids pronoun "I")
  */
@@ -275,6 +325,7 @@ const CITY_MAP: Record<string, string> = {
   "chicago":       "Chicago",       "miami":          "Miami",
   "boston":        "Boston",        "denver":         "Denver",
   "las vegas":     "Las Vegas",     "barcelona":      "Barcelona",
+  "lisbon":        "Lisbon",        "helsinki":       "Helsinki",
 }
 
 /** Extracts a human-readable date hint from tweet text, or null. */
@@ -334,14 +385,18 @@ const SIGNAL_LABELS: Record<string, string> = {
 }
 
 // ---------------------------------------------------------------------------
-// Scoring
+// Warmth helper (shared between scoring and UI logic)
 // ---------------------------------------------------------------------------
 
-function attendeeWarmth(a: EventAttendee): "warm" | "email" | "cold" {
+export function attendeeWarmth(a: Pick<EventAttendee, "meetingCount" | "interactionScore">): "warm" | "email" | "cold" {
   if (a.meetingCount > 0 || a.interactionScore >= 8) return "warm"
   if (a.interactionScore >= 3)                       return "email"
   return "cold"
 }
+
+// ---------------------------------------------------------------------------
+// Scoring
+// ---------------------------------------------------------------------------
 
 function computeScore(attendees: EventAttendee[], signals: EventSignalSummary[]): number {
   // Base — each unique attendee is worth 10 points
@@ -477,11 +532,64 @@ function buildWhyAttend(
 }
 
 // ---------------------------------------------------------------------------
+// Source evidence collection
+// ---------------------------------------------------------------------------
+
+/**
+ * Selects up to maxSnippets representative tweet snippets for card-level display.
+ * Priority: speaker → warm → email → cold.
+ * Deduplicates by first 60 characters to avoid near-duplicate quotes.
+ */
+function collectSourceEvidence(
+  mentions:  Array<{ tweet: string; contactEmail: string }>,
+  attendees: EventAttendee[],
+  maxSnippets = 2,
+): string[] {
+  const attendeeByEmail = new Map(attendees.map((a) => [a.email, a]))
+
+  const buckets: Array<{ tweet: string; contactEmail: string }[]> = [[], [], [], []]
+
+  for (const m of mentions) {
+    const a = attendeeByEmail.get(m.contactEmail)
+    if (!a) continue
+    if (a.role === "speaker")          buckets[0].push(m)
+    else if (attendeeWarmth(a) === "warm")  buckets[1].push(m)
+    else if (attendeeWarmth(a) === "email") buckets[2].push(m)
+    else                               buckets[3].push(m)
+  }
+
+  const ordered = buckets.flat()
+  const results: string[] = []
+  const seen    = new Set<string>()
+
+  for (const m of ordered) {
+    if (results.length >= maxSnippets) break
+    const snippet = m.tweet.length > 200 ? m.tweet.slice(0, 200) + "…" : m.tweet
+    const key     = snippet.slice(0, 60).toLowerCase()
+    if (!seen.has(key)) {
+      seen.add(key)
+      results.push(snippet)
+    }
+  }
+
+  return results
+}
+
+// ---------------------------------------------------------------------------
 // Core export
 // ---------------------------------------------------------------------------
 
-/** Minimum distinct contacts required for an *unknown* event to surface. */
+/**
+ * Minimum distinct contacts required for an *unknown* event to surface.
+ * Known events use a different validation path (see below).
+ */
 const MIN_UNKNOWN_CONTACTS = 2
+
+/**
+ * Minimum computed score an event must reach to be included.
+ * Drops technically-valid but very weak events before the list is returned.
+ */
+const MIN_SCORE = 15
 
 /** Cap on returned events — keeps the list curated and actionable. */
 const MAX_EVENTS = 10
@@ -601,12 +709,10 @@ export function buildEventRadar(contacts: Contact[]): RadarEvent[] {
   const contactByEmail = new Map(enriched.map((c) => [c.email, c]))
 
   for (const [key, { mentions, canonical, isKnown }] of grouped) {
-    // Filter: unknown events need ≥2 distinct contacts
     const uniqueEmails = new Set(mentions.map((m) => m.contactEmail))
-    if (!isKnown && uniqueEmails.size < MIN_UNKNOWN_CONTACTS) continue
 
-    // Build attendees — one per unique contact, preserving their best mention
-    const seenEmails  = new Set<string>()
+    // Build attendees first so we can check warmth for validation
+    const seenEmails   = new Set<string>()
     const attendees:   EventAttendee[] = []
     const signalCounts = new Map<string, number>()
 
@@ -631,14 +737,27 @@ export function buildEventRadar(contacts: Contact[]): RadarEvent[] {
         signals:          td.signals ?? [],
         interactionScore: contact.interactionScore,
         meetingCount:     contact.meetingCount,
-        mentionContext:   m.tweet.length > 140 ? m.tweet.slice(0, 140) + "…" : m.tweet,
+        mentionContext:   m.tweet.length > 160 ? m.tweet.slice(0, 160) + "…" : m.tweet,
         role:             classifyRole(m.tweet),
       })
     }
 
     if (attendees.length === 0) continue
 
-    // Sort attendees warm-first, then by interaction score
+    // ── Validation ──────────────────────────────────────────────────────────
+    const hasWarmOrEmail = attendees.some((a) => attendeeWarmth(a) !== "cold")
+    const distinctCount  = uniqueEmails.size
+
+    if (isKnown) {
+      // Known events: require ≥2 distinct contacts OR ≥1 warm/email contact.
+      // A single cold contact mentioning "SXSW" in passing is not enough signal.
+      if (distinctCount < 2 && !hasWarmOrEmail) continue
+    } else {
+      // Unknown events: must be independently mentioned by ≥2 contacts.
+      if (distinctCount < MIN_UNKNOWN_CONTACTS) continue
+    }
+
+    // ── Sort attendees warm-first ────────────────────────────────────────────
     attendees.sort((a, b) => {
       const wa = a.meetingCount > 0 || a.interactionScore >= 8 ? 2
                : a.interactionScore >= 3 ? 1 : 0
@@ -647,7 +766,7 @@ export function buildEventRadar(contacts: Contact[]): RadarEvent[] {
       return wa !== wb ? wb - wa : b.interactionScore - a.interactionScore
     })
 
-    // Build signal summaries
+    // ── Signal summaries ─────────────────────────────────────────────────────
     const signals: EventSignalSummary[] = [...signalCounts.entries()]
       .sort((a, b) => b[1] - a[1])
       .map(([type, count]) => ({
@@ -656,12 +775,30 @@ export function buildEventRadar(contacts: Contact[]): RadarEvent[] {
         count,
       }))
 
-    // Combine all tweet text for date/location extraction
-    const allText     = mentions.map((m) => m.tweet).join(" ")
+    // ── Date / location / score / narrative ──────────────────────────────────
+    const allText      = mentions.map((m) => m.tweet).join(" ")
     const estimatedDate = extractDate(allText)
     const location      = extractLocation(allText)
     const score         = computeScore(attendees, signals)
+
+    // Minimum score gate — drops technically-valid but very weak events
+    if (score < MIN_SCORE) continue
+
     const whyAttend     = buildWhyAttend(attendees, signals, canonical)
+
+    // ── Confidence ───────────────────────────────────────────────────────────
+    // high: ≥2 contacts of any warmth AND at least one warm/email
+    //       OR: ≥3 contacts regardless of warmth (density signal)
+    const confidence: "high" | "medium" =
+      (distinctCount >= 2 && hasWarmOrEmail) || distinctCount >= 3
+        ? "high"
+        : "medium"
+
+    // ── Description (known events only) ──────────────────────────────────────
+    const description = DESCRIPTION_BY_CANONICAL.get(canonical) ?? null
+
+    // ── Source evidence ───────────────────────────────────────────────────────
+    const sourceEvidence = collectSourceEvidence(mentions, attendees)
 
     events.push({
       id:            key.replace(/\s+/g, "-"),
@@ -675,6 +812,9 @@ export function buildEventRadar(contacts: Contact[]): RadarEvent[] {
       score,
       whyAttend,
       isKnown,
+      confidence,
+      description,
+      sourceEvidence,
       relatedSurfaces: [],   // filled in by linkEventsToSurfaces() in the page
     })
   }

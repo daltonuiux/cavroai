@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import type { RadarEvent, EventAttendee, EventSignalSummary, SurfaceRef } from "@/lib/events-radar"
+import { attendeeWarmth } from "@/lib/events-radar"
 
 // ---------------------------------------------------------------------------
 // Signal colours — matches the scheme used across the app
@@ -20,14 +21,8 @@ const SIGNAL_COLOURS: Record<string, string> = {
 }
 
 // ---------------------------------------------------------------------------
-// Warmth helpers
+// Warmth badge helpers
 // ---------------------------------------------------------------------------
-
-function warmthOf(a: EventAttendee): "warm" | "email" | "cold" {
-  if (a.meetingCount > 0 || a.interactionScore >= 8) return "warm"
-  if (a.interactionScore >= 3)                       return "email"
-  return "cold"
-}
 
 const WARMTH_DOT: Record<string, string> = {
   warm:  "bg-emerald-400",
@@ -69,19 +64,28 @@ function SignalPill({ signal }: { signal: EventSignalSummary }) {
   )
 }
 
-function ScoreBar({ score }: { score: number }) {
-  const colour =
-    score >= 70 ? "bg-emerald-500"
-    : score >= 40 ? "bg-amber-400"
-    : "bg-foreground/20"
-  return (
-    <div className="flex items-center gap-1.5" title={`Score: ${score}/100`}>
-      <div className="h-1 w-16 rounded-full bg-foreground/[0.06] overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${colour}`} style={{ width: `${score}%` }} />
-      </div>
-      <span className="text-[10px] text-muted-foreground/40">{score}</span>
-    </div>
-  )
+/**
+ * Confidence badge — replaces the old "Known event" tag and score bar.
+ * "Verified" = high confidence (≥2 contacts + at least one warm, or ≥3 contacts).
+ * "Unverified" is intentionally not shown — medium events simply lack the badge.
+ */
+function ConfidenceBadge({ confidence, isKnown }: { confidence: "high" | "medium"; isKnown: boolean }) {
+  if (confidence === "high" && isKnown) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded px-1.5 py-px text-[9px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden />
+        Verified
+      </span>
+    )
+  }
+  if (isKnown) {
+    return (
+      <span className="rounded px-1.5 py-px text-[9px] font-semibold bg-foreground/[0.05] text-foreground/35">
+        Known event
+      </span>
+    )
+  }
+  return null
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +93,7 @@ function ScoreBar({ score }: { score: number }) {
 // ---------------------------------------------------------------------------
 
 function AttendeeRow({ person }: { person: EventAttendee }) {
-  const warmth = warmthOf(person)
+  const warmth = attendeeWarmth(person)
   const dot    = WARMTH_DOT[warmth]
   const wLabel = WARMTH_LABEL[warmth]
   const rLabel = ROLE_LABEL[person.role]
@@ -158,9 +162,9 @@ function AttendeeRow({ person }: { person: EventAttendee }) {
 // ---------------------------------------------------------------------------
 
 function RelSummaryPills({ people }: { people: EventAttendee[] }) {
-  const warmCount  = people.filter((p) => warmthOf(p) === "warm").length
-  const emailCount = people.filter((p) => warmthOf(p) === "email").length
-  const coldCount  = people.filter((p) => warmthOf(p) === "cold").length
+  const warmCount  = people.filter((p) => attendeeWarmth(p) === "warm").length
+  const emailCount = people.filter((p) => attendeeWarmth(p) === "email").length
+  const coldCount  = people.filter((p) => attendeeWarmth(p) === "cold").length
 
   const parts: React.ReactNode[] = []
 
@@ -194,6 +198,58 @@ function RelSummaryPills({ people }: { people: EventAttendee[] }) {
 }
 
 // ---------------------------------------------------------------------------
+// Source evidence — tweet snippets that triggered detection
+// ---------------------------------------------------------------------------
+
+function SourceEvidenceSection({
+  evidence,
+  people,
+}: {
+  evidence:  string[]
+  people:    EventAttendee[]
+}) {
+  if (evidence.length === 0) return null
+
+  // Build a name map for attributing quotes
+  const nameBySnippet = new Map<string, string>()
+  for (const person of people) {
+    const snippet = person.mentionContext
+    if (snippet && !nameBySnippet.has(snippet)) {
+      nameBySnippet.set(
+        snippet,
+        person.name?.split(" ")[0] ?? `@${person.twitterHandle}`,
+      )
+    }
+  }
+
+  return (
+    <div className="border-t border-border px-4 py-3 flex flex-col gap-2">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/30">
+        Detected from
+      </p>
+      <div className="flex flex-col gap-2">
+        {evidence.map((snippet, i) => {
+          const author = nameBySnippet.get(snippet)
+          return (
+            <div
+              key={i}
+              className="rounded-md bg-foreground/[0.025] border-l-2 border-foreground/10 pl-3 pr-3 py-2"
+            >
+              <p className="text-[11px] text-muted-foreground/55 italic leading-relaxed line-clamp-3">
+                &ldquo;{snippet}&rdquo;
+              </p>
+              {author && (
+                <p className="mt-0.5 text-[10px] text-muted-foreground/35">— {author}</p>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Event card
 // ---------------------------------------------------------------------------
 
@@ -201,48 +257,56 @@ function EventCard({ event }: { event: RadarEvent }) {
   const [showPeople, setShowPeople] = useState(false)
   const [saved, setSaved]           = useState(false)
 
-  const personLabel = event.attendeeCount === 1
-    ? "1 person attending"
-    : `${event.attendeeCount} people attending`
-
   const speakerCount = event.people.filter((p) => p.role === "speaker").length
 
   return (
     <div className="card-cavro rounded-md">
+
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="px-4 pt-3.5 pb-3 flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          {/* Event name + score bar */}
-          <div className="flex flex-wrap items-center gap-2 mb-1">
+
+          {/* Event name + badges */}
+          <div className="flex flex-wrap items-center gap-1.5 mb-1">
             <span className="text-[13px] font-semibold text-foreground">{event.name}</span>
-            {event.isKnown && (
-              <span className="rounded px-1.5 py-px text-[9px] font-semibold bg-foreground/[0.05] text-foreground/35">
-                Known event
-              </span>
-            )}
-            <ScoreBar score={event.score} />
-          </div>
-
-          {/* Date + location */}
-          {(event.estimatedDate || event.location) && (
-            <p className="text-[11px] text-muted-foreground/50 mb-1">
-              {[event.estimatedDate, event.location].filter(Boolean).join(" · ")}
-            </p>
-          )}
-
-          {/* People count + relationship summary */}
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-[11px] text-muted-foreground/50">{personLabel}</p>
+            <ConfidenceBadge confidence={event.confidence} isKnown={event.isKnown} />
             {speakerCount > 0 && (
-              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+              <span className="rounded px-1.5 py-px text-[9px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400">
                 {speakerCount} speaking
               </span>
             )}
+          </div>
+
+          {/* Description — what is this event */}
+          {event.description && (
+            <p className="text-[12px] leading-snug text-muted-foreground/55 mb-2">
+              {event.description}
+            </p>
+          )}
+
+          {/* When + where */}
+          {(event.estimatedDate || event.location) && (
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-muted-foreground/30 shrink-0" aria-hidden="true">
+                <rect x="1" y="3" width="14" height="12" rx="1.5" />
+                <path d="M1 7h14M5 1v4M11 1v4" strokeLinecap="round" />
+              </svg>
+              <span className="text-[11px] text-muted-foreground/50">
+                {[event.estimatedDate, event.location].filter(Boolean).join(" · ")}
+              </span>
+            </div>
+          )}
+
+          {/* Attendee count + warmth pills */}
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[11px] text-muted-foreground/50">
+              {event.attendeeCount === 1 ? "1 person" : `${event.attendeeCount} people`} from your network
+            </p>
             <RelSummaryPills people={event.people} />
           </div>
         </div>
 
-        {/* Save button — UI only */}
+        {/* Save button */}
         <button
           onClick={() => setSaved((s) => !s)}
           className={
@@ -254,6 +318,19 @@ function EventCard({ event }: { event: RadarEvent }) {
           {saved ? "Saved" : "Save"}
         </button>
       </div>
+
+      {/* ── Why attend ─────────────────────────────────────────────────────── */}
+      <div className="border-t border-border px-4 py-3">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/30 mb-1.5">
+          Why attend
+        </p>
+        <p className="text-[13px] leading-relaxed font-medium text-foreground/80">
+          {event.whyAttend}
+        </p>
+      </div>
+
+      {/* ── Source evidence (tweet snippets that triggered detection) ──────── */}
+      <SourceEvidenceSection evidence={event.sourceEvidence} people={event.people} />
 
       {/* ── Signals ────────────────────────────────────────────────────────── */}
       {event.signals.length > 0 && (
@@ -268,19 +345,6 @@ function EventCard({ event }: { event: RadarEvent }) {
           )}
         </div>
       )}
-
-      {/* ── Why attend ─────────────────────────────────────────────────────── */}
-      <div className="border-t border-border px-4 py-3 flex flex-col gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/30">
-          Why attend
-        </p>
-
-        {/* Render the 3-sentence narrative as a readable paragraph — subtle
-            dividers added via leading and spacing rather than hard separators */}
-        <p className="text-[13px] leading-relaxed font-medium text-foreground/80">
-          {event.whyAttend}
-        </p>
-      </div>
 
       {/* ── Related communities ───────────────────────────────────────────── */}
       <RelatedCommunitiesSection surfaces={event.relatedSurfaces} />
@@ -412,8 +476,8 @@ export function EventsRadarList({
     return <EmptyState enrichedCount={enrichedCount} />
   }
 
-  const knownCount   = events.filter((e) => e.isKnown).length
-  const speakerTotal = events.reduce(
+  const verifiedCount = events.filter((e) => e.confidence === "high" && e.isKnown).length
+  const speakerTotal  = events.reduce(
     (n, e) => n + e.people.filter((p) => p.role === "speaker").length,
     0,
   )
@@ -424,7 +488,7 @@ export function EventsRadarList({
       <div className="flex items-center justify-between">
         <p className="text-[12px] text-muted-foreground/60">
           {events.length} event{events.length === 1 ? "" : "s"} detected
-          {knownCount > 0 && ` · ${knownCount} recognised`}
+          {verifiedCount > 0 && ` · ${verifiedCount} verified`}
           {speakerTotal > 0 && ` · ${speakerTotal} speaking`}
         </p>
         <p className="text-[11px] text-muted-foreground/35">Sorted by network signal strength</p>
