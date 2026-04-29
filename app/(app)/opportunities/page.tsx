@@ -13,8 +13,8 @@ import type { Analysis } from "@/lib/types"
 import { confidenceFromScore } from "@/lib/scoring"
 import { createClient } from "@/lib/supabase/server"
 import type { ClientOpportunityRow, ProspectOpportunityRow } from "@/components/opportunities-list"
-import { buildContactOpportunities } from "@/lib/contact-graph"
-import type { CompanyOpportunityRow } from "@/lib/contact-graph"
+import { buildContactOpportunities, buildPublicSignalOpportunities } from "@/lib/contact-graph"
+import type { CompanyOpportunityRow, PublicSignalOpportunityRow } from "@/lib/contact-graph"
 
 function deriveScore(analysis: Analysis): number {
   if (analysis.fitScore !== undefined) return analysis.fitScore
@@ -43,9 +43,10 @@ export default async function OpportunitiesRoute() {
   const userId = user?.id ?? MVP_USER_ID
 
   let agencyProfile = null
-  let prospectRows: ProspectOpportunityRow[]  = []
-  let clientRows: ClientOpportunityRow[]      = []
-  let contactOpps: CompanyOpportunityRow[]     = []
+  let prospectRows:       ProspectOpportunityRow[]       = []
+  let clientRows:         ClientOpportunityRow[]         = []
+  let contactOpps:        CompanyOpportunityRow[]        = []
+  let publicSignalOpps:   PublicSignalOpportunityRow[]   = []
 
   try {
     const [profile, clients, enrichmentProspects, contacts, interactions] = await Promise.all([
@@ -58,8 +59,11 @@ export default async function OpportunitiesRoute() {
 
     agencyProfile = profile
 
-    // ── Contact-sourced opportunities (from Google sync) ────────────────────
+    // ── Contact-sourced opportunities (email interaction history) ───────────
     contactOpps = buildContactOpportunities(contacts, interactions, profile)
+
+    // ── Public signal opportunities (Twitter enrichment, no email required) ─
+    publicSignalOpps = buildPublicSignalOpportunities(contacts, contactOpps, profile)
 
     // ── Enrichment-sourced prospects ────────────────────────────────────────
     const clientNameSet = new Set(clients.map((c) => c.name.toLowerCase().trim()))
@@ -136,7 +140,7 @@ export default async function OpportunitiesRoute() {
     )
   }
 
-  const hasAnyData = prospectRows.length > 0 || clientRows.length > 0 || contactOpps.length > 0
+  const hasAnyData = prospectRows.length > 0 || clientRows.length > 0 || contactOpps.length > 0 || publicSignalOpps.length > 0
 
   return (
     <div>
@@ -175,6 +179,7 @@ export default async function OpportunitiesRoute() {
           prospects={prospectRows}
           clientRows={clientRows}
           contactOpportunities={contactOpps}
+          publicSignalOpportunities={publicSignalOpps}
         />
       )}
     </div>

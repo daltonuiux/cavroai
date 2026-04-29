@@ -282,6 +282,53 @@ export interface CompanyOpportunityRow {
 /** @deprecated Use CompanyOpportunityRow */
 export type ContactOpportunityRow = CompanyOpportunityRow
 
+// ---------------------------------------------------------------------------
+// Public signal opportunity — Twitter-driven, no email history required
+// ---------------------------------------------------------------------------
+
+/**
+ * An opportunity surfaced from Twitter enrichment data alone.
+ *
+ * Unlike CompanyOpportunityRow (which requires email interaction history),
+ * public signal opportunities surface when a contact or known handle shows
+ * clear intent signals on Twitter/X — regardless of whether you've ever
+ * emailed them.
+ *
+ * Proximity scoring boosts companies where you DO have some relationship
+ * (email history, meetings), so warmer leads rank above cold ones.
+ */
+export interface PublicSignalOpportunityRow {
+  type:       "public_signal"
+  company:    string
+  domain:     string
+  /** Primary signal (highest intent from the SIGNAL_PRIORITY_PUBLIC ordering). */
+  signal:     TwitterSignal
+  /** All unique signals detected across contacts at this domain. */
+  signals:    TwitterSignal[]
+  /** Highest confidence level across all enriched contacts at this domain. */
+  confidence: "high" | "medium"
+  score:      number
+  fitTier:    "high" | "medium"
+  /** 1–2 sentence "why now" narrative. */
+  whyNow:     string
+  /** Contacts whose Twitter data drives this opportunity. */
+  contacts:   Array<{
+    email:          string
+    name:           string | null
+    twitterHandle:  string
+    twitterSignals: TwitterSignal[]
+    bio:            string | null
+    topics:         string[]
+  }>
+  /** How close you are to this company — used for scoring and narrative. */
+  proximity: {
+    hasEmailHistory: boolean
+    hasMeetings:     boolean
+    emailCount:      number
+  }
+  topics: string[]
+}
+
 /** Per-company debug record emitted by buildContactOpportunitiesWithDebug. */
 export interface OpportunityDebugEntry {
   /** Company display name. */
@@ -979,6 +1026,179 @@ export function buildContactOpportunitiesWithDebug(
     return b.finalScore - a.finalScore || b.baseScore - a.baseScore
   })
   return { opportunities, debug }
+}
+
+// ---------------------------------------------------------------------------
+// Public signal opportunity pipeline
+// ---------------------------------------------------------------------------
+
+/** Max public signal cards to show — kept lower because these are colder leads. */
+const MAX_PUBLIC_SIGNAL_RESULTS = 5
+
+/** Intent priority for picking the "primary" signal on a public-signal card. */
+const SIGNAL_PRIORITY_PUBLIC: TwitterSignal[] = [
+  "fundraising", "launching", "announcing", "hiring", "building",
+]
+
+const PUBLIC_SIGNAL_DESCRIPTIONS: Record<TwitterSignal, string> = {
+  fundraising: "closing a funding round",
+  launching:   "about to launch publicly",
+  announcing:  "about to make a major announcement",
+  hiring:      "expanding their team",
+  building:    "actively building something new",
+}
+
+interface PublicSignalWhyNowCtx {
+  signal:          TwitterSignal
+  signals:         TwitterSignal[]
+  hasEmailHistory: boolean
+  hasMeetings:     boolean
+  confidence:      "high" | "medium"
+}
+
+function narrativePublicSignalWhyNow(ctx: PublicSignalWhyNowCtx): string {
+  const { signal, signals, hasEmailHistory, hasMeetings, confidence } = ctx
+
+  const primaryDesc = PUBLIC_SIGNAL_DESCRIPTIONS[signal] ?? "showing strong signals"
+
+  // ── Activity line ─────────────────────────────────────────────────────────
+  let activity: string
+  if (signals.length >= 3) {
+    activity = `Multiple converging signals — ${primaryDesc}`
+  } else if (signals.length === 2) {
+    const second     = signals.find((s) => s !== signal)
+    const secondDesc = second ? (PUBLIC_SIGNAL_DESCRIPTIONS[second] ?? second) : ""
+    activity = `${primaryDesc} and ${secondDesc}`
+  } else {
+    activity = primaryDesc
+  }
+  // Capitalise
+  activity = activity.charAt(0).toUpperCase() + activity.slice(1)
+
+  // ── Proximity + recommendation ────────────────────────────────────────────
+  let closing: string
+  if (hasMeetings) {
+    closing = "you have a warm relationship here — reconnect while momentum is high"
+  } else if (hasEmailHistory) {
+    closing = "you have an existing contact here — warm outreach while they're active"
+  } else {
+    const urgency = confidence === "high" ? "reach out now" : "worth a cold introduction"
+    closing = `no prior relationship — ${urgency} while the signal is fresh`
+  }
+
+  return `${activity} — ${closing}.`
+}
+
+/**
+ * Surfaces companies showing public intent signals on Twitter/X.
+ *
+ * Unlike buildContactOpportunities (email-based), this pipeline:
+ *   - Requires NO minimum interaction score — even low-interaction contacts
+ *     with Twitter signals are considered
+ *   - Deduplicates against existingOpportunities so the same company is
+ *     never shown in both sections
+ *   - Applies the same fit gate (scoreCompanyFit) as the email pipeline
+ *   - Proximity boosts: meetings (1.7×), email history (1.4×), cold (1.0×)
+ *
+ * Sorted by score desc, capped at MAX_PUBLIC_SIGNAL_RESULTS.
+ */
+export function buildPublicSignalOpportunities(
+  contacts:             Contact[],
+  existingOpportunities: CompanyOpportunityRow[],
+  profile?:             AgencyProfile | null,
+): PublicSignalOpportunityRow[] {
+  // Domains already covered by the email-based pipeline
+  const coveredDomains = new Set(existingOpportunities.map((o) => o.domain))
+
+  // Group contacts that have Twitter signals by domain
+  const domainMap = new Map<string, Contact[]>()
+  for (const contact of contacts) {
+    if (!contact.twitterData || contact.twitterData.signals.length === 0) continue
+    if (!domainMap.has(contact.domain)) domainMap.set(contact.domain, [])
+    domainMap.get(contact.domain)!.push(contact)
+  }
+
+  const rows: PublicSignalOpportunityRow[] = []
+
+  for (const [domain, domainContacts] of domainMap) {
+    // Skip if the email pipeline already covers this company
+    if (coveredDomains.has(domain)) continue
+
+    const sortedContacts = [...domainContacts].sort(
+      (a, b) => b.interactionScore - a.interactionScore,
+    )
+    const topContact = sortedContacts[0]
+    if (!topContact) continue
+
+    // ── Fit gate ──────────────────────────────────────────────────────────────
+    const fitTier = scoreCompanyFit(
+      { name: topContact.companyName, domain },
+      profile,
+    )
+    if (fitTier === "low") continue
+
+    // ── Aggregate signals + topics across all contacts at domain ──────────────
+    const signalSet = new Set<TwitterSignal>()
+    const topicSet  = new Set<string>()
+    let confidence: "high" | "medium" = "medium"
+
+    for (const c of sortedContacts) {
+      if (!c.twitterData) continue
+      for (const s of c.twitterData.signals) signalSet.add(s)
+      for (const t of c.twitterData.topics)  topicSet.add(t)
+      if (c.twitterData.confidence === "high") confidence = "high"
+    }
+
+    const allSignals = SIGNAL_PRIORITY_PUBLIC.filter((s) => signalSet.has(s))
+    if (allSignals.length === 0) continue
+
+    const primarySignal = allSignals[0]!
+
+    // ── Proximity ─────────────────────────────────────────────────────────────
+    const hasEmailHistory = sortedContacts.some((c) => c.sentCount + c.receivedCount > 0)
+    const hasMeetings     = sortedContacts.some((c) => c.meetingCount > 0)
+    const emailCount      = sortedContacts.reduce((n, c) => n + c.sentCount + c.receivedCount, 0)
+
+    // ── Scoring ───────────────────────────────────────────────────────────────
+    const base       = allSignals.length * 2.5
+    const confMult   = confidence === "high" ? 1.2 : 1.0
+    const proxMult   = hasMeetings ? 1.7 : hasEmailHistory ? 1.4 : 1.0
+    const score      = Math.round(base * confMult * proxMult * FIT_MULTIPLIER[fitTier] * 100) / 100
+
+    rows.push({
+      type:       "public_signal",
+      company:    topContact.companyName,
+      domain,
+      signal:     primarySignal,
+      signals:    allSignals,
+      confidence,
+      score,
+      fitTier,
+      whyNow:     narrativePublicSignalWhyNow({
+        signal: primarySignal,
+        signals: allSignals,
+        hasEmailHistory,
+        hasMeetings,
+        confidence,
+      }),
+      contacts:   sortedContacts
+        .filter((c) => c.twitterData)
+        .map((c) => ({
+          email:          c.email,
+          name:           c.name,
+          twitterHandle:  c.twitterData!.handle,
+          twitterSignals: c.twitterData!.signals,
+          bio:            c.twitterData!.bio,
+          topics:         c.twitterData!.topics,
+        })),
+      proximity: { hasEmailHistory, hasMeetings, emailCount },
+      topics:     [...topicSet],
+    })
+  }
+
+  return rows
+    .sort((a, b) => b.score - a.score)
+    .slice(0, MAX_PUBLIC_SIGNAL_RESULTS)
 }
 
 // ---------------------------------------------------------------------------

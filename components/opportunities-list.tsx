@@ -4,7 +4,7 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import type { EvidenceItem } from "@/lib/types"
-import type { CompanyOpportunityRow } from "@/lib/contact-graph"
+import type { CompanyOpportunityRow, PublicSignalOpportunityRow } from "@/lib/contact-graph"
 import { signalLabels } from "@/lib/contact-graph"
 
 // ---------------------------------------------------------------------------
@@ -381,11 +381,13 @@ function ConfidenceBadge({ confidence }: { confidence: "high" | "medium" | "low"
 export function OpportunitiesPage({
   prospects,
   clientRows,
-  contactOpportunities = [],
+  contactOpportunities    = [],
+  publicSignalOpportunities = [],
 }: {
-  prospects:             ProspectOpportunityRow[]
-  clientRows:            ClientOpportunityRow[]
-  contactOpportunities?: CompanyOpportunityRow[]
+  prospects:                  ProspectOpportunityRow[]
+  clientRows:                 ClientOpportunityRow[]
+  contactOpportunities?:      CompanyOpportunityRow[]
+  publicSignalOpportunities?: PublicSignalOpportunityRow[]
 }) {
   const [dismissedClients, setDismissedClients] = useState<Set<string>>(new Set())
 
@@ -409,6 +411,21 @@ export function OpportunitiesPage({
         </div>
       )}
 
+      {/* ── Emerging opportunities (Twitter / public signals) ─────────────────── */}
+      {publicSignalOpportunities.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 px-0.5">
+            Emerging opportunities
+          </p>
+          <p className="text-[11px] text-muted-foreground/40 px-0.5 -mt-1">
+            Companies showing public intent signals — even without email history
+          </p>
+          {publicSignalOpportunities.map((row) => (
+            <PublicSignalCard key={`${row.domain}|${row.signal}`} row={row} />
+          ))}
+        </div>
+      )}
+
       {/* ── Primary: discovered prospects ─────────────────────────────────────── */}
       {prospects.length > 0 && (
         <div className="flex flex-col gap-2">
@@ -422,7 +439,7 @@ export function OpportunitiesPage({
       )}
 
       {/* ── Empty state — Google synced but nothing qualified ─────────────────── */}
-      {prospects.length === 0 && contactOpportunities.length === 0 && (
+      {prospects.length === 0 && contactOpportunities.length === 0 && publicSignalOpportunities.length === 0 && (
         <div className="rounded-md border border-dashed border-border px-6 py-8 flex flex-col items-center gap-4 text-center">
           <div>
             <p className="text-[13px] font-medium text-foreground mb-1">
@@ -656,6 +673,150 @@ function CompanyOpportunityCard({ row }: { row: CompanyOpportunityRow }) {
                         className="rounded px-1.5 py-px text-[10px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400"
                       >
                         {TWITTER_SIGNAL_LABELS[s] ?? s}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Public signal card
+// ---------------------------------------------------------------------------
+
+const PUBLIC_SIGNAL_COLOURS: Record<string, string> = {
+  fundraising: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+  launching:   "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+  announcing:  "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+  hiring:      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  building:    "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+}
+
+const PUBLIC_SIGNAL_LABELS: Record<string, string> = {
+  fundraising: "Fundraising",
+  launching:   "Launching",
+  announcing:  "Announcing",
+  hiring:      "Hiring",
+  building:    "Building",
+}
+
+function PublicSignalBadge({ signal }: { signal: string }) {
+  return (
+    <span className={`rounded px-1.5 py-px text-[10px] font-semibold ${PUBLIC_SIGNAL_COLOURS[signal] ?? "bg-foreground/[0.04] text-foreground/40"}`}>
+      {PUBLIC_SIGNAL_LABELS[signal] ?? signal}
+    </span>
+  )
+}
+
+function ProximityBadge({ proximity }: { proximity: PublicSignalOpportunityRow["proximity"] }) {
+  if (proximity.hasMeetings) {
+    return (
+      <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+        Warm — met before
+      </span>
+    )
+  }
+  if (proximity.hasEmailHistory) {
+    return (
+      <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-foreground/[0.06] text-foreground/50">
+        Some history
+      </span>
+    )
+  }
+  return (
+    <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-foreground/[0.04] text-foreground/35">
+      No prior contact
+    </span>
+  )
+}
+
+function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
+  const [showContacts, setShowContacts] = useState(false)
+
+  return (
+    <div className="card-cavro rounded-md px-4 py-3.5 flex flex-col gap-3">
+
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+            <span className="text-[13px] font-semibold text-foreground">{row.company}</span>
+            <FitTierBadge tier={row.fitTier} />
+            {row.signals.map((s) => <PublicSignalBadge key={s} signal={s} />)}
+          </div>
+          <div className="flex items-center gap-1.5">
+            {/* X / Twitter source indicator */}
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" className="text-muted-foreground/30 shrink-0" aria-hidden="true">
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+            </svg>
+            <span className="text-[10px] text-muted-foreground/35">Public signal</span>
+            <span className="text-muted-foreground/20">·</span>
+            <ProximityBadge proximity={row.proximity} />
+          </div>
+        </div>
+      </div>
+
+      {/* Why now */}
+      <div className="border-t border-border pt-3">
+        <p className="text-[13px] leading-snug font-medium text-foreground/85">{row.whyNow}</p>
+      </div>
+
+      {/* Topics / context */}
+      {row.topics.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {row.topics.slice(0, 4).map((t) => (
+            <span key={t} className="rounded px-1.5 py-px text-[10px] text-muted-foreground/40 bg-foreground/[0.03] border border-border/60">
+              {t}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Contacts with Twitter handles */}
+      <div className="border-t border-border pt-2">
+        <button
+          onClick={() => setShowContacts(!showContacts)}
+          className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors"
+        >
+          {showContacts
+            ? "Hide contacts"
+            : row.contacts.length === 1
+            ? "1 contact on X"
+            : `${row.contacts.length} contacts on X`}
+        </button>
+
+        {showContacts && (
+          <ul className="mt-2.5 space-y-3">
+            {row.contacts.map((c) => (
+              <li key={c.email} className="flex flex-col gap-0.5">
+                <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                  <span className="text-foreground/70 font-medium">{c.name ?? c.email}</span>
+                  <a
+                    href={`https://x.com/${c.twitterHandle}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-0.5 text-muted-foreground/40 hover:text-foreground transition-colors"
+                  >
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                    </svg>
+                    @{c.twitterHandle}
+                  </a>
+                </div>
+                {c.bio && (
+                  <p className="text-[11px] text-muted-foreground/40 italic">{c.bio}</p>
+                )}
+                {c.twitterSignals.length > 0 && (
+                  <div className="flex gap-1 flex-wrap">
+                    {c.twitterSignals.map((s) => (
+                      <span key={s} className={`rounded px-1.5 py-px text-[10px] font-semibold ${PUBLIC_SIGNAL_COLOURS[s] ?? "bg-foreground/[0.04] text-foreground/35"}`}>
+                        {PUBLIC_SIGNAL_LABELS[s] ?? s}
                       </span>
                     ))}
                   </div>
