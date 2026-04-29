@@ -2,13 +2,14 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Zap, Users, Building2, Settings2, Layers2 } from "lucide-react"
+import { LayoutDashboard, Zap, Users, Building2, Settings2, Layers2, Radar } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const nav = [
   { label: "Overview",      href: "/overview",     icon: LayoutDashboard },
   { label: "Opportunities", href: "/opportunities", icon: Zap },
   { label: "Surfaces",      href: "/surfaces",      icon: Layers2 },
+  { label: "Events Radar",  href: "/events",        icon: Radar },
   { label: "Clients",       href: "/clients",       icon: Users },
 ]
 
