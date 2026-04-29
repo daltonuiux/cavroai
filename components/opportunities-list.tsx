@@ -3,6 +3,8 @@
 import { useState } from "react"
 import Link from "next/link"
 import type { EvidenceItem } from "@/lib/types"
+import type { ContactOpportunityRow } from "@/lib/contact-graph"
+import { signalLabels } from "@/lib/contact-graph"
 
 // ---------------------------------------------------------------------------
 // Row types
@@ -378,9 +380,11 @@ function ConfidenceBadge({ confidence }: { confidence: "high" | "medium" | "low"
 export function OpportunitiesPage({
   prospects,
   clientRows,
+  contactOpportunities = [],
 }: {
-  prospects: ProspectOpportunityRow[]
-  clientRows: ClientOpportunityRow[]
+  prospects:             ProspectOpportunityRow[]
+  clientRows:            ClientOpportunityRow[]
+  contactOpportunities?: ContactOpportunityRow[]
 }) {
   const [dismissedClients, setDismissedClients] = useState<Set<string>>(new Set())
 
@@ -389,11 +393,23 @@ export function OpportunitiesPage({
   return (
     <div className="flex flex-col gap-8">
 
+      {/* ── From your real network (Google sync) ──────────────────────────────── */}
+      {contactOpportunities.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 px-0.5">
+            From your network — real signals from Gmail and Calendar
+          </p>
+          {contactOpportunities.map((row) => (
+            <ContactOpportunityCard key={`${row.domain}|${row.contactEmail}`} row={row} />
+          ))}
+        </div>
+      )}
+
       {/* ── Primary: discovered prospects ─────────────────────────────────────── */}
       {prospects.length > 0 && (
         <div className="flex flex-col gap-2">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 px-0.5">
-            Discovered through your network
+            Discovered through your client network
           </p>
           {prospects.map((row) => (
             <ProspectCard key={row.id} row={row} />
@@ -401,12 +417,15 @@ export function OpportunitiesPage({
         </div>
       )}
 
-      {prospects.length === 0 && (
+      {prospects.length === 0 && contactOpportunities.length === 0 && (
         <div className="rounded-md border border-dashed border-border px-6 py-8 text-center">
           <p className="text-[13px] font-medium text-foreground">No prospects discovered yet</p>
           <p className="mt-1 text-[12px] text-muted-foreground">
-            Prospects are discovered automatically when clients are analysed. Re-run analysis on
-            any client to surface companies from their customer and partner signals.
+            Prospects are discovered automatically when clients are analysed.{" "}
+            <Link href="/settings" className="underline underline-offset-2 hover:text-foreground transition-colors">
+              Connect Google
+            </Link>{" "}
+            to surface opportunities from your real relationships immediately.
           </p>
         </div>
       )}
@@ -418,6 +437,95 @@ export function OpportunitiesPage({
           onDismiss={(id) => setDismissedClients((prev) => new Set([...prev, id]))}
         />
       )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Contact opportunity card
+// ---------------------------------------------------------------------------
+
+function ContactOpportunityCard({ row }: { row: ContactOpportunityRow }) {
+  const [open, setOpen] = useState(false)
+
+  const signalBadge = (signal: string) => {
+    const colours: Record<string, string> = {
+      hiring:  "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+      launch:  "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+      project: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+      budget:  "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+      agency:  "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+    }
+    return (
+      <span
+        key={signal}
+        className={`rounded px-1.5 py-px text-[10px] font-semibold ${colours[signal] ?? "bg-foreground/[0.04] text-foreground/40"}`}
+      >
+        {signalLabels([signal])}
+      </span>
+    )
+  }
+
+  const contactLabel = row.contactName
+    ? `${row.contactName} (${row.contactEmail})`
+    : row.contactEmail
+
+  const daysSince = Math.floor(
+    (Date.now() - new Date(row.mostRecent).getTime()) / (1000 * 60 * 60 * 24),
+  )
+  const recencyLabel = daysSince === 0 ? "today"
+    : daysSince === 1 ? "yesterday"
+    : `${daysSince}d ago`
+
+  return (
+    <div className="rounded-lg border border-border bg-card px-4 py-3.5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13px] font-semibold text-foreground">{row.companyName}</span>
+            {row.signals.map(signalBadge)}
+          </div>
+
+          <p className="mt-1 text-[12px] text-muted-foreground">
+            Via {contactLabel}
+            <span className="mx-1.5 text-muted-foreground/30">·</span>
+            <span className="text-muted-foreground/60">{recencyLabel}</span>
+          </p>
+
+          {/* Most recent subject */}
+          {row.subjects[0] && (
+            <p className="mt-1.5 text-[11px] text-muted-foreground/60 italic truncate">
+              &ldquo;{row.subjects[0]}&rdquo;
+            </p>
+          )}
+
+          {/* Expand subjects */}
+          {row.subjects.length > 1 && (
+            <button
+              onClick={() => setOpen(!open)}
+              className="mt-1 text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors"
+            >
+              {open ? "Hide" : `+${row.subjects.length - 1} more subject${row.subjects.length > 2 ? "s" : ""}`}
+            </button>
+          )}
+
+          {open && (
+            <ul className="mt-1 space-y-0.5">
+              {row.subjects.slice(1).map((s, i) => (
+                <li key={i} className="text-[11px] text-muted-foreground/50 italic truncate">
+                  &ldquo;{s}&rdquo;
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="shrink-0 text-right">
+          <span className="text-[11px] text-muted-foreground/40">
+            score {row.interactionScore.toFixed(1)}
+          </span>
+        </div>
+      </div>
     </div>
   )
 }

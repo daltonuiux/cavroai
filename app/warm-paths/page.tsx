@@ -5,13 +5,17 @@ import {
   getAllRelationshipSignalsForUser,
   getEnrichmentProspectsForUser,
   getRelationshipSeedsForUser,
+  getContactsForUser,
+  getContactInteractionsForUser,
   MVP_USER_ID,
 } from "@/lib/db"
 import { computeWarmPaths } from "@/lib/warm-paths"
+import { buildContactWarmPaths } from "@/lib/contact-graph"
 import { WarmPathsPage } from "@/components/warm-paths-page"
 import type { WarmPathRow, DirectPathRow } from "@/components/warm-paths-page"
 import { createClient } from "@/lib/supabase/server"
 import type { Client } from "@/lib/types"
+import type { ContactWarmPathRow } from "@/lib/contact-graph"
 
 /** Title-case a normalized entity name. */
 function titleCase(str: string): string {
@@ -34,11 +38,13 @@ export default async function WarmPathsRoute() {
   const { data: { user } } = await supabase.auth.getUser()
   const userId = user?.id ?? MVP_USER_ID
 
-  const [clients, signals, enrichmentProspects, seeds] = await Promise.all([
+  const [clients, signals, enrichmentProspects, seeds, contacts, interactions] = await Promise.all([
     getClients().catch(() => []),
     getAllRelationshipSignalsForUser(userId).catch(() => []),
     getEnrichmentProspectsForUser(userId).catch(() => []),
     getRelationshipSeedsForUser(userId).catch(() => []),
+    getContactsForUser(userId).catch(() => []),
+    getContactInteractionsForUser(userId).catch(() => []),
   ])
 
   const clientMap = new Map<string, Client>(clients.map((c) => [c.id, c]))
@@ -47,7 +53,6 @@ export default async function WarmPathsRoute() {
   // Direct paths — one client → one prospect (from enrichment signals)
   // ---------------------------------------------------------------------------
 
-  // Deduplicate by (sourceClientId, prospectName) — keep highest fit
   const directPathMap = new Map<string, DirectPathRow>()
   for (const p of enrichmentProspects) {
     const key = `${p.sourceClientId}|${p.name.toLowerCase()}`
@@ -71,23 +76,18 @@ export default async function WarmPathsRoute() {
     })
   }
 
-  const directPaths = [...directPathMap.values()]
-    // Sort: customer before partner, then high fit before medium/low
-    .sort((a, b) => {
-      const fitOrder = { high: 3, medium: 2, low: 1 }
-      if (a.signalType !== b.signalType) {
-        return a.signalType === "customer" ? -1 : 1
-      }
-      return fitOrder[b.estimatedFit] - fitOrder[a.estimatedFit]
-    })
+  const directPaths = [...directPathMap.values()].sort((a, b) => {
+    const fitOrder = { high: 3, medium: 2, low: 1 }
+    if (a.signalType !== b.signalType) return a.signalType === "customer" ? -1 : 1
+    return fitOrder[b.estimatedFit] - fitOrder[a.estimatedFit]
+  })
 
   // ---------------------------------------------------------------------------
-  // Overlap paths — shared entities across 2+ clients (existing logic)
+  // Overlap paths — shared entities across 2+ clients (existing engine)
   // ---------------------------------------------------------------------------
 
   const overlapPaths = computeWarmPaths(signals, clients, seeds)
 
-  // Track which prospect names are already in the DB
   const addedNames = new Set(
     enrichmentProspects
       .filter((p) => p.addedAsClientId)
@@ -109,13 +109,20 @@ export default async function WarmPathsRoute() {
           : `Ask your contact at ${ref.name} whether they know of any relevant prospects via ${via}.`,
       }
     })
-
     return {
       ...path,
       alreadyAdded: addedNames.has(path.entityName.toLowerCase().trim()),
       facilitators,
     }
   })
+
+  // ---------------------------------------------------------------------------
+  // Contact warm paths — from Google integration
+  // ---------------------------------------------------------------------------
+
+  const contactPaths: ContactWarmPathRow[] = contacts.length > 0
+    ? buildContactWarmPaths(contacts, signals, clients)
+    : []
 
   return (
     <div>
@@ -128,7 +135,11 @@ export default async function WarmPathsRoute() {
         </p>
       </div>
 
-      <WarmPathsPage directPaths={directPaths} overlapRows={overlapRows} />
+      <WarmPathsPage
+        directPaths={directPaths}
+        overlapRows={overlapRows}
+        contactPaths={contactPaths}
+      />
     </div>
   )
 }

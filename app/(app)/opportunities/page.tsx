@@ -4,6 +4,8 @@ import {
   getClients,
   getLatestAnalysesForClients,
   getEnrichmentProspectsForUser,
+  getContactsForUser,
+  getContactInteractionsForUser,
   MVP_USER_ID,
 } from "@/lib/db"
 import { OpportunitiesPage } from "@/components/opportunities-list"
@@ -11,6 +13,8 @@ import type { Analysis } from "@/lib/types"
 import { confidenceFromScore } from "@/lib/scoring"
 import { createClient } from "@/lib/supabase/server"
 import type { ClientOpportunityRow, ProspectOpportunityRow } from "@/components/opportunities-list"
+import { buildContactOpportunities } from "@/lib/contact-graph"
+import type { ContactOpportunityRow } from "@/lib/contact-graph"
 
 function deriveScore(analysis: Analysis): number {
   if (analysis.fitScore !== undefined) return analysis.fitScore
@@ -29,7 +33,7 @@ export default async function OpportunitiesRoute() {
         Opportunities
       </h1>
       <p className="mt-0.5 text-[12px] text-muted-foreground">
-        Companies to reach out to — surfaced through your client network
+        Companies to reach out to — surfaced through your client network and real relationships
       </p>
     </div>
   )
@@ -39,27 +43,28 @@ export default async function OpportunitiesRoute() {
   const userId = user?.id ?? MVP_USER_ID
 
   let agencyProfile = null
-  let prospectRows: ProspectOpportunityRow[] = []
-  let clientRows: ClientOpportunityRow[] = []
+  let prospectRows: ProspectOpportunityRow[]  = []
+  let clientRows: ClientOpportunityRow[]      = []
+  let contactOpps: ContactOpportunityRow[]    = []
 
   try {
-    const [profile, clients, enrichmentProspects] = await Promise.all([
+    const [profile, clients, enrichmentProspects, contacts, interactions] = await Promise.all([
       getAgencyProfile().catch(() => null),
       getClients(),
       getEnrichmentProspectsForUser(userId).catch(() => []),
+      getContactsForUser(userId).catch(() => []),
+      getContactInteractionsForUser(userId).catch(() => []),
     ])
 
     agencyProfile = profile
 
-    // ---------------------------------------------------------------------------
-    // Primary: enrichment-sourced prospects
-    // ---------------------------------------------------------------------------
+    // ── Contact-sourced opportunities (from Google sync) ────────────────────
+    contactOpps = buildContactOpportunities(contacts, interactions)
 
-    // Build a set of existing client names for deduplication
+    // ── Enrichment-sourced prospects ────────────────────────────────────────
     const clientNameSet = new Set(clients.map((c) => c.name.toLowerCase().trim()))
 
     prospectRows = enrichmentProspects
-      // Don't show prospects that are already tracked as clients
       .filter((p) => !clientNameSet.has(p.name.toLowerCase().trim()))
       .map((p): ProspectOpportunityRow => ({
         id:               p.id,
@@ -73,11 +78,7 @@ export default async function OpportunitiesRoute() {
         addedAsClientId:  p.addedAsClientId,
       }))
 
-    // ---------------------------------------------------------------------------
-    // Secondary: existing clients with strong analysis (complete + showOpportunity)
-    // Profile-only and insufficient-data clients are excluded per spec.
-    // ---------------------------------------------------------------------------
-
+    // ── Existing clients with strong analysis ───────────────────────────────
     if (clients.length > 0) {
       const analysesMap = await getLatestAnalysesForClients(clients.map((c) => c.id))
 
@@ -97,9 +98,9 @@ export default async function OpportunitiesRoute() {
           const top = analysis.opportunities?.[0] ?? null
           const whatsHappening =
             analysis.whatIsHappening || top?.whatsHappening || analysis.summary || ""
-          const whatToDo = analysis.whatToDo || top?.whatToDo || ""
-          const outreach = analysis.outreach || top?.outreach || analysis.suggestedPitch || ""
-          const score = deriveScore(analysis)
+          const whatToDo  = analysis.whatToDo  || top?.whatToDo  || ""
+          const outreach  = analysis.outreach  || top?.outreach  || analysis.suggestedPitch || ""
+          const score     = deriveScore(analysis)
 
           return {
             id:             client.id,
@@ -135,6 +136,8 @@ export default async function OpportunitiesRoute() {
     )
   }
 
+  const hasAnyData = prospectRows.length > 0 || clientRows.length > 0 || contactOpps.length > 0
+
   return (
     <div>
       {header}
@@ -158,16 +161,21 @@ export default async function OpportunitiesRoute() {
         </div>
       )}
 
-      {prospectRows.length === 0 && clientRows.length === 0 ? (
+      {!hasAnyData ? (
         <div className="rounded-md border border-dashed border-border px-6 py-12 text-center">
           <p className="text-[13px] font-medium text-foreground">No opportunities yet</p>
           <p className="mt-1 text-[12px] text-muted-foreground">
-            Run analysis on your clients — prospects will be discovered automatically from their
-            customer and partner signals.
+            Run analysis on your clients, or{" "}
+            <Link href="/settings" className="underline underline-offset-2">connect Google</Link>{" "}
+            to surface opportunities from your real email and calendar relationships.
           </p>
         </div>
       ) : (
-        <OpportunitiesPage prospects={prospectRows} clientRows={clientRows} />
+        <OpportunitiesPage
+          prospects={prospectRows}
+          clientRows={clientRows}
+          contactOpportunities={contactOpps}
+        />
       )}
     </div>
   )

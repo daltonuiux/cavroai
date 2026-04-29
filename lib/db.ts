@@ -1,6 +1,53 @@
 // ---------------------------------------------------------------------------
 // Supabase migrations required — run once in the SQL editor:
 //
+// Google OAuth connections:
+//   CREATE TABLE IF NOT EXISTS google_connections (
+//     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+//     user_id uuid NOT NULL UNIQUE,
+//     access_token text NOT NULL,
+//     refresh_token text NOT NULL,
+//     token_expiry timestamptz NOT NULL,
+//     google_email text NOT NULL,
+//     synced_at timestamptz,
+//     created_at timestamptz NOT NULL DEFAULT now()
+//   );
+//
+// Contact network (derived from Gmail + Calendar):
+//   CREATE TABLE IF NOT EXISTS contacts (
+//     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+//     user_id uuid NOT NULL,
+//     email text NOT NULL,
+//     name text,
+//     domain text NOT NULL,
+//     company_name text NOT NULL,
+//     sent_count integer NOT NULL DEFAULT 0,
+//     received_count integer NOT NULL DEFAULT 0,
+//     meeting_count integer NOT NULL DEFAULT 0,
+//     last_interaction timestamptz,
+//     first_interaction timestamptz,
+//     interaction_score numeric NOT NULL DEFAULT 0,
+//     created_at timestamptz NOT NULL DEFAULT now(),
+//     UNIQUE (user_id, email)
+//   );
+//   CREATE INDEX IF NOT EXISTS idx_contacts_user ON contacts(user_id);
+//   CREATE INDEX IF NOT EXISTS idx_contacts_domain ON contacts(user_id, domain);
+//
+// Contact interactions with opportunity signals:
+//   CREATE TABLE IF NOT EXISTS contact_interactions (
+//     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+//     user_id uuid NOT NULL,
+//     contact_email text NOT NULL,
+//     interaction_type text NOT NULL,
+//     subject text NOT NULL,
+//     occurred_at timestamptz NOT NULL,
+//     external_id text NOT NULL,
+//     opportunity_signals text[] NOT NULL DEFAULT '{}',
+//     created_at timestamptz NOT NULL DEFAULT now(),
+//     UNIQUE (user_id, contact_email, external_id)
+//   );
+//   CREATE INDEX IF NOT EXISTS idx_contact_interactions_user ON contact_interactions(user_id);
+//
 // Relationship signals table (warm path engine):
 //   CREATE TABLE IF NOT EXISTS relationship_signals (
 //     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -875,4 +922,226 @@ export async function deleteRelationshipSeed(
     .eq("user_id", userId)
 
   if (error) throw new Error(`deleteRelationshipSeed: ${error.message}`)
+}
+
+// ---------------------------------------------------------------------------
+// Google OAuth connections
+// ---------------------------------------------------------------------------
+
+export interface GoogleConnection {
+  id:          string
+  userId:      string
+  accessToken: string
+  refreshToken: string
+  tokenExpiry:  string  // ISO
+  googleEmail:  string
+  syncedAt:     string | null
+  createdAt:    string
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToGoogleConnection(row: any): GoogleConnection {
+  return {
+    id:           row.id,
+    userId:       row.user_id,
+    accessToken:  row.access_token,
+    refreshToken: row.refresh_token,
+    tokenExpiry:  row.token_expiry,
+    googleEmail:  row.google_email,
+    syncedAt:     row.synced_at ?? null,
+    createdAt:    row.created_at,
+  }
+}
+
+/**
+ * Upserts a Google OAuth connection for a user.
+ * Replaces any existing connection (only one per user).
+ */
+export async function saveGoogleConnection(
+  userId: string,
+  data: {
+    accessToken:  string
+    refreshToken: string
+    tokenExpiry:  string
+    googleEmail:  string
+  },
+): Promise<void> {
+  const { error } = await db()
+    .from("google_connections")
+    .upsert(
+      {
+        user_id:       userId,
+        access_token:  data.accessToken,
+        refresh_token: data.refreshToken,
+        token_expiry:  data.tokenExpiry,
+        google_email:  data.googleEmail,
+      },
+      { onConflict: "user_id" },
+    )
+
+  if (error) throw new Error(`saveGoogleConnection: ${error.message}`)
+}
+
+/** Updates only the access token + expiry (after a token refresh). */
+export async function updateGoogleAccessToken(
+  userId:      string,
+  accessToken: string,
+  tokenExpiry: string,
+): Promise<void> {
+  const { error } = await db()
+    .from("google_connections")
+    .update({ access_token: accessToken, token_expiry: tokenExpiry })
+    .eq("user_id", userId)
+
+  if (error) throw new Error(`updateGoogleAccessToken: ${error.message}`)
+}
+
+/** Marks the connection as synced now. */
+export async function markGoogleSynced(userId: string): Promise<void> {
+  const { error } = await db()
+    .from("google_connections")
+    .update({ synced_at: new Date().toISOString() })
+    .eq("user_id", userId)
+
+  if (error) throw new Error(`markGoogleSynced: ${error.message}`)
+}
+
+export async function getGoogleConnection(userId: string): Promise<GoogleConnection | null> {
+  const { data, error } = await db()
+    .from("google_connections")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (error) throw new Error(`getGoogleConnection: ${error.message}`)
+  return data ? rowToGoogleConnection(data) : null
+}
+
+// ---------------------------------------------------------------------------
+// Contacts (derived from Gmail + Calendar)
+// ---------------------------------------------------------------------------
+
+import type { Contact, ContactInteraction } from "./contact-graph"
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToContact(row: any): Contact {
+  return {
+    id:               row.id,
+    userId:           row.user_id,
+    email:            row.email,
+    name:             row.name ?? null,
+    domain:           row.domain,
+    companyName:      row.company_name,
+    sentCount:        row.sent_count ?? 0,
+    receivedCount:    row.received_count ?? 0,
+    meetingCount:     row.meeting_count ?? 0,
+    lastInteraction:  row.last_interaction ?? null,
+    firstInteraction: row.first_interaction ?? null,
+    interactionScore: Number(row.interaction_score ?? 0),
+    createdAt:        row.created_at,
+  }
+}
+
+/**
+ * Upserts contacts for a user.
+ * On conflict (user_id, email): updates all counts and scores.
+ * Returns the number of rows upserted.
+ */
+export async function upsertContacts(
+  userId:   string,
+  contacts: import("./google-sync").ContactRow[],
+): Promise<number> {
+  if (contacts.length === 0) return 0
+
+  const rows = contacts.map((c) => ({
+    user_id:          userId,
+    email:            c.email,
+    name:             c.name,
+    domain:           c.domain,
+    company_name:     c.companyName,
+    sent_count:       c.sentCount,
+    received_count:   c.receivedCount,
+    meeting_count:    c.meetingCount,
+    first_interaction: c.firstInteraction,
+    last_interaction:  c.lastInteraction,
+    interaction_score: c.interactionScore,
+  }))
+
+  const { data, error } = await db()
+    .from("contacts")
+    .upsert(rows, { onConflict: "user_id,email" })
+    .select("id")
+
+  if (error) throw new Error(`upsertContacts: ${error.message}`)
+  return data?.length ?? 0
+}
+
+export async function getContactsForUser(userId: string): Promise<Contact[]> {
+  const { data, error } = await db()
+    .from("contacts")
+    .select("*")
+    .eq("user_id", userId)
+    .order("interaction_score", { ascending: false })
+
+  if (error) throw new Error(`getContactsForUser: ${error.message}`)
+  return (data ?? []).map(rowToContact)
+}
+
+// ---------------------------------------------------------------------------
+// Contact interactions (opportunity signals only)
+// ---------------------------------------------------------------------------
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToContactInteraction(row: any): ContactInteraction {
+  return {
+    id:                 row.id,
+    userId:             row.user_id,
+    contactEmail:       row.contact_email,
+    interactionType:    row.interaction_type,
+    subject:            row.subject,
+    occurredAt:         row.occurred_at,
+    externalId:         row.external_id,
+    opportunitySignals: row.opportunity_signals ?? [],
+    createdAt:          row.created_at,
+  }
+}
+
+/**
+ * Upserts contact interactions (only those with opportunity signals).
+ * On conflict (user_id, contact_email, external_id): updates signals.
+ */
+export async function upsertContactInteractions(
+  userId:       string,
+  interactions: import("./google-sync").ContactInteractionRow[],
+): Promise<number> {
+  if (interactions.length === 0) return 0
+
+  const rows = interactions.map((i) => ({
+    user_id:             userId,
+    contact_email:       i.contactEmail,
+    interaction_type:    i.interactionType,
+    subject:             i.subject,
+    occurred_at:         i.occurredAt,
+    external_id:         i.externalId,
+    opportunity_signals: i.opportunitySignals,
+  }))
+
+  const { data, error } = await db()
+    .from("contact_interactions")
+    .upsert(rows, { onConflict: "user_id,contact_email,external_id" })
+    .select("id")
+
+  if (error) throw new Error(`upsertContactInteractions: ${error.message}`)
+  return data?.length ?? 0
+}
+
+export async function getContactInteractionsForUser(userId: string): Promise<ContactInteraction[]> {
+  const { data, error } = await db()
+    .from("contact_interactions")
+    .select("*")
+    .eq("user_id", userId)
+    .order("occurred_at", { ascending: false })
+
+  if (error) throw new Error(`getContactInteractionsForUser: ${error.message}`)
+  return (data ?? []).map(rowToContactInteraction)
 }

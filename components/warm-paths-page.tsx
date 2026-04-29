@@ -2,6 +2,8 @@
 
 import { useState } from "react"
 import type { WarmPath, WarmPathSource } from "@/lib/types"
+import type { ContactWarmPathRow } from "@/lib/contact-graph"
+import { signalLabels } from "@/lib/contact-graph"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -500,23 +502,25 @@ function BandSection({ title, rows }: { title: string; rows: WarmPathRow[] }) {
 export function WarmPathsPage({
   directPaths,
   overlapRows,
+  contactPaths = [],
 }: {
-  directPaths: DirectPathRow[]
-  overlapRows: WarmPathRow[]
+  directPaths:  DirectPathRow[]
+  overlapRows:  WarmPathRow[]
+  contactPaths?: ContactWarmPathRow[]
 }) {
-  const hasAnything = directPaths.length > 0 || overlapRows.length > 0
+  const hasAnything = directPaths.length > 0 || overlapRows.length > 0 || contactPaths.length > 0
 
   if (!hasAnything) {
     return (
       <div className="rounded-md border border-dashed border-border px-6 py-12 text-center">
         <p className="text-[13px] font-medium text-foreground">No warm paths yet</p>
         <p className="mt-1 text-[12px] text-muted-foreground">
-          Run analysis on your clients to discover prospects through their customer and partner
-          signals. You can also seed your own network on the{" "}
-          <a
-            href="/network"
-            className="underline underline-offset-2 hover:text-foreground transition-colors"
-          >
+          Run analysis on your clients to discover prospects through their signals.{" "}
+          <a href="/settings" className="underline underline-offset-2 hover:text-foreground transition-colors">
+            Connect Google
+          </a>{" "}
+          to surface warm paths from your real email and calendar relationships, or seed your network on the{" "}
+          <a href="/network" className="underline underline-offset-2 hover:text-foreground transition-colors">
             Network
           </a>{" "}
           page.
@@ -527,7 +531,19 @@ export function WarmPathsPage({
 
   return (
     <div className="flex flex-col gap-8">
-      {/* Direct paths — primary */}
+      {/* Contact network paths — from Google integration (highest personal signal) */}
+      {contactPaths.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 px-0.5">
+            From your network — real relationships via Google
+          </p>
+          {contactPaths.map((row) => (
+            <ContactWarmPathCard key={row.domain} row={row} />
+          ))}
+        </div>
+      )}
+
+      {/* Direct paths — discovered through clients */}
       {directPaths.length > 0 ? (
         <div className="flex flex-col gap-2">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 px-0.5">
@@ -551,6 +567,89 @@ export function WarmPathsPage({
 
       {/* Shared connections — collapsible secondary */}
       <OverlapSection rows={overlapRows} />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Contact warm path card
+// ---------------------------------------------------------------------------
+
+function ContactWarmPathCard({ row }: { row: ContactWarmPathRow }) {
+  const [open, setOpen] = useState(false)
+  const topContact = row.topContact
+
+  return (
+    <div className="rounded-lg border border-border bg-card px-4 py-3.5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          {/* Header */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13px] font-semibold text-foreground">{row.companyName}</span>
+            <span className="rounded px-1.5 py-px text-[10px] font-semibold bg-violet-500/10 text-violet-600 dark:text-violet-400">
+              Your Network
+            </span>
+          </div>
+
+          {/* Contact + path */}
+          <p className="mt-1 text-[12px] text-muted-foreground">
+            {row.contacts.length === 1
+              ? `You know ${topContact?.name ?? topContact?.email ?? "1 person"} here`
+              : `You know ${row.contacts.length} people here`}
+            {row.matchingClients.length > 0 && (
+              <>
+                {" · Connected to "}
+                {row.matchingClients.map((c, i) => (
+                  <span key={c.id}>
+                    {i > 0 && ", "}
+                    <span className="font-medium text-foreground/80">{c.name}</span>
+                    {" "}
+                    <span className="text-muted-foreground/60">({c.relationshipType})</span>
+                  </span>
+                ))}
+              </>
+            )}
+          </p>
+
+          {/* Suggested ask */}
+          <p className="mt-2 text-[11px] text-muted-foreground/70 italic">
+            {row.suggestedAsk}
+          </p>
+        </div>
+
+        {/* Score */}
+        <div className="shrink-0 text-right">
+          <span className="text-[11px] font-semibold text-muted-foreground/50">
+            score {Math.round(row.totalScore)}
+          </span>
+        </div>
+      </div>
+
+      {/* Expand to show all contacts */}
+      {row.contacts.length > 1 && (
+        <button
+          onClick={() => setOpen(!open)}
+          className="mt-2 text-[11px] text-muted-foreground/50 hover:text-foreground transition-colors"
+        >
+          {open ? "Hide contacts" : `Show all ${row.contacts.length} contacts`}
+        </button>
+      )}
+
+      {open && (
+        <div className="mt-2 space-y-1 border-t border-border pt-2">
+          {row.contacts.map((c) => (
+            <div key={c.email} className="flex items-center gap-2 text-[11px]">
+              <span className="text-foreground/70">{c.name ?? c.email}</span>
+              {c.name && (
+                <span className="text-muted-foreground/40">{c.email}</span>
+              )}
+              <span className="ml-auto text-muted-foreground/40">
+                score {c.interactionScore.toFixed(1)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
