@@ -157,7 +157,7 @@
 // ---------------------------------------------------------------------------
 
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
-import type { AgencyProfile, Client, Analysis, ClientProfile, Prospect, RelationshipSeed, RelationshipSignal, SeedEntityType, SeedRelationshipType } from "./types"
+import type { AgencyProfile, Client, Analysis, ClientProfile, Prospect, RelationshipSignal } from "./types"
 
 // ---------------------------------------------------------------------------
 // Supabase client (service role — no auth layer yet, bypasses RLS)
@@ -854,92 +854,6 @@ export async function getAllRelationshipSignalsForUser(
 
   if (error) throw new Error(`getAllRelationshipSignalsForUser: ${error.message}`)
   return (data ?? []).map(rowToRelationshipSignal)
-}
-
-// ---------------------------------------------------------------------------
-// Relationship Seeds CRUD
-// ---------------------------------------------------------------------------
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function rowToRelationshipSeed(row: any): RelationshipSeed {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    entityName: row.entity_name,
-    entityType: row.entity_type as SeedEntityType,
-    relationshipType: row.relationship_type as SeedRelationshipType,
-    sourceLabel: row.source_label ?? undefined,
-    notes: row.notes ?? undefined,
-    strength: (row.strength ?? "medium") as RelationshipSeed["strength"],
-    createdAt: row.created_at,
-  }
-}
-
-/**
- * Returns all relationship seeds for a user, ordered newest first.
- */
-export async function getRelationshipSeedsForUser(
-  userId: string,
-): Promise<RelationshipSeed[]> {
-  const { data, error } = await db()
-    .from("relationship_seeds")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-
-  if (error) throw new Error(`getRelationshipSeedsForUser: ${error.message}`)
-  return (data ?? []).map(rowToRelationshipSeed)
-}
-
-/**
- * Creates a new relationship seed. Upserts on (user_id, entity_name, entity_type)
- * so re-adding the same entity updates it rather than throwing a duplicate error.
- */
-export async function createRelationshipSeed(input: {
-  userId: string
-  entityName: string
-  entityType: SeedEntityType
-  relationshipType: SeedRelationshipType
-  sourceLabel?: string
-  notes?: string
-  strength?: RelationshipSeed["strength"]
-}): Promise<RelationshipSeed> {
-  const { data, error } = await db()
-    .from("relationship_seeds")
-    .upsert(
-      {
-        user_id: input.userId,
-        entity_name: input.entityName.trim(),
-        entity_type: input.entityType,
-        relationship_type: input.relationshipType,
-        source_label: input.sourceLabel?.trim() ?? null,
-        notes: input.notes?.trim() ?? null,
-        strength: input.strength ?? "medium",
-      },
-      { onConflict: "user_id,entity_name,entity_type" },
-    )
-    .select()
-    .single()
-
-  if (error) throw new Error(`createRelationshipSeed: ${error.message}`)
-  return rowToRelationshipSeed(data)
-}
-
-/**
- * Deletes a relationship seed by ID.
- * Scoped to userId to prevent cross-user deletion.
- */
-export async function deleteRelationshipSeed(
-  id: string,
-  userId: string,
-): Promise<void> {
-  const { error } = await db()
-    .from("relationship_seeds")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", userId)
-
-  if (error) throw new Error(`deleteRelationshipSeed: ${error.message}`)
 }
 
 // ---------------------------------------------------------------------------

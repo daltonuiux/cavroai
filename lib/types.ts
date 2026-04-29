@@ -167,7 +167,7 @@ export interface CompanyProfile {
 }
 
 // ---------------------------------------------------------------------------
-// Warm Path Engine — relationship signal extraction and intro mapping
+// Relationship signal extraction — used by the opportunities pipeline
 // ---------------------------------------------------------------------------
 
 export type EntityType =
@@ -177,54 +177,6 @@ export type EntityType =
   | "tool"
   | "person"
   | "community"
-
-// ---------------------------------------------------------------------------
-// Network seeds — manually seeded relationships (agency's own network)
-// ---------------------------------------------------------------------------
-
-export type SeedEntityType =
-  | "person"
-  | "company"
-  | "investor"
-  | "partner"
-  | "tool"
-  | "community"
-
-export type SeedRelationshipType =
-  | "knows"
-  | "worked_with"
-  | "client"
-  | "partner"
-  | "investor"
-  | "ecosystem"
-  | "uses"
-  | "member_of"
-
-/**
- * The source of a warm path:
- *   "scraped" — both clients have scraped relationship signals for this entity
- *   "seed"    — only a manual seed (no client match), shown in Network page only
- *   "both"    — a manual seed + 1+ client relationship signals
- */
-export type WarmPathSource = "scraped" | "seed" | "both"
-
-/**
- * A manually seeded relationship — represents the agency's own known network.
- * Seeds are combined with scraped relationship_signals to strengthen warm paths.
- */
-export interface RelationshipSeed {
-  id: string
-  userId: string
-  entityName: string
-  entityType: SeedEntityType
-  relationshipType: SeedRelationshipType
-  /** Optional label describing how/where you know this entity, e.g. "Met at SaaStr 2024" */
-  sourceLabel?: string
-  /** Free-form notes about this relationship */
-  notes?: string
-  strength: "strong" | "medium" | "weak"
-  createdAt: string
-}
 
 export type RelationshipSignalType =
   | "uses"
@@ -246,51 +198,6 @@ export interface RelationshipSignal {
   sourceContext?: string
   confidence: "high" | "medium" | "low"
   createdAt: string
-}
-
-export interface WarmPath {
-  entityName: string
-  /** Strongest entity type found across all matching clients */
-  entityType: EntityType
-  strength: "strong" | "medium" | "weak"
-  clients: Array<{ id: string; name: string }>
-  reason: string
-  whyItMatters: string
-  /** Whether this path comes from scraping, a manual seed, or both */
-  source: WarmPathSource
-  /** Notes from the matching seed, if any */
-  seedNotes?: string
-}
-
-/**
- * A named, actionable intro suggestion derived from a warm path.
- * Generated at read-time from client contacts + person relationship signals.
- * Never invented — only produced when supporting data exists.
- */
-export interface NamedIntro {
-  sourceClient: string           // name of the source client we're asking through
-  sourceContact: string | null   // named contact at source client (null = ask generically)
-  viaEntity: string              // title-cased shared entity name
-  suggestedAsk: string           // ready-to-use ask sentence
-  confidence: "low" | "medium" | "high"
-  /** Named people found at the target from relationship_signals (entity_type = "person") */
-  targetPeople?: string[]
-}
-
-/**
- * A single warm intro path attached to an opportunity row.
- * Derived at read-time from the global warm paths index — not stored in DB.
- */
-export interface OpportunityWarmPath {
-  viaEntity: string
-  viaType: string
-  /** Comma-joined names of the other clients that share this entity */
-  sourceClients: string
-  strength: "strong" | "medium" | "weak"
-  explanation: string
-  suggestedApproach: string
-  /** Named intro suggestions for this path — empty when no supporting data */
-  namedIntros: NamedIntro[]
 }
 
 /** A suggested company to pursue, generated from a source client's profile. */

@@ -123,7 +123,7 @@ class ExaProvider implements EnrichmentProvider {
     // }
     // Parse highlights for "FirstName LastName" patterns near "founder"/"CEO".
     //
-    // ── Similar companies (warm path prospects) ──────────────────────────────
+    // ── Similar companies ──────────────────────────────────────────────────
     // POST /findSimilar
     // { url: websiteUrl, numResults: 5, excludeSourceDomain: true }
     // These could seed the prospect list directly.
@@ -539,7 +539,7 @@ function parseNamePrefix(s: string): string {
 
 /**
  * Converts an EnrichmentResult into ExtractedEntity[] so enrichment data
- * feeds into the warm-paths engine via the existing relationship_signals table.
+ * feeds into the relationship_signals table.
  */
 export function convertEnrichmentToEntities(result: EnrichmentResult): ExtractedEntity[] {
   if (result.status !== "ok") return []

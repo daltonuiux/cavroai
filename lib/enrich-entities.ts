@@ -11,12 +11,6 @@
  * This generates opportunities even when no external enrichment provider
  * (Tavily / Exa) is configured — only the Anthropic API key is required.
  *
- * Warm-path note:
- *   Warm paths between *existing* clients are computed by computeWarmPaths()
- *   from the relationship_signals table. Those paths form automatically once
- *   two clients share the same entity name. This file only produces NEW
- *   prospect candidates; it does not write to relationship_signals.
- *
  * Output: EnrichmentProspectCandidate[] — merged with extractEnrichmentProspects()
  * output before the single saveEnrichmentProspects() call in analyze-client.
  */

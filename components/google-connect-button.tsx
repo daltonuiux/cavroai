@@ -84,8 +84,8 @@ export function GoogleConnectButton({
           <div className="flex-1">
             <p className="text-[13px] font-semibold text-foreground">Connect Google Workspace</p>
             <p className="mt-0.5 text-[12px] text-muted-foreground">
-              Sync Gmail and Calendar to build your real contact network. Surfaces warm paths and
-              outreach opportunities from your actual relationships.
+              Sync Gmail and Calendar to build your real contact network. Surfaces outreach
+              opportunities from your actual relationships.
             </p>
             <ul className="mt-2 space-y-0.5 text-[11px] text-muted-foreground">
               <li className="flex items-center gap-1.5"><Dot /> Reads email metadata (sender, recipient, subject, date)</li>
@@ -142,7 +142,7 @@ export function GoogleConnectButton({
                 <span>
                   Synced — {syncResult.contactsUpserted} contacts,{" "}
                   {syncResult.interactionsUpserted} opportunity signals.{" "}
-                  <a href="/warm-paths" className="underline underline-offset-2">View warm paths →</a>
+                  <a href="/opportunities" className="underline underline-offset-2">View opportunities →</a>
                 </span>
               </div>
             )

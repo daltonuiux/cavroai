@@ -906,11 +906,8 @@ function EnrichmentPanel({
               Suggested next step
             </p>
             <p className="text-[12px] leading-relaxed text-muted-foreground/55">
-              Add known relationships on the{" "}
-              <a href="/network" className="underline underline-offset-2 text-foreground/60 hover:text-foreground/80 transition-colors">
-                Network page
-              </a>
-              {" "}or re-scan this client once the company has more public activity.
+              Re-scan this client once the company has more public activity, or add more
+              contacts via Google sync to strengthen the signal.
             </p>
           </div>
         </div>

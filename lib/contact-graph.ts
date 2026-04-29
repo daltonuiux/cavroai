@@ -8,17 +8,11 @@
  *
  * Quality controls:
  *  - Contacts below MIN_CONTACT_SCORE are excluded from all outputs
- *  - Warm paths require totalScore >= MIN_WARM_PATH_SCORE
  *  - Opportunities are grouped by company domain (not per-contact)
  *  - Opportunities are capped at MAX_OPPORTUNITY_RESULTS
  *  - Each output includes "why this person / why now / why it matters" narratives
  *
  * Two output types:
- *
- *  ContactWarmPathRow
- *    You know someone at Company X.
- *    Company X appears in one of your clients' relationship_signals.
- *    → "You ↔ Contact ↔ Company X ↔ Client"
  *
  *  CompanyOpportunityRow
  *    Companies grouped by domain (company_name fallback) where contacts have
@@ -27,7 +21,7 @@
  *    signal strength.  → curated outreach opportunity cards.
  */
 
-import type { AgencyProfile, Client, RelationshipSignal } from "./types"
+import type { AgencyProfile } from "./types"
 
 // ---------------------------------------------------------------------------
 // Quality thresholds
@@ -35,9 +29,6 @@ import type { AgencyProfile, Client, RelationshipSignal } from "./types"
 
 /** Minimum interaction score for a contact to qualify for any output. */
 const MIN_CONTACT_SCORE = 2.5
-
-/** Minimum company-level score to appear in warm paths. */
-const MIN_WARM_PATH_SCORE = 1.5
 
 /** Max opportunity cards to surface — keep it curated. */
 const MAX_OPPORTUNITY_RESULTS = 5
@@ -482,34 +473,6 @@ export interface ContactInteraction {
 // ---------------------------------------------------------------------------
 // Output types
 // ---------------------------------------------------------------------------
-
-export interface ContactWarmPathContact {
-  email:            string
-  name:             string | null
-  interactionScore: number
-  lastInteraction:  string | null
-}
-
-export interface ContactWarmPathClient {
-  id:                string
-  name:              string
-  matchedEntityName: string
-  relationshipType:  string
-}
-
-export interface ContactWarmPathRow {
-  domain:               string
-  companyName:          string
-  contacts:             ContactWarmPathContact[]
-  matchingClients:      ContactWarmPathClient[]
-  totalScore:           number
-  topContact:           ContactWarmPathContact | null
-  suggestedAsk:         string
-  /** Derived relationship strength based on score + meetings + contact count. */
-  relationshipStrength: "strong" | "medium" | "weak"
-  /** One-sentence explanation of why this path matters for business development. */
-  whyItMatters:         string
-}
 
 export interface CompanyOpportunityRow {
   /** Display name — taken from the top contact's companyName. */
@@ -1116,162 +1079,6 @@ function narrativeCompanyWhyNow(ctx: CompanyWhyNowCtx): string {
     return `${open}, but haven't been in touch recently — reactivation opportunity.`
   }
   return `${open} — worth reconnecting.`
-}
-
-function warmPathStrength(
-  totalScore:   number,
-  hasMeetings:  boolean,
-  contactCount: number,
-): "strong" | "medium" | "weak" {
-  if (hasMeetings || totalScore >= 10) return "strong"
-  if (contactCount >= 2 || totalScore >= 4) return "medium"
-  return "weak"
-}
-
-function warmPathWhyItMatters(
-  companyName: string,
-  contacts:    ContactWarmPathContact[],
-  clients:     ContactWarmPathClient[],
-): string {
-  const top = contacts[0]
-  const handle = top?.name ?? (top?.email?.split("@")[0] ?? "your contact")
-  const clientName = clients[0]?.name ?? "one of your clients"
-  const relType = clients[0]?.relationshipType
-
-  const whoLine = contacts.length > 1
-    ? `You know ${contacts.length} people at ${companyName}`
-    : `${handle} is at ${companyName}`
-
-  const clientLine = relType
-    ? `${companyName} has a ${relType} relationship with ${clientName}`
-    : `${companyName} is connected to ${clientName}`
-
-  return `${whoLine}. ${clientLine} — a warm intro here skips cold outreach entirely.`
-}
-
-// ---------------------------------------------------------------------------
-// Warm paths from contacts
-// ---------------------------------------------------------------------------
-
-/**
- * Computes warm paths by crossing the contact network with relationship_signals.
- *
- * A path is generated when:
- *   - You have ≥1 contact at company X with interactionScore >= MIN_CONTACT_SCORE
- *   - ≥1 client has a relationship_signal that normalised-matches the contact's domain/company
- *   - Company total score >= MIN_WARM_PATH_SCORE
- *
- * Sorted by totalScore desc.
- */
-export function buildContactWarmPaths(
-  contacts:  Contact[],
-  signals:   RelationshipSignal[],
-  clients:   Client[],
-): ContactWarmPathRow[] {
-  if (contacts.length === 0 || signals.length === 0) return []
-
-  const clientMap = new Map(clients.map((c) => [c.id, c]))
-
-  // Build entity → clients lookup from relationship_signals
-  const entityClientMap = new Map<string, Array<{ clientId: string; entityName: string; relType: string }>>()
-  for (const sig of signals) {
-    const key = normaliseForMatch(sig.entityName)
-    if (!entityClientMap.has(key)) entityClientMap.set(key, [])
-    entityClientMap.get(key)!.push({
-      clientId:   sig.clientId,
-      entityName: sig.entityName,
-      relType:    sig.relationshipType ?? sig.entityType,
-    })
-  }
-
-  // Group contacts by domain — only qualifying contacts
-  const domainMap = new Map<string, Contact[]>()
-  for (const contact of contacts) {
-    if (contact.interactionScore < MIN_CONTACT_SCORE) continue
-    if (!domainMap.has(contact.domain)) domainMap.set(contact.domain, [])
-    domainMap.get(contact.domain)!.push(contact)
-  }
-
-  const rows: ContactWarmPathRow[] = []
-
-  for (const [domain, domainContacts] of domainMap) {
-    const companyName = domainContacts[0].companyName
-
-    // Try matching by domain label AND company name
-    const domainKey  = normaliseForMatch(domain.split(".")[0])
-    const companyKey = normaliseForMatch(companyName)
-
-    const matchedSignals =
-      entityClientMap.get(domainKey) ??
-      entityClientMap.get(companyKey) ??
-      []
-
-    if (matchedSignals.length === 0) continue
-
-    // Collect unique matching clients
-    const seenClientIds = new Set<string>()
-    const matchingClients: ContactWarmPathClient[] = []
-    for (const sig of matchedSignals) {
-      if (seenClientIds.has(sig.clientId)) continue
-      const client = clientMap.get(sig.clientId)
-      if (!client) continue
-      seenClientIds.add(sig.clientId)
-      matchingClients.push({
-        id:                sig.clientId,
-        name:              client.name,
-        matchedEntityName: sig.entityName,
-        relationshipType:  sig.relType,
-      })
-    }
-
-    if (matchingClients.length === 0) continue
-
-    const sortedContacts = [...domainContacts].sort(
-      (a, b) => b.interactionScore - a.interactionScore,
-    )
-    const totalScore = sortedContacts.reduce((n, c) => n + c.interactionScore, 0)
-
-    if (totalScore < MIN_WARM_PATH_SCORE) continue
-
-    const hasMeetings  = sortedContacts.some((c) => c.meetingCount > 0)
-    const strength     = warmPathStrength(totalScore, hasMeetings, sortedContacts.length)
-    const topContact   = sortedContacts[0] ?? null
-
-    const clientNames  = matchingClients.map((c) => c.name).join(" and ")
-    const handle       = topContact?.name ?? topContact?.email ?? "your contact"
-
-    const suggestedAsk = topContact?.name
-      ? `Message ${topContact.name} at ${companyName} — ask if they have a connection to anyone at ${clientNames} and would be willing to introduce you. Their relationship makes this a natural ask.`
-      : `Reach out to your contact at ${companyName} and ask if they know anyone at ${clientNames} who you should speak with.`
-
-    const contactShapes: ContactWarmPathContact[] = sortedContacts.map((c) => ({
-      email:            c.email,
-      name:             c.name,
-      interactionScore: c.interactionScore,
-      lastInteraction:  c.lastInteraction,
-    }))
-
-    rows.push({
-      domain,
-      companyName,
-      contacts:            contactShapes,
-      matchingClients,
-      totalScore,
-      topContact:          topContact
-        ? {
-            email:            topContact.email,
-            name:             topContact.name,
-            interactionScore: topContact.interactionScore,
-            lastInteraction:  topContact.lastInteraction,
-          }
-        : null,
-      suggestedAsk,
-      relationshipStrength: strength,
-      whyItMatters:         warmPathWhyItMatters(companyName, contactShapes, matchingClients),
-    })
-  }
-
-  return rows.sort((a, b) => b.totalScore - a.totalScore)
 }
 
 // ---------------------------------------------------------------------------
