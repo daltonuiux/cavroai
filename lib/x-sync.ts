@@ -1,30 +1,36 @@
 /**
  * X (Twitter) data sync — real API mode.
  *
- * Upgrades contacts from validation-mode (inferred handles, inferred signals)
- * to real data by:
- *   1. Batch-looking up contact handles via GET /2/users/by
- *   2. Fetching the 20 most recent tweets for each confirmed user
- *   3. Extracting intent signals with regex patterns on real tweet text
- *   4. Writing ContactTwitterData with confidence: "high" back to the DB
+ * Enrichment strategy (two passes per sync run):
+ *
+ *   Pass 1 — Person match
+ *     Look up the inferred / stored personal handle for each contact.
+ *     If verified: fetch tweets, extract signals → source: "person", matchConfidence: "high"
+ *
+ *   Pass 2 — Company fallback (new)
+ *     For contacts whose personal handle wasn't found, extract the company domain,
+ *     generate common brand-account handle candidates (acme, acmehq, acmeapp, …),
+ *     batch-verify them, and store whichever candidate is real.
+ *     → source: "company", matchConfidence: "medium"
+ *     Deduplicates by domain so a shared company account is only fetched once.
  *
  * After sync, all existing pipelines (buildContactOpportunities,
  * buildPublicSignalOpportunities) automatically use the real data.
  *
  * Rate-limit awareness (X Basic tier):
- *   - /2/users/by      : 300 req / 15 min (app-auth), we stay well below
- *   - /2/users/:id/tweets: 1500 req / 15 min (app-auth)
+ *   - /2/users/by        : 300 req / 15 min — we stay well below
+ *   - /2/users/:id/tweets: 1500 req / 15 min
  *   - Capped at MAX_CONTACTS_PER_SYNC contacts per run
  */
 
 import type { Contact, ContactTwitterData, TwitterSignal } from "./contact-graph"
-import { inferTwitterHandle } from "./twitter-enrich"
+import { inferTwitterHandle, inferCompanyHandleCandidates, inferCompanyName } from "./twitter-enrich"
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const X_API_BASE           = "https://api.twitter.com/2"
+const X_API_BASE            = "https://api.twitter.com/2"
 const MAX_CONTACTS_PER_SYNC = 20
 const TWEETS_PER_USER       = 20
 const USERNAME_BATCH_SIZE   = 100   // X API max per /2/users/by request
@@ -52,7 +58,6 @@ export function extractSignalsFromTweets(tweets: string[]): TwitterSignal[] {
       if (pattern.test(text)) found.add(signal)
     }
   }
-  // Return in a stable priority order
   const priority: TwitterSignal[] = ["fundraising", "launching", "announcing", "hiring", "building"]
   return priority.filter((s) => found.has(s))
 }
@@ -77,9 +82,9 @@ function extractTopicsFromTweets(tweets: string[]): string[] {
 // ---------------------------------------------------------------------------
 
 interface XUserLookup {
-  id:       string
-  username: string
-  name:     string
+  id:           string
+  username:     string
+  name:         string
   description?: string
 }
 
@@ -89,13 +94,12 @@ interface XUserLookup {
  * Unknown or suspended handles are silently omitted.
  */
 async function lookupUsernames(
-  usernames: string[],
+  usernames:   string[],
   accessToken: string,
 ): Promise<Map<string, XUserLookup>> {
   const result = new Map<string, XUserLookup>()
   if (usernames.length === 0) return result
 
-  // Process in batches of USERNAME_BATCH_SIZE
   for (let i = 0; i < usernames.length; i += USERNAME_BATCH_SIZE) {
     const batch = usernames.slice(i, i + USERNAME_BATCH_SIZE)
     const url   = `${X_API_BASE}/users/by?usernames=${batch.join(",")}&user.fields=name,username,description`
@@ -143,32 +147,95 @@ async function fetchRecentTweets(
 }
 
 // ---------------------------------------------------------------------------
-// Main sync function
+// Company handle resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Given a set of domains whose contacts had no person-level match,
+ * resolves the best verified company handle for each domain.
+ *
+ * Returns a map of domain → verified XUserLookup (company account).
+ */
+async function resolveCompanyHandles(
+  domains:     Set<string>,
+  accessToken: string,
+): Promise<Map<string, XUserLookup>> {
+  if (domains.size === 0) return new Map()
+
+  // Build candidate list: for each domain, generate ordered handle candidates.
+  // Track which candidate maps to which domain so we can reconstruct later.
+  const candidateToMeta = new Map<string, { domain: string; priority: number }>()
+
+  for (const domain of domains) {
+    const candidates = inferCompanyHandleCandidates(domain)
+    candidates.forEach((handle, idx) => {
+      if (!candidateToMeta.has(handle)) {
+        candidateToMeta.set(handle, { domain, priority: idx })
+      }
+    })
+  }
+
+  const allCandidates = [...candidateToMeta.keys()]
+  console.log(
+    `X SYNC [company]: looking up ${allCandidates.length} company handle candidates ` +
+    `for ${domains.size} domains`,
+  )
+
+  const verified = await lookupUsernames(allCandidates, accessToken)
+
+  // For each domain, pick the verified candidate with the lowest priority index.
+  const domainToCompany = new Map<string, XUserLookup>()
+
+  for (const [handle, user] of verified) {
+    const meta = candidateToMeta.get(handle)
+    if (!meta) continue
+
+    const existing = domainToCompany.get(meta.domain)
+    if (!existing) {
+      domainToCompany.set(meta.domain, user)
+    } else {
+      // Lower priority index = preferred candidate
+      const existingPriority = candidateToMeta.get(existing.username.toLowerCase())?.priority ?? 999
+      if (meta.priority < existingPriority) {
+        domainToCompany.set(meta.domain, user)
+      }
+    }
+  }
+
+  return domainToCompany
+}
+
+// ---------------------------------------------------------------------------
+// Sync result
 // ---------------------------------------------------------------------------
 
 export interface XSyncResult {
-  contactsAttempted: number
-  handlesVerified:   number
-  handlesNotFound:   number
-  signalsFound:      number
-  savedCount:        number
-  errors:            string[]
+  contactsAttempted:  number
+  handlesVerified:    number    // person-level matches
+  handlesNotFound:    number    // person handle not on X
+  companyMatchesFound: number   // company fallback matches
+  signalsFound:       number
+  savedCount:         number
+  errors:             string[]
 }
+
+// ---------------------------------------------------------------------------
+// Main sync function
+// ---------------------------------------------------------------------------
 
 /**
  * Syncs real X data for a batch of contacts.
  *
- * Strategy:
- *   1. Collect handles to look up:
- *      - From contacts that already have an inferred twitterData.handle
- *      - From contacts without twitterData where we can infer a handle
- *   2. Batch-verify all handles against the real X API
- *   3. For verified handles, fetch recent tweets and extract signals
- *   4. Call saveFn for each successfully enriched contact
+ * Pass 1 — person handles:
+ *   Collect handles (from existing twitterData or inferred), batch-verify,
+ *   fetch tweets, save with source: "person", matchConfidence: "high".
  *
- * @param contacts    All contacts for the user (we select the best candidates)
- * @param accessToken Valid X Bearer access token
- * @param saveFn      Called once per enriched contact to persist the data
+ * Pass 2 — company fallback:
+ *   For contacts whose person handle wasn't found, infer company handle
+ *   candidates from the contact's email domain, batch-verify, fetch tweets,
+ *   save with source: "company", matchConfidence: "medium".
+ *   Company accounts are fetched once per domain and reused for all contacts
+ *   at that domain.
  */
 export async function syncXData(
   contacts:    Contact[],
@@ -176,25 +243,22 @@ export async function syncXData(
   saveFn:      (email: string, data: ContactTwitterData) => Promise<void>,
 ): Promise<XSyncResult> {
   const result: XSyncResult = {
-    contactsAttempted: 0,
-    handlesVerified:   0,
-    handlesNotFound:   0,
-    signalsFound:      0,
-    savedCount:        0,
-    errors:            [],
+    contactsAttempted:   0,
+    handlesVerified:     0,
+    handlesNotFound:     0,
+    companyMatchesFound: 0,
+    signalsFound:        0,
+    savedCount:          0,
+    errors:              [],
   }
 
   // ── Select candidates ──────────────────────────────────────────────────────
-  // Prefer contacts with existing inferred handles (fast path).
-  // Then add contacts with no handle yet but a guessable name + domain.
-  // Sort by interaction score descending and cap the run.
 
   type Candidate = { contact: Contact; handle: string }
   const candidates: Candidate[] = []
-
   const seenHandles = new Set<string>()
 
-  // Pass 1: contacts with existing handle
+  // Pass 1a: contacts with existing handle (fast path)
   for (const c of contacts) {
     if (candidates.length >= MAX_CONTACTS_PER_SYNC) break
     const handle = c.twitterData?.handle
@@ -203,10 +267,10 @@ export async function syncXData(
     candidates.push({ contact: c, handle: handle.toLowerCase() })
   }
 
-  // Pass 2: contacts without handle (infer)
+  // Pass 1b: contacts without handle (infer from name + domain)
   for (const c of contacts) {
     if (candidates.length >= MAX_CONTACTS_PER_SYNC) break
-    if (c.twitterData?.handle) continue   // already picked up
+    if (c.twitterData?.handle) continue
     if (!c.name) continue
     const inferred = inferTwitterHandle(c.name, c.domain)
     if (!inferred || seenHandles.has(inferred)) continue
@@ -217,58 +281,140 @@ export async function syncXData(
   result.contactsAttempted = candidates.length
   if (candidates.length === 0) return result
 
-  console.log(`X SYNC: looking up ${candidates.length} handles`)
+  console.log(`X SYNC [person]: looking up ${candidates.length} handles`)
 
-  // ── Batch username lookup ──────────────────────────────────────────────────
-  const handleList  = candidates.map((c) => c.handle)
+  // ── Batch person username lookup ──────────────────────────────────────────
+
+  const handleList    = candidates.map((c) => c.handle)
   const usersByHandle = await lookupUsernames(handleList, accessToken)
 
-  // ── Fetch tweets + extract signals ────────────────────────────────────────
-  for (const { contact, handle } of candidates) {
+  // ── Pass 1: fetch tweets for verified person handles ──────────────────────
+
+  // Track which contacts need company fallback
+  const needsCompanyFallback: Candidate[] = []
+
+  for (const candidate of candidates) {
+    const { contact, handle } = candidate
     const xUser = usersByHandle.get(handle)
 
     if (!xUser) {
       result.handlesNotFound++
-      console.log(`X SYNC: @${handle} not found — skipping ${contact.email}`)
+      console.log(`X SYNC [person]: @${handle} not found — queuing company fallback for ${contact.email}`)
+      needsCompanyFallback.push(candidate)
       continue
     }
 
     result.handlesVerified++
 
-    // Fetch real tweets
     const tweets  = await fetchRecentTweets(xUser.id, accessToken)
     const signals = extractSignalsFromTweets(tweets)
     const topics  = extractTopicsFromTweets(tweets)
 
-    // Only save when we have signals or tweet samples (no-signal enrichment adds noise)
     if (signals.length === 0 && tweets.length === 0) {
-      console.log(`X SYNC: @${xUser.username} has no signals — skipping`)
+      console.log(`X SYNC [person]: @${xUser.username} has no signals — skipping`)
       continue
     }
 
     if (signals.length > 0) result.signalsFound++
 
     const twitterData: ContactTwitterData = {
-      handle:       xUser.username,
-      bio:          xUser.description ?? null,
+      handle:          xUser.username,
+      bio:             xUser.description ?? null,
       signals,
       topics,
-      tweetSamples: tweets.slice(0, 5),
-      enrichedAt:   new Date().toISOString(),
-      confidence:   "high",   // real API data
+      tweetSamples:    tweets.slice(0, 5),
+      enrichedAt:      new Date().toISOString(),
+      confidence:      "high",
+      source:          "person",
+      matchConfidence: "high",
     }
 
     try {
       await saveFn(contact.email, twitterData)
       result.savedCount++
       console.log(
-        `X SYNC: ${contact.email} → @${xUser.username} ` +
+        `X SYNC [person]: ${contact.email} → @${xUser.username} ` +
         `signals: [${signals.join(", ")}]`,
       )
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       result.errors.push(`${contact.email}: ${msg}`)
-      console.error(`X SYNC: failed to save ${contact.email} —`, msg)
+      console.error(`X SYNC [person]: failed to save ${contact.email} —`, msg)
+    }
+  }
+
+  // ── Pass 2: company handle fallback ───────────────────────────────────────
+
+  if (needsCompanyFallback.length === 0) return result
+
+  // Collect unique domains to look up (one company per domain)
+  const domainsToResolve = new Set(needsCompanyFallback.map((c) => c.contact.domain))
+
+  const domainToCompany = await resolveCompanyHandles(domainsToResolve, accessToken)
+
+  // Cache tweets per company account (avoid re-fetching for multiple contacts at same domain)
+  const companyTweetCache = new Map<string, {
+    tweets:  string[]
+    signals: TwitterSignal[]
+    topics:  string[]
+    xUser:   XUserLookup
+  }>()
+
+  for (const { contact } of needsCompanyFallback) {
+    const companyUser = domainToCompany.get(contact.domain)
+    if (!companyUser) {
+      console.log(
+        `X SYNC [company]: no company handle found for ${contact.domain} ` +
+        `(${contact.email}) — skipping`,
+      )
+      continue
+    }
+
+    // Fetch + cache tweets for this company account
+    if (!companyTweetCache.has(companyUser.id)) {
+      const tweets  = await fetchRecentTweets(companyUser.id, accessToken)
+      const signals = extractSignalsFromTweets(tweets)
+      const topics  = extractTopicsFromTweets(tweets)
+      companyTweetCache.set(companyUser.id, { tweets, signals, topics, xUser: companyUser })
+      console.log(
+        `X SYNC [company]: @${companyUser.username} (${contact.domain}) ` +
+        `— signals: [${signals.join(", ")}]`,
+      )
+    }
+
+    const cached = companyTweetCache.get(companyUser.id)!
+
+    if (cached.signals.length === 0 && cached.tweets.length === 0) {
+      console.log(`X SYNC [company]: @${companyUser.username} has no signals — skipping`)
+      continue
+    }
+
+    result.companyMatchesFound++
+    if (cached.signals.length > 0) result.signalsFound++
+
+    const twitterData: ContactTwitterData = {
+      handle:          companyUser.username,
+      bio:             companyUser.description ?? `${inferCompanyName(contact.domain)} on X`,
+      signals:         cached.signals,
+      topics:          cached.topics,
+      tweetSamples:    cached.tweets.slice(0, 5),
+      enrichedAt:      new Date().toISOString(),
+      confidence:      "high",   // real API data
+      source:          "company",
+      matchConfidence: "medium", // company match, not personal
+    }
+
+    try {
+      await saveFn(contact.email, twitterData)
+      result.savedCount++
+      console.log(
+        `X SYNC [company]: ${contact.email} → @${companyUser.username} ` +
+        `(company account) signals: [${cached.signals.join(", ")}]`,
+      )
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      result.errors.push(`${contact.email}: ${msg}`)
+      console.error(`X SYNC [company]: failed to save ${contact.email} —`, msg)
     }
   }
 

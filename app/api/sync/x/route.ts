@@ -106,11 +106,12 @@ export async function POST() {
 
   console.log(
     `X SYNC [${userId}] complete — ${durationMs}ms\n` +
-    `  Attempted: ${result.contactsAttempted}\n` +
-    `  Verified:  ${result.handlesVerified}\n` +
-    `  Not found: ${result.handlesNotFound}\n` +
-    `  Signals:   ${result.signalsFound}\n` +
-    `  Saved:     ${result.savedCount}` +
+    `  Attempted:       ${result.contactsAttempted}\n` +
+    `  Person matches:  ${result.handlesVerified}\n` +
+    `  Company matches: ${result.companyMatchesFound}\n` +
+    `  Not found:       ${result.handlesNotFound}\n` +
+    `  Signals:         ${result.signalsFound}\n` +
+    `  Saved:           ${result.savedCount}` +
     (result.errors.length > 0 ? `\n  Errors:    ${result.errors.join(", ")}` : ""),
   )
 

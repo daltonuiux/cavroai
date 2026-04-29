@@ -164,18 +164,28 @@ export type TwitterSignal = "launching" | "hiring" | "building" | "fundraising" 
 /**
  * Twitter/X data attached to a contact after enrichment.
  * Stored as JSONB in the contacts.twitter_data column.
+ *
+ * source          — "person" when the handle belongs to the contact personally;
+ *                   "company" when we fell back to the company's brand account.
+ * matchConfidence — "high"   = exact person handle verified via API
+ *                   "medium" = company account found for the contact's domain
+ *                   "low"    = inferred only, no API verification
  */
 export interface ContactTwitterData {
-  handle:       string
-  bio:          string | null
+  handle:          string
+  bio:             string | null
   /** Intent signals detected in recent tweets. */
-  signals:      TwitterSignal[]
+  signals:         TwitterSignal[]
   /** Hashtag topics extracted from recent tweets. */
-  topics:       string[]
+  topics:          string[]
   /** Up to 5 tweet texts that matched a signal. */
-  tweetSamples: string[]
-  enrichedAt:   string           // ISO
-  confidence:   "high" | "medium"
+  tweetSamples:    string[]
+  enrichedAt:      string           // ISO
+  confidence:      "high" | "medium"
+  /** Whether the handle is the person's own account or their company's account. */
+  source?:         "person" | "company"
+  /** How confident we are that this handle matches the contact. */
+  matchConfidence?: "high" | "medium" | "low"
 }
 
 // ---------------------------------------------------------------------------

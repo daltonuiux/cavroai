@@ -42,17 +42,61 @@ export const MAX_CONTACTS_PER_RUN = 20
 
 /**
  * Strips the registered-domain TLD and returns the name label.
- *   "smallest.ai"   → "smallest"
+ *   "smallest.ai"    → "smallest"
  *   "bright-data.io" → "bright-data"
  *   "app.acme.com"   → "acme"
  */
-function domainLabel(domain: string): string {
+export function domainLabel(domain: string): string {
   const stripped = domain.replace(
     /\.(com|io|co|net|org|app|dev|ai|xyz|so|gg|me|us|uk|ca|au)(\.[a-z]{2})?$/i,
     "",
   )
   // Use the last segment (handles subdomains like "app.acme.com" → "acme")
   return stripped.split(".").pop() ?? stripped
+}
+
+/**
+ * Infers the company name from a domain.
+ *   "bright-data.io" → "Bright Data"
+ *   "smallest.ai"    → "Smallest"
+ */
+export function inferCompanyName(domain: string): string {
+  const label = domainLabel(domain)
+  return label
+    .replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim()
+}
+
+/**
+ * Generates ordered Twitter handle candidates for a company domain.
+ *
+ * Tries the most common brand-account naming patterns seen on X:
+ *   acme, acmehq, acmeapp, acmeco, getacme, tryacme, useacme
+ *
+ * Returns handles in priority order (most likely first).
+ * All handles are lowercase, alphanumeric only, ≤ 15 chars.
+ */
+export function inferCompanyHandleCandidates(domain: string): string[] {
+  const raw   = domainLabel(domain).replace(/[-_]/g, "").replace(/[^a-z0-9]/gi, "").toLowerCase()
+  if (!raw || raw.length < 2) return []
+
+  const candidates: string[] = []
+  const add = (h: string) => {
+    const clean = h.slice(0, 15)
+    if (clean.length >= 2 && !candidates.includes(clean)) candidates.push(clean)
+  }
+
+  add(raw)              // acme
+  add(`${raw}hq`)       // acmehq
+  add(`${raw}app`)      // acmeapp
+  add(`${raw}co`)       // acmeco
+  add(`get${raw}`)      // getacme
+  add(`try${raw}`)      // tryacme
+  add(`use${raw}`)      // useacme
+  add(`${raw}io`)       // acmeio  (often used when domain is .com but brand is .io)
+
+  return candidates
 }
 
 /**
