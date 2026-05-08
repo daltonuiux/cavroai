@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Intelligence Layer",
-  description: "AI-powered intelligence platform",
+  title: "Cavro AI",
+  description: "AI Recommendation Optimizer — understand how AI assistants perceive and recommend your company.",
 };
 
 export default function RootLayout({

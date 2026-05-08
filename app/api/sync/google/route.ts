@@ -43,6 +43,22 @@ const COLUMN_MIGRATIONS: Record<string, string> = {
     "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS relationship_strength text NOT NULL DEFAULT 'cold';",
   twitter_data:
     "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS twitter_data jsonb;",
+  last_reply_at:
+    "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS last_reply_at timestamptz;",
+  reply_latency_trend:
+    "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS reply_latency_trend text;",
+  messages_last_7_days:
+    "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS messages_last_7_days integer NOT NULL DEFAULT 0;",
+  messages_last_30_days:
+    "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS messages_last_30_days integer NOT NULL DEFAULT 0;",
+  conversation_active_this_week:
+    "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS conversation_active_this_week boolean NOT NULL DEFAULT false;",
+  conversation_reactivated:
+    "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS conversation_reactivated boolean NOT NULL DEFAULT false;",
+  fast_replies:
+    "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS fast_replies boolean NOT NULL DEFAULT false;",
+  inbound_interest:
+    "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS inbound_interest boolean NOT NULL DEFAULT false;",
 }
 
 const TABLE_MIGRATIONS: Record<string, string> = {
@@ -64,6 +80,14 @@ const TABLE_MIGRATIONS: Record<string, string> = {
   avg_reply_time_hours numeric,
   who_initiates text,
   relationship_strength text NOT NULL DEFAULT 'cold',
+  last_reply_at timestamptz,
+  reply_latency_trend text,
+  messages_last_7_days integer NOT NULL DEFAULT 0,
+  messages_last_30_days integer NOT NULL DEFAULT 0,
+  conversation_active_this_week boolean NOT NULL DEFAULT false,
+  conversation_reactivated boolean NOT NULL DEFAULT false,
+  fast_replies boolean NOT NULL DEFAULT false,
+  inbound_interest boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (user_id, email)
 );`,

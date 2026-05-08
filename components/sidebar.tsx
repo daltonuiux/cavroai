@@ -2,19 +2,18 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Zap, Users, Building2, Settings2, Layers2, Radar } from "lucide-react"
+import { LayoutDashboard, ClipboardList, Users2, MessageSquare, Lightbulb, Settings2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const nav = [
-  { label: "Overview",      href: "/overview",     icon: LayoutDashboard },
-  { label: "Opportunities", href: "/opportunities", icon: Zap },
-  { label: "Surfaces",      href: "/surfaces",      icon: Layers2 },
-  { label: "Events Radar",  href: "/events",        icon: Radar },
-  { label: "Clients",       href: "/clients",       icon: Users },
+  { label: "Overview",        href: "/overview",        icon: LayoutDashboard },
+  { label: "Audits",          href: "/audits",           icon: ClipboardList   },
+  { label: "Competitors",     href: "/competitors",      icon: Users2          },
+  { label: "Prompts",         href: "/prompts",          icon: MessageSquare   },
+  { label: "Recommendations", href: "/recommendations",  icon: Lightbulb       },
 ]
 
 const bottomNav = [
-  { label: "Agency Profile", href: "/profile", icon: Building2 },
   { label: "Settings", href: "/settings", icon: Settings2 },
 ]
 
@@ -58,8 +57,11 @@ export function Sidebar() {
 
   return (
     <aside className="flex h-full w-[220px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
-      <div className="flex h-12 items-center border-b border-sidebar-border px-4">
-        <img src="/logo.svg" alt="Logo" className="h-[18px] w-auto dark:invert" />
+      <div className="flex h-12 items-center gap-2 border-b border-sidebar-border px-4">
+        <div className="flex h-5 w-5 items-center justify-center rounded bg-foreground">
+          <span className="text-[9px] font-bold tracking-tight text-background">C</span>
+        </div>
+        <span className="text-[13px] font-semibold tracking-[-0.01em] text-foreground">Cavro AI</span>
       </div>
 
       <nav className="flex flex-1 flex-col gap-px overflow-y-auto px-2 py-2.5">

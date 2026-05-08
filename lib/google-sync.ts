@@ -205,76 +205,189 @@ function touchContact(
 // Thread-derived relationship metrics
 // ---------------------------------------------------------------------------
 
+const MS_1H  = 3_600_000
+const MS_6H  = 6 * MS_1H
+const MS_7D  = 7  * 24 * MS_1H
+const MS_14D = 14 * 24 * MS_1H
+const MS_30D = 30 * 24 * MS_1H
+const MS_60D = 60 * 24 * MS_1H
+
 /**
- * Derives `threadCount`, `avgReplyTimeHours`, and `whoInitiates` from
- * the per-thread message sequences captured during Gmail processing.
+ * Derives all thread-level relationship metrics from the per-thread message
+ * sequences captured during Gmail processing.
  *
- * Reply-time algorithm:
- *   For each thread with ≥2 messages, sort by timestamp, then find consecutive
- *   message pairs where the sender alternates (user ↔ contact).  The time gap
- *   between each alternating pair is one "reply event".  Average all reply
- *   events across all threads for this contact.
+ * New metrics vs. the original:
  *
- * Who-initiates algorithm:
- *   The first message in each thread identifies the initiator.
- *   If >70% of threads were started by the user → "user"
- *   If >70% of threads were started by the contact → "them"
- *   Otherwise → "mixed"
+ *   lastReplyAt            — most recent inbound message timestamp (ISO)
+ *   replyLatencyTrend      — compares early vs. late reply delays across threads;
+ *                            "improving" when replies are getting faster,
+ *                            "worsening" when getting slower, "stable" otherwise.
+ *                            Null when fewer than 4 alternating reply pairs exist.
+ *   messagesLast7Days      — count of all messages (sent + received) in the last 7 days
+ *   messagesLast30Days     — count of all messages in the last 30 days
+ *   conversationActiveThisWeek — true when any message occurred in the last 7 days
+ *   conversationReactivated    — true when there was a 60+ day silence followed by
+ *                                a message in the last 30 days
+ *   fastReplies            — true when avg reply time < 6 hours
+ *   inboundInterest        — true when the contact started a new thread in the last 14 days
+ *
+ * @param threads  Per-thread message sequences from touchContact()
+ * @param now      Reference timestamp — injectable for tests (defaults to Date.now())
  */
-function computeThreadMetrics(threads: Map<string, ThreadMessage[]>): {
-  threadCount:       number
-  avgReplyTimeHours: number | null
-  whoInitiates:      "user" | "them" | "mixed" | null
+function computeThreadMetrics(
+  threads: Map<string, ThreadMessage[]>,
+  now = Date.now(),
+): {
+  threadCount:                number
+  avgReplyTimeHours:          number | null
+  whoInitiates:               "user" | "them" | "mixed" | null
+  lastReplyAt:                string | null
+  replyLatencyTrend:          "improving" | "worsening" | "stable" | null
+  messagesLast7Days:          number
+  messagesLast30Days:         number
+  conversationActiveThisWeek: boolean
+  conversationReactivated:    boolean
+  fastReplies:                boolean
+  inboundInterest:            boolean
 } {
   const threadCount = threads.size
   if (threadCount === 0) {
-    return { threadCount: 0, avgReplyTimeHours: null, whoInitiates: null }
+    return {
+      threadCount:                0,
+      avgReplyTimeHours:          null,
+      whoInitiates:               null,
+      lastReplyAt:                null,
+      replyLatencyTrend:          null,
+      messagesLast7Days:          0,
+      messagesLast30Days:         0,
+      conversationActiveThisWeek: false,
+      conversationReactivated:    false,
+      fastReplies:                false,
+      inboundInterest:            false,
+    }
   }
 
-  const replyDelaysMs: number[] = []
+  // ── Collect all per-thread messages for aggregates ─────────────────────────
+  // Each entry: { delayMs, atMs } for a genuine alternating reply pair.
+  const replyEvents: Array<{ delayMs: number; atMs: number }> = []
   let userInitiated = 0
   let themInitiated = 0
+  let lastReplyAtMs = 0   // most recent inbound message across all threads
+
+  // Flat list of all message timestamps (both directions) for 7d/30d counts
+  const allTimestamps: number[] = []
 
   for (const msgs of threads.values()) {
     if (msgs.length < 1) continue
 
-    // Sort chronologically
+    // Sort chronologically within thread
     const sorted = [...msgs].sort((a, b) => a.timestamp - b.timestamp)
+
+    // Accumulate all timestamps
+    for (const m of sorted) allTimestamps.push(m.timestamp)
 
     // Who-initiates: first message in thread
     if (sorted[0].senderIsUser) userInitiated++
     else                        themInitiated++
 
-    // Reply-time: consecutive pairs where sender alternates
+    // lastReplyAt: track the most recent message where the contact sent
+    for (const m of sorted) {
+      if (!m.senderIsUser && m.timestamp > lastReplyAtMs) {
+        lastReplyAtMs = m.timestamp
+      }
+    }
+
+    // Reply-time + trend: consecutive pairs where sender alternates
     if (sorted.length < 2) continue
     for (let i = 1; i < sorted.length; i++) {
       const prev = sorted[i - 1]
       const curr = sorted[i]
-      // Only count when sender flips (genuine reply, not two back-to-back from same side)
       if (prev.senderIsUser !== curr.senderIsUser) {
-        replyDelaysMs.push(curr.timestamp - prev.timestamp)
+        replyEvents.push({ delayMs: curr.timestamp - prev.timestamp, atMs: curr.timestamp })
       }
     }
   }
 
+  // ── avgReplyTimeHours ──────────────────────────────────────────────────────
   const avgReplyTimeHours =
-    replyDelaysMs.length > 0
+    replyEvents.length > 0
       ? Math.round(
-          (replyDelaysMs.reduce((a, b) => a + b, 0) / replyDelaysMs.length / 3_600_000) * 10,
+          (replyEvents.reduce((a, e) => a + e.delayMs, 0) / replyEvents.length / MS_1H) * 10,
         ) / 10
       : null
 
-  const totalThreadsWithKnownInitiator = userInitiated + themInitiated
-  let whoInitiates: "user" | "them" | "mixed" | null = null
-  if (totalThreadsWithKnownInitiator > 0) {
-    const userRatio = userInitiated / totalThreadsWithKnownInitiator
-    whoInitiates =
-      userRatio >= 0.7 ? "user"
-      : userRatio <= 0.3 ? "them"
-      : "mixed"
+  // ── replyLatencyTrend ──────────────────────────────────────────────────────
+  // Compare average reply delay in the first half vs. second half of all reply
+  // events (ordered chronologically).  Minimum 4 events for statistical signal.
+  let replyLatencyTrend: "improving" | "worsening" | "stable" | null = null
+  if (replyEvents.length >= 4) {
+    replyEvents.sort((a, b) => a.atMs - b.atMs)
+    const half     = Math.floor(replyEvents.length / 2)
+    const earlyAvg = replyEvents.slice(0, half).reduce((a, e) => a + e.delayMs, 0) / half
+    const lateAvg  = replyEvents.slice(half).reduce((a, e) => a + e.delayMs, 0) / (replyEvents.length - half)
+    if      (lateAvg < earlyAvg * 0.7) replyLatencyTrend = "improving"
+    else if (lateAvg > earlyAvg * 1.3) replyLatencyTrend = "worsening"
+    else                               replyLatencyTrend = "stable"
   }
 
-  return { threadCount, avgReplyTimeHours, whoInitiates }
+  // ── whoInitiates ───────────────────────────────────────────────────────────
+  const totalWithInitiator = userInitiated + themInitiated
+  let whoInitiates: "user" | "them" | "mixed" | null = null
+  if (totalWithInitiator > 0) {
+    const r = userInitiated / totalWithInitiator
+    whoInitiates = r >= 0.7 ? "user" : r <= 0.3 ? "them" : "mixed"
+  }
+
+  // ── messagesLast7Days / messagesLast30Days ─────────────────────────────────
+  const messagesLast7Days  = allTimestamps.filter((t) => t >= now - MS_7D).length
+  const messagesLast30Days = allTimestamps.filter((t) => t >= now - MS_30D).length
+
+  // ── conversationActiveThisWeek ────────────────────────────────────────────
+  const conversationActiveThisWeek = messagesLast7Days > 0
+
+  // ── conversationReactivated ────────────────────────────────────────────────
+  // True when there was a 60+ day silence immediately before the most recent
+  // cluster of messages (within the last 30 days).
+  let conversationReactivated = false
+  const sortedAll = [...allTimestamps].sort((a, b) => a - b)
+  if (sortedAll.length >= 2) {
+    const recentMessages  = sortedAll.filter((t) => t >= now - MS_30D)
+    const beforeRecent    = sortedAll.filter((t) => t <  now - MS_30D)
+    if (recentMessages.length > 0 && beforeRecent.length > 0) {
+      const lastBefore    = beforeRecent[beforeRecent.length - 1]
+      const firstRecent   = recentMessages[0]
+      conversationReactivated = (firstRecent - lastBefore) >= MS_60D
+    }
+  }
+
+  // ── fastReplies ───────────────────────────────────────────────────────────
+  const fastReplies = avgReplyTimeHours !== null && avgReplyTimeHours < (MS_6H / MS_1H)
+
+  // ── inboundInterest ───────────────────────────────────────────────────────
+  // True when the contact (not the user) started a new thread within the last 14 days.
+  let inboundInterest = false
+  for (const msgs of threads.values()) {
+    const sorted = [...msgs].sort((a, b) => a.timestamp - b.timestamp)
+    const first  = sorted[0]
+    if (first && !first.senderIsUser && first.timestamp >= now - MS_14D) {
+      inboundInterest = true
+      break
+    }
+  }
+
+  return {
+    threadCount,
+    avgReplyTimeHours,
+    whoInitiates,
+    lastReplyAt:                lastReplyAtMs > 0 ? new Date(lastReplyAtMs).toISOString() : null,
+    replyLatencyTrend,
+    messagesLast7Days,
+    messagesLast30Days,
+    conversationActiveThisWeek,
+    conversationReactivated,
+    fastReplies,
+    inboundInterest,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -436,6 +549,15 @@ export interface ContactRow {
   avgReplyTimeHours: number | null
   whoInitiates:      "user" | "them" | "mixed" | null
   relationshipStrength: "strong" | "warm" | "cold"
+  // ── Gmail signal fields ───────────────────────────────────────────────────
+  lastReplyAt:                string | null   // ISO — last inbound message
+  replyLatencyTrend:          "improving" | "worsening" | "stable" | null
+  messagesLast7Days:          number
+  messagesLast30Days:         number
+  conversationActiveThisWeek: boolean
+  conversationReactivated:    boolean
+  fastReplies:                boolean
+  inboundInterest:            boolean
 }
 
 export interface ContactInteractionRow {
@@ -656,7 +778,12 @@ export async function syncGoogleData(
   // ── Build contact rows ─────────────────────────────────────────────────────
   const contacts: ContactRow[] = []
   for (const [, accum] of contactMap) {
-    const { threadCount, avgReplyTimeHours, whoInitiates } = computeThreadMetrics(accum.threads)
+    const {
+      threadCount, avgReplyTimeHours, whoInitiates,
+      lastReplyAt, replyLatencyTrend,
+      messagesLast7Days, messagesLast30Days,
+      conversationActiveThisWeek, conversationReactivated, fastReplies, inboundInterest,
+    } = computeThreadMetrics(accum.threads)
     const lastInteractionISO = accum.lastInteraction.toISOString()
 
     contacts.push({
@@ -679,6 +806,14 @@ export async function syncGoogleData(
         meetingCount:    accum.meetingCount,
         lastInteraction: lastInteractionISO,
       }),
+      lastReplyAt,
+      replyLatencyTrend,
+      messagesLast7Days,
+      messagesLast30Days,
+      conversationActiveThisWeek,
+      conversationReactivated,
+      fastReplies,
+      inboundInterest,
     })
   }
 

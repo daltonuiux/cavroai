@@ -43,6 +43,16 @@
 //   ALTER TABLE contacts ADD COLUMN IF NOT EXISTS who_initiates text;
 //   ALTER TABLE contacts ADD COLUMN IF NOT EXISTS relationship_strength text NOT NULL DEFAULT 'cold';
 //
+// Migration — Gmail signal fields (run once):
+//   ALTER TABLE contacts ADD COLUMN IF NOT EXISTS last_reply_at timestamptz;
+//   ALTER TABLE contacts ADD COLUMN IF NOT EXISTS reply_latency_trend text;
+//   ALTER TABLE contacts ADD COLUMN IF NOT EXISTS messages_last_7_days integer NOT NULL DEFAULT 0;
+//   ALTER TABLE contacts ADD COLUMN IF NOT EXISTS messages_last_30_days integer NOT NULL DEFAULT 0;
+//   ALTER TABLE contacts ADD COLUMN IF NOT EXISTS conversation_active_this_week boolean NOT NULL DEFAULT false;
+//   ALTER TABLE contacts ADD COLUMN IF NOT EXISTS conversation_reactivated boolean NOT NULL DEFAULT false;
+//   ALTER TABLE contacts ADD COLUMN IF NOT EXISTS fast_replies boolean NOT NULL DEFAULT false;
+//   ALTER TABLE contacts ADD COLUMN IF NOT EXISTS inbound_interest boolean NOT NULL DEFAULT false;
+//
 // X (Twitter) OAuth connections:
 //   CREATE TABLE IF NOT EXISTS x_connections (
 //     id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1100,6 +1110,15 @@ function rowToContact(row: any): Contact {
     avgReplyTimeHours:    row.avg_reply_time_hours   ?? null,
     whoInitiates:         row.who_initiates          ?? null,
     relationshipStrength,
+    // Gmail signal fields
+    lastReplyAt:                row.last_reply_at                   ?? null,
+    replyLatencyTrend:          row.reply_latency_trend             ?? null,
+    messagesLast7Days:          row.messages_last_7_days            ?? 0,
+    messagesLast30Days:         row.messages_last_30_days           ?? 0,
+    conversationActiveThisWeek: row.conversation_active_this_week   ?? false,
+    conversationReactivated:    row.conversation_reactivated        ?? false,
+    fastReplies:                row.fast_replies                    ?? false,
+    inboundInterest:            row.inbound_interest                ?? false,
   }
 }
 
@@ -1126,10 +1145,18 @@ export async function upsertContacts(
     first_interaction:     c.firstInteraction,
     last_interaction:      c.lastInteraction,
     interaction_score:     c.interactionScore,
-    thread_count:          c.threadCount,
-    avg_reply_time_hours:  c.avgReplyTimeHours,
-    who_initiates:         c.whoInitiates,
-    relationship_strength: c.relationshipStrength,
+    thread_count:                   c.threadCount,
+    avg_reply_time_hours:           c.avgReplyTimeHours,
+    who_initiates:                  c.whoInitiates,
+    relationship_strength:          c.relationshipStrength,
+    last_reply_at:                  c.lastReplyAt,
+    reply_latency_trend:            c.replyLatencyTrend,
+    messages_last_7_days:           c.messagesLast7Days,
+    messages_last_30_days:          c.messagesLast30Days,
+    conversation_active_this_week:  c.conversationActiveThisWeek,
+    conversation_reactivated:       c.conversationReactivated,
+    fast_replies:                   c.fastReplies,
+    inbound_interest:               c.inboundInterest,
   }))
 
   const { data, error } = await db()

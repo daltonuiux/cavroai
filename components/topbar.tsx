@@ -3,10 +3,12 @@
 import { usePathname } from "next/navigation"
 
 const ROUTE_TITLES: { path: string; title: string }[] = [
-  { path: "/overview", title: "Overview" },
-  { path: "/opportunities", title: "Opportunities" },
-  { path: "/clients", title: "Clients" },
-  { path: "/settings", title: "Settings" },
+  { path: "/overview",        title: "Overview"        },
+  { path: "/audits",          title: "Audits"          },
+  { path: "/competitors",     title: "Competitors"     },
+  { path: "/prompts",         title: "Prompts"         },
+  { path: "/recommendations", title: "Recommendations" },
+  { path: "/settings",        title: "Settings"        },
 ]
 
 function getTitle(pathname: string): string {
@@ -15,7 +17,7 @@ function getTitle(pathname: string): string {
       return title
     }
   }
-  return "Cavro"
+  return "Cavro AI"
 }
 
 export function Topbar() {

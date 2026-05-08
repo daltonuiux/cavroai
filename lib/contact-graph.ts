@@ -563,6 +563,7 @@ export function deriveRelationshipContext(
   contacts: Pick<
     Contact,
     "lastInteraction" | "whoInitiates" | "threadCount" | "sentCount" | "receivedCount" | "meetingCount"
+    | "inboundInterest" | "conversationReactivated" | "fastReplies" | "conversationActiveThisWeek"
   >[],
 ): string {
   if (!contacts.length) return "Cold contact — no history"
@@ -579,11 +580,21 @@ export function deriveRelationshipContext(
     : 999
 
   const whoInitiates = top.whoInitiates
+  const inboundInterest         = contacts.some((c) => c.inboundInterest)
+  const conversationReactivated = contacts.some((c) => c.conversationReactivated)
+  const fastReplies             = contacts.some((c) => c.fastReplies)
+  const conversationActiveThisWeek = contacts.some((c) => c.conversationActiveThisWeek)
 
   // One-sidedness — only meaningful with ≥4 emails
   const isOneSidedOut      = totalEmails >= 4 && totalRecv === 0
   const isHeavilySentBiased = totalEmails >= 4 && totalSent / totalEmails >= 0.85
   const isHeavilyRecvBiased = totalEmails >= 4 && totalRecv / totalEmails >= 0.85
+
+  // ── Gmail signal overrides (highest priority phrases) ───────────────────
+  if (inboundInterest && fastReplies) return "They started a conversation — and reply quickly"
+  if (inboundInterest) return "They reached out to start a conversation recently"
+  if (conversationReactivated) return "They came back after a long silence"
+  if (conversationActiveThisWeek && fastReplies) return "Active this week — quick back-and-forth"
 
   // ── Very recent (≤7d) ────────────────────────────────────────────────────
   if (hasMeetings  && daysSince <= 7) return "You met recently — still in the window"
@@ -698,6 +709,23 @@ export interface Contact {
   whoInitiates:         "user" | "them" | "mixed" | null
   /** Three-tier relationship classification derived from interaction depth + recency. */
   relationshipStrength: RelationshipStrength
+  // ── Gmail signal fields (populated during sync, null/0/false for older rows) ──
+  /** ISO timestamp of the most recent inbound message from this contact. */
+  lastReplyAt:                string | null
+  /** Whether reply latency is trending shorter ("improving") or longer ("worsening"). */
+  replyLatencyTrend:          "improving" | "worsening" | "stable" | null
+  /** Total messages (sent + received) in the last 7 days. */
+  messagesLast7Days:          number
+  /** Total messages (sent + received) in the last 30 days. */
+  messagesLast30Days:         number
+  /** True when any message was exchanged in the last 7 days. */
+  conversationActiveThisWeek: boolean
+  /** True when there was a 60+ day silence immediately followed by a recent cluster. */
+  conversationReactivated:    boolean
+  /** True when average reply time is under 6 hours. */
+  fastReplies:                boolean
+  /** True when the contact started a new thread within the last 14 days. */
+  inboundInterest:            boolean
 }
 
 export interface ContactInteraction {
@@ -1181,6 +1209,13 @@ interface ActionScoreInput {
   sentCount:     number
   /** Total emails received from contacts across the cluster. */
   receivedCount: number
+  // ── Gmail signal fields (from top contact) ────────────────────────────────
+  conversationActiveThisWeek: boolean
+  conversationReactivated:    boolean
+  fastReplies:                boolean
+  inboundInterest:            boolean
+  replyLatencyTrend:          "improving" | "worsening" | "stable" | null
+  messagesLast7Days:          number
 }
 
 /**
@@ -1209,6 +1244,8 @@ function computeActionScore(input: ActionScoreInput): {
     hasMeetings, totalEmails, contactCount, recentInteractions, daysSince,
     emailSignals, twitterSignals, buyerLikelihood, fitTier, relationshipStrength,
     threadCount, whoInitiates, sentCount, receivedCount,
+    conversationActiveThisWeek, conversationReactivated, fastReplies, inboundInterest,
+    replyLatencyTrend, messagesLast7Days,
   } = input
 
   // ── 1. Relationship score (DOMINANT — up to ~125 with bonuses) ──────────────
@@ -1239,6 +1276,19 @@ function computeActionScore(input: ActionScoreInput): {
 
   // ── Recent contact bonus (14-day window = peak receptivity, on top of mult) ──
   if (daysSince <= 14 && totalEmails > 0) relScore += 8
+
+  // ── Gmail signal bonuses ─────────────────────────────────────────────────────
+  // inboundInterest: they started a thread recently — highest signal of receptivity
+  if (inboundInterest) relScore += 12
+  // conversationReactivated: they came back after silence — strong signal
+  if (conversationReactivated) relScore += 8
+  // conversationActiveThisWeek: current momentum
+  if (conversationActiveThisWeek && messagesLast7Days >= 2) relScore += 6
+  // fastReplies: low friction, they're engaged
+  if (fastReplies) relScore += 4
+  // replyLatencyTrend: direction of engagement
+  if (replyLatencyTrend === "improving") relScore += 3
+  else if (replyLatencyTrend === "worsening") relScore -= 4
 
   // ── Stale relationship penalty (>90d contact gap without a meeting) ──────────
   if      (daysSince > 90 && !hasMeetings) relScore -= 12
@@ -2051,6 +2101,12 @@ export function buildContactOpportunities(
       whoInitiates:         whoInitC,
       sentCount:            totalSentC,
       receivedCount:        totalRecvC,
+      conversationActiveThisWeek: topContact.conversationActiveThisWeek ?? false,
+      conversationReactivated:    topContact.conversationReactivated    ?? false,
+      fastReplies:                topContact.fastReplies                ?? false,
+      inboundInterest:            topContact.inboundInterest            ?? false,
+      replyLatencyTrend:          topContact.replyLatencyTrend          ?? null,
+      messagesLast7Days:          topContact.messagesLast7Days          ?? 0,
     })
 
     const actionReason = buildContactActionReason({
@@ -2568,6 +2624,7 @@ export function buildPublicSignalOpportunities(
     const whoInitP       = sortedContacts[0]?.whoInitiates ?? null
     const relCtxP        = deriveRelationshipContext(sortedContacts)
 
+    const topPubContact = sortedContacts[0]
     const { actionScore, breakdown: actionBreakdown } = computeActionScore({
       hasMeetings,
       totalEmails:         emailCount,
@@ -2583,6 +2640,12 @@ export function buildPublicSignalOpportunities(
       whoInitiates:         whoInitP,
       sentCount:            totalSentP,
       receivedCount:        totalRecvP,
+      conversationActiveThisWeek: topPubContact?.conversationActiveThisWeek ?? false,
+      conversationReactivated:    topPubContact?.conversationReactivated    ?? false,
+      fastReplies:                topPubContact?.fastReplies                ?? false,
+      inboundInterest:            topPubContact?.inboundInterest            ?? false,
+      replyLatencyTrend:          topPubContact?.replyLatencyTrend          ?? null,
+      messagesLast7Days:          topPubContact?.messagesLast7Days          ?? 0,
     })
 
     const actionReason = buildPublicSignalActionReason({
