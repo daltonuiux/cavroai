@@ -1,73 +1,114 @@
 import Link from "next/link"
 
 // ---------------------------------------------------------------------------
-// Mock data — replace with real AI audit pipeline later
+// Mock data
 // ---------------------------------------------------------------------------
 
 const MOCK_SCORE = 61
 
 const MOCK_AUDIT = {
-  id:       "audit-003",
-  date:     "May 6, 2026",
-  label:    "Full audit",
-  score:    61,
-  summary:
-    "AI assistants recognise your brand name but rarely recommend you unprompted. Positioning around your core differentiator is weak compared to two key competitors.",
+  id:      "audit-003",
+  date:    "May 6, 2026",
+  label:   "Full audit",
+  score:   61,
+  summary: "AI assistants recognise your brand but rarely recommend you first. Your positioning is too generic to win competitive prompts.",
 }
 
-const MOCK_GAPS = [
+const MOCK_PROMPTS_TRACKED   = 7
+const MOCK_COMPETITORS_TRACKED = 4
+
+const MOCK_RISKS = [
   {
-    id:       "gap-1",
+    id:       "r-1",
     title:    "Differentiation is vague",
-    detail:   "AI models describe you in generic terms — 'easy to use', 'affordable' — rather than your specific technical advantages.",
+    detail:   "AI models describe you in generic terms rather than your specific advantages.",
     severity: "high" as const,
+    action:   "Rewrite homepage headline",
   },
   {
-    id:       "gap-2",
-    title:    "No social proof visible to AI",
-    detail:   "Customer case studies and G2 reviews aren't crawled consistently. AI models cite competitor proof points 3× more often.",
+    id:       "r-2",
+    title:    "No social proof AI can cite",
+    detail:   "Case studies aren't indexed. Competitors are cited 3x more in trust-driven prompts.",
     severity: "high" as const,
+    action:   "Publish /customers page",
   },
   {
-    id:       "gap-3",
-    title:    "Pricing clarity missing",
-    detail:   "When buyers ask \"how much does X cost\", AI assistants often say \"pricing not available\" or recommend alternatives.",
+    id:       "r-3",
+    title:    "Pricing invisible to AI",
+    detail:   "Buyers asking about cost get \"pricing unavailable\" — then a competitor recommendation.",
     severity: "medium" as const,
+    action:   "Add pricing FAQ",
   },
 ]
 
-const MOCK_COMPETITOR_RISKS = [
+const MOCK_QUICK_WINS = [
   {
-    id:      "cr-1",
-    name:    "Notion",
-    risk:    "Recommended instead of you in 4 of 7 tracked prompts targeting knowledge-management buyers.",
-    delta:   -18,
+    id:     "qw-1",
+    action: "Rewrite homepage headline with a concrete differentiator",
+    effort: "quick" as const,
   },
   {
-    id:      "cr-2",
-    name:    "Linear",
-    risk:    "AI models cite Linear's changelog and roadmap as proof of active development — you lack an equivalent public signal.",
-    delta:   -11,
+    id:     "qw-2",
+    action: "Publish 3 named case studies on /customers",
+    effort: "medium" as const,
+  },
+  {
+    id:     "qw-3",
+    action: "Add transparent pricing FAQ to /pricing",
+    effort: "quick" as const,
+  },
+  {
+    id:     "qw-4",
+    action: "Create a /vs-notion comparison page",
+    effort: "medium" as const,
+  },
+]
+
+const MOCK_PROMPTS = [
+  {
+    id:         "p-1",
+    text:       "Best knowledge base tool for remote teams",
+    position:   3,
+    visibility: "medium" as const,
+    score:      58,
+  },
+  {
+    id:         "p-2",
+    text:       "Notion alternatives that are more affordable",
+    position:   1,
+    visibility: "high" as const,
+    score:      83,
+  },
+  {
+    id:         "p-3",
+    text:       "No-code database tool with views and automations",
+    position:   5,
+    visibility: "low" as const,
+    score:      32,
+  },
+  {
+    id:         "p-4",
+    text:       "Best tool for internal team wikis",
+    position:   3,
+    visibility: "medium" as const,
+    score:      55,
   },
 ]
 
 const MOCK_RECENT_AUDITS = [
-  { id: "audit-003", date: "May 6, 2026",   score: 61, label: "Full audit",         status: "complete" as const },
-  { id: "audit-002", date: "Apr 22, 2026",  score: 54, label: "Prompt coverage run", status: "complete" as const },
-  { id: "audit-001", date: "Apr 8, 2026",   score: 49, label: "Baseline audit",      status: "complete" as const },
+  { id: "audit-003", date: "May 6, 2026",  score: 61, label: "Full audit"         },
+  { id: "audit-002", date: "Apr 22, 2026", score: 54, label: "Prompt coverage run" },
+  { id: "audit-001", date: "Apr 8, 2026",  score: 49, label: "Baseline audit"      },
 ]
 
-const MOCK_PROMPTS_TRACKED = 7
-const MOCK_COMPETITORS_TRACKED = 4
-
 // ---------------------------------------------------------------------------
-// Score ring helpers
+// Helpers
 // ---------------------------------------------------------------------------
 
 function scoreColour(score: number) {
-  if (score >= 75) return { text: "text-emerald-600 dark:text-emerald-400", ring: "stroke-emerald-500" }
-  if (score >= 50) return { text: "text-amber-600 dark:text-amber-400",    ring: "stroke-amber-500"   }
-  return               { text: "text-rose-600 dark:text-rose-400",          ring: "stroke-rose-500"    }
+  if (score >= 75) return { text: "text-emerald-600 dark:text-emerald-400", ring: "stroke-emerald-500", bg: "bg-emerald-500/10" }
+  if (score >= 50) return { text: "text-amber-600 dark:text-amber-400",    ring: "stroke-amber-500",   bg: "bg-amber-500/10"   }
+  return               { text: "text-rose-600 dark:text-rose-400",          ring: "stroke-rose-500",    bg: "bg-rose-500/10"    }
 }
 
 function scoreLabel(score: number) {
@@ -76,47 +117,76 @@ function scoreLabel(score: number) {
   return "Weak"
 }
 
-// ---------------------------------------------------------------------------
-// Shared sub-components
-// ---------------------------------------------------------------------------
+type Severity   = "high" | "medium" | "low"
+type Visibility = "high" | "medium" | "low" | "none"
+type Effort     = "quick" | "medium" | "large"
 
-function SectionLabel({
-  label,
-  sublabel,
-  href,
-  linkLabel,
-}: {
-  label:      string
-  sublabel?:  string
-  href?:      string
-  linkLabel?: string
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3 mb-3">
-      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50">
-          {label}
-        </p>
-        {sublabel && (
-          <p className="text-[11px] text-muted-foreground/35 mt-0.5">{sublabel}</p>
-        )}
-      </div>
-      {href && linkLabel && (
-        <Link
-          href={href}
-          className="shrink-0 text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors"
-        >
-          {linkLabel}
-        </Link>
-      )}
-    </div>
-  )
+const SEVERITY_DOT: Record<Severity, string> = {
+  high:   "bg-rose-500",
+  medium: "bg-amber-400",
+  low:    "bg-foreground/20",
 }
 
-const SEVERITY_STYLES = {
+const SEVERITY_BADGE: Record<Severity, string> = {
   high:   "bg-rose-500/10 text-rose-600 dark:text-rose-400",
   medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   low:    "bg-foreground/[0.04] text-foreground/40",
+}
+
+const VISIBILITY_BADGE: Record<Visibility, string> = {
+  high:   "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  low:    "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+  none:   "bg-foreground/[0.04] text-foreground/40",
+}
+
+const VISIBILITY_LABEL: Record<Visibility, string> = {
+  high:   "Appearing",
+  medium: "Partial",
+  low:    "Rarely",
+  none:   "Not found",
+}
+
+const EFFORT_BADGE: Record<Effort, string> = {
+  quick:  "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  large:  "bg-foreground/[0.04] text-foreground/40",
+}
+
+// ---------------------------------------------------------------------------
+// Score ring
+// ---------------------------------------------------------------------------
+
+function ScoreRing({ score, size = 80 }: { score: number; size?: number }) {
+  const c    = scoreColour(score)
+  const r    = (size - 12) / 2
+  const circ = 2 * Math.PI * r
+  const cx   = size / 2
+  return (
+    <div className="relative flex items-center justify-center shrink-0">
+      <svg width={size} height={size} className="-rotate-90">
+        <circle
+          cx={cx} cy={cx} r={r}
+          fill="none" stroke="currentColor"
+          strokeWidth="5"
+          className="text-foreground/[0.06]"
+        />
+        <circle
+          cx={cx} cy={cx} r={r}
+          fill="none"
+          strokeWidth="5"
+          strokeLinecap="round"
+          className={c.ring}
+          strokeDasharray={circ}
+          strokeDashoffset={circ * (1 - score / 100)}
+        />
+      </svg>
+      <div className="absolute flex flex-col items-center leading-none">
+        <span className={`text-[19px] font-bold tabular-nums ${c.text}`}>{score}</span>
+        <span className="text-[8px] text-muted-foreground/35 mt-0.5 uppercase tracking-wide">/ 100</span>
+      </div>
+    </div>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -124,204 +194,226 @@ const SEVERITY_STYLES = {
 // ---------------------------------------------------------------------------
 
 export default function OverviewPage() {
-  const colours = scoreColour(MOCK_SCORE)
+  const c = scoreColour(MOCK_SCORE)
 
   return (
-    <div className="flex flex-col gap-8 max-w-2xl">
+    <div className="flex flex-col gap-5 w-full max-w-4xl">
 
-      {/* ── Page header ──────────────────────────────────────────────────────── */}
-      <div>
-        <h1 className="text-[18px] font-semibold tracking-[-0.02em] text-foreground">Overview</h1>
-        <p className="mt-0.5 text-[12px] text-muted-foreground">
-          How AI assistants currently perceive and recommend your company
-        </p>
-      </div>
+      {/* ── 1. Hero ─────────────────────────────────────────────────────────── */}
+      <div className="card-cavro rounded-md p-5">
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-5 items-center">
 
-      {/* ── Section 1: Score + last audit ────────────────────────────────────── */}
-      <section className="flex flex-col gap-3">
-        <SectionLabel
-          label="Recommendation readiness"
-          sublabel={`Last audit: ${MOCK_AUDIT.date}`}
-          href="/audits"
-          linkLabel="View all audits →"
-        />
+          {/* Left: status + summary + meta + CTA */}
+          <div className="flex flex-col gap-3 min-w-0">
 
-        <div className="card-cavro rounded-md px-5 py-5 flex items-center gap-6">
-          {/* Score ring */}
-          <div className="relative shrink-0 flex items-center justify-center">
-            <svg width="72" height="72" className="-rotate-90">
-              <circle cx="36" cy="36" r="30" fill="none" stroke="currentColor"
-                strokeWidth="5" className="text-foreground/[0.06]" />
-              <circle cx="36" cy="36" r="30" fill="none"
-                strokeWidth="5" strokeLinecap="round"
-                className={colours.ring}
-                strokeDasharray={`${2 * Math.PI * 30}`}
-                strokeDashoffset={`${2 * Math.PI * 30 * (1 - MOCK_SCORE / 100)}`}
-              />
-            </svg>
-            <div className="absolute flex flex-col items-center">
-              <span className={`text-[17px] font-bold leading-none tabular-nums ${colours.text}`}>
-                {MOCK_SCORE}
-              </span>
-              <span className="text-[8px] text-muted-foreground/40 mt-0.5 uppercase tracking-wide">/ 100</span>
-            </div>
-          </div>
-
-          {/* Score summary */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <span className={`text-[13px] font-semibold ${colours.text}`}>
+            {/* Status + label */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${c.bg} ${c.text}`}>
                 {scoreLabel(MOCK_SCORE)}
               </span>
-              <span className="text-[11px] text-muted-foreground/35">AI Recommendation Score</span>
+              <span className="text-[12px] text-muted-foreground/45">
+                AI Recommendation Score
+              </span>
             </div>
-            <p className="text-[12px] leading-relaxed text-foreground/60">
+
+            {/* Summary */}
+            <p className="text-[13px] leading-relaxed text-foreground/70 max-w-prose">
               {MOCK_AUDIT.summary}
             </p>
+
+            {/* Metadata */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground/40">
+              <span>Last audit: {MOCK_AUDIT.date}</span>
+              <span className="text-foreground/15">·</span>
+              <span>{MOCK_PROMPTS_TRACKED} prompts</span>
+              <span className="text-foreground/15">·</span>
+              <span>{MOCK_COMPETITORS_TRACKED} competitors</span>
+              <span className="text-foreground/15">·</span>
+              <span className={`font-semibold ${c.text}`}>
+                {MOCK_RISKS.filter(r => r.severity === "high").length} high-priority gaps
+              </span>
+            </div>
+
+            {/* CTA */}
+            <div className="flex items-center gap-2.5">
+              <Link
+                href="/audits/new"
+                className="btn-cavro-primary rounded-md px-3.5 text-[12px] font-semibold text-primary-foreground"
+              >
+                Run new audit
+              </Link>
+              <Link
+                href="/audits"
+                className="text-[12px] text-muted-foreground/45 hover:text-foreground transition-colors"
+              >
+                View all audits →
+              </Link>
+            </div>
           </div>
-        </div>
 
-        {/* Stat strip */}
-        <div className="flex items-center gap-6 px-1">
-          <span className="flex items-center gap-1.5 text-[12px]">
-            <span className="font-semibold text-foreground/70">{MOCK_PROMPTS_TRACKED}</span>
-            <span className="text-muted-foreground/40">prompts tracked</span>
-          </span>
-          <span className="flex items-center gap-1.5 text-[12px]">
-            <span className="font-semibold text-foreground/70">{MOCK_COMPETITORS_TRACKED}</span>
-            <span className="text-muted-foreground/40">competitors monitored</span>
-          </span>
-          <span className="flex items-center gap-1.5 text-[12px]">
-            <span className="font-semibold text-amber-600 dark:text-amber-400">
-              {MOCK_GAPS.filter((g) => g.severity === "high").length}
-            </span>
-            <span className="text-muted-foreground/40">high-priority gaps</span>
-          </span>
-        </div>
-      </section>
+          {/* Right: score ring */}
+          <div className="flex sm:justify-end">
+            <ScoreRing score={MOCK_SCORE} size={84} />
+          </div>
 
-      {/* ── Section 2: Positioning gaps ──────────────────────────────────────── */}
-      <section>
-        <SectionLabel
-          label="Top positioning gaps"
-          sublabel="Issues most likely reducing your AI recommendation rate"
-          href="/recommendations"
-          linkLabel="View all →"
-        />
-        <div className="flex flex-col gap-2.5">
-          {MOCK_GAPS.map((gap) => (
-            <div
-              key={gap.id}
-              className="card-cavro rounded-md px-5 py-4 flex flex-col gap-2"
+        </div>
+      </div>
+
+      {/* ── 2. Main grid: risks + quick wins ─────────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+        {/* LEFT: Recommendation risks */}
+        <section className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-[13px] font-semibold text-foreground">Recommendation risks</h2>
+            <Link
+              href="/recommendations"
+              className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors"
             >
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-[13px] font-semibold text-foreground tracking-[-0.01em]">
-                  {gap.title}
-                </p>
-                <span className={`shrink-0 rounded px-1.5 py-px text-[10px] font-semibold ${SEVERITY_STYLES[gap.severity]}`}>
-                  {gap.severity}
-                </span>
-              </div>
-              <p className="text-[12px] leading-relaxed text-foreground/55">
-                {gap.detail}
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
+              All →
+            </Link>
+          </div>
 
-      {/* ── Section 3: Competitor risks ──────────────────────────────────────── */}
-      <section>
-        <SectionLabel
-          label="Competitor risks"
-          sublabel="Where AI is recommending competitors over you"
-          href="/competitors"
-          linkLabel="View all →"
-        />
-        <div className="flex flex-col gap-2.5">
-          {MOCK_COMPETITOR_RISKS.map((cr) => (
-            <div
-              key={cr.id}
-              className="card-cavro rounded-md px-5 py-4 flex items-start gap-4"
-            >
-              {/* Competitor initial */}
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-foreground/[0.06] mt-0.5">
-                <span className="text-[11px] font-bold text-foreground/50">
-                  {cr.name[0]}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-3 mb-1">
-                  <p className="text-[13px] font-semibold text-foreground tracking-[-0.01em]">
-                    {cr.name}
+          <div className="card-cavro rounded-md divide-y divide-border/60 overflow-hidden">
+            {MOCK_RISKS.map((risk) => (
+              <div key={risk.id} className="flex items-start gap-3 px-4 py-3">
+                {/* Severity dot */}
+                <div className={`mt-[5px] h-1.5 w-1.5 rounded-full shrink-0 ${SEVERITY_DOT[risk.severity]}`} />
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2 mb-0.5">
+                    <p className="text-[12px] font-semibold text-foreground leading-snug">
+                      {risk.title}
+                    </p>
+                    <span className={`shrink-0 rounded px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide ${SEVERITY_BADGE[risk.severity]}`}>
+                      {risk.severity}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground/55 leading-snug">
+                    {risk.detail}
                   </p>
-                  <span className="shrink-0 text-[11px] font-semibold tabular-nums text-rose-600 dark:text-rose-400">
-                    {cr.delta} pts
-                  </span>
+                  <p className="text-[11px] font-medium text-foreground/50 mt-1.5">
+                    Fix: {risk.action}
+                  </p>
                 </div>
-                <p className="text-[12px] leading-relaxed text-foreground/55">
-                  {cr.risk}
-                </p>
               </div>
-            </div>
-          ))}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
 
-      {/* ── Section 4: Quick actions ──────────────────────────────────────────── */}
-      <section>
-        <SectionLabel label="Quick actions" />
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href="/audits/new"
-            className="btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-foreground/70"
-          >
-            Run new audit
-          </Link>
+        {/* RIGHT: Quick wins */}
+        <section className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-[13px] font-semibold text-foreground">Quick wins</h2>
+            <Link
+              href="/recommendations"
+              className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors"
+            >
+              All →
+            </Link>
+          </div>
+
+          <div className="card-cavro rounded-md divide-y divide-border/60 overflow-hidden">
+            {MOCK_QUICK_WINS.map((win, i) => (
+              <div key={win.id} className="flex items-center gap-3 px-4 py-3">
+                {/* Number */}
+                <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border/70">
+                  <span className="text-[8px] font-bold text-foreground/30">{i + 1}</span>
+                </div>
+                {/* Action */}
+                <p className="flex-1 text-[12px] font-medium text-foreground/75 leading-snug min-w-0">
+                  {win.action}
+                </p>
+                {/* Effort */}
+                <span className={`shrink-0 rounded px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide ${EFFORT_BADGE[win.effort]}`}>
+                  {win.effort}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+      </div>
+
+      {/* ── 3. Prompt readiness ───────────────────────────────────────────────── */}
+      <section className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <h2 className="text-[13px] font-semibold text-foreground">Prompt readiness</h2>
           <Link
             href="/prompts"
-            className="btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-foreground/70"
+            className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors"
           >
-            Add buyer prompt
+            All prompts →
           </Link>
-          <Link
-            href="/competitors"
-            className="btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-foreground/70"
-          >
-            Add competitor
-          </Link>
-          <Link
-            href="/recommendations"
-            className="btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-foreground/70"
-          >
-            View recommendations
-          </Link>
+        </div>
+
+        <div className="rounded-md border border-border overflow-hidden divide-y divide-border/60">
+          {MOCK_PROMPTS.map((p) => {
+            const vc = scoreColour(p.score)
+            const barColor =
+              p.score >= 70 ? "bg-emerald-500" :
+              p.score >= 45 ? "bg-amber-400" :
+              "bg-rose-500"
+            return (
+              <div
+                key={p.id}
+                className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 transition-colors"
+              >
+                {/* Prompt text */}
+                <p className="flex-1 text-[12px] text-foreground/65 truncate min-w-0">
+                  &ldquo;{p.text}&rdquo;
+                </p>
+                {/* Position */}
+                <span className={`shrink-0 text-[11px] font-semibold tabular-nums ${vc.text}`}>
+                  #{p.position}
+                </span>
+                {/* Visibility badge */}
+                <span className={`shrink-0 hidden sm:inline rounded px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide ${VISIBILITY_BADGE[p.visibility]}`}>
+                  {VISIBILITY_LABEL[p.visibility]}
+                </span>
+                {/* Progress bar */}
+                <div className="shrink-0 w-14 h-1 rounded-full bg-foreground/[0.07] overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${barColor}`}
+                    style={{ width: `${p.score}%` }}
+                  />
+                </div>
+              </div>
+            )
+          })}
         </div>
       </section>
 
-      {/* ── Section 5: Recent audits ──────────────────────────────────────────── */}
-      <section>
-        <SectionLabel
-          label="Recent audits"
-          href="/audits"
-          linkLabel="View all →"
-        />
-        <div className="flex flex-col gap-0 divide-y divide-border rounded-md border border-border overflow-hidden">
+      {/* ── 4. Recent audits ─────────────────────────────────────────────────── */}
+      <section className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <h2 className="text-[13px] font-semibold text-foreground">Recent audits</h2>
+          <Link
+            href="/audits"
+            className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors"
+          >
+            All audits →
+          </Link>
+        </div>
+
+        <div className="rounded-md border border-border overflow-hidden divide-y divide-border/60">
           {MOCK_RECENT_AUDITS.map((audit) => {
-            const c = scoreColour(audit.score)
+            const ac = scoreColour(audit.score)
             return (
               <Link
                 key={audit.id}
                 href="/audits"
-                className="flex items-center justify-between gap-4 px-5 py-3 hover:bg-muted/40 transition-colors"
+                className="flex items-center gap-4 px-4 py-2.5 hover:bg-muted/30 transition-colors"
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className={`text-[13px] font-semibold tabular-nums ${c.text}`}>
-                    {audit.score}
-                  </span>
-                  <span className="text-[12px] text-foreground/70 truncate">{audit.label}</span>
-                </div>
-                <span className="shrink-0 text-[11px] text-muted-foreground/40">{audit.date}</span>
+                <span className={`shrink-0 text-[13px] font-bold tabular-nums w-7 ${ac.text}`}>
+                  {audit.score}
+                </span>
+                <span className="flex-1 text-[12px] text-foreground/65 truncate">
+                  {audit.label}
+                </span>
+                <span className="shrink-0 text-[11px] text-muted-foreground/35">
+                  {audit.date}
+                </span>
               </Link>
             )
           })}
