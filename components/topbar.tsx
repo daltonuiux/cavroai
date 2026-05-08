@@ -25,11 +25,14 @@ export function Topbar() {
   const title = getTitle(pathname)
 
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-background px-6">
-      <span className="text-[14px] font-semibold tracking-[-0.015em] text-foreground">
+    <header className="flex h-11 shrink-0 items-center justify-between border-b border-border bg-background px-6 sm:px-8 xl:px-10">
+      <span className="text-[12px] font-medium text-muted-foreground/50 tracking-[-0.01em]">
         {title}
       </span>
-      <div className="size-7 rounded-full bg-sidebar-accent ring-1 ring-sidebar-border" />
+      <div className="flex items-center gap-3">
+        <span className="text-[11px] text-muted-foreground/35 hidden sm:block">Acme Inc.</span>
+        <div className="size-6 rounded-full bg-foreground/[0.08] ring-1 ring-border/60" />
+      </div>
     </header>
   )
 }

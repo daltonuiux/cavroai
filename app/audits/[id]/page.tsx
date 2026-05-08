@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Fragment } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import {
@@ -131,12 +131,12 @@ function formatDate(iso: string) {
 
 function SectionLabel({ label, sublabel }: { label: string; sublabel?: string }) {
   return (
-    <div className="mb-3">
-      <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+    <div className="mb-4">
+      <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/40">
         {label}
       </p>
       {sublabel && (
-        <p className="text-[11px] text-muted-foreground/35 mt-0.5">{sublabel}</p>
+        <p className="text-[11px] text-muted-foreground/35 mt-1">{sublabel}</p>
       )}
     </div>
   )
@@ -156,19 +156,26 @@ function Pill({ label, className }: { label: string; className: string }) {
 
 function HeroSection({ audit }: { audit: AuditResult }) {
   const c = scoreColour(audit.score)
-  const r = 44
-  const circ = 2 * Math.PI * r
 
   return (
-    <section className="card-cavro rounded-md px-6 py-6 flex flex-col gap-5">
-      {/* Top row: identity + score ring */}
-      <div className="flex items-start gap-5">
-        {/* Company identity */}
-        <div className="flex-1 min-w-0">
-          {/* Logo placeholder + name */}
-          <div className="flex items-center gap-2.5 mb-1">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-foreground/[0.07]">
-              <span className="text-[13px] font-bold text-foreground/60">
+    <section className="pb-7 border-b border-border">
+      <div className="flex items-start gap-6">
+        {/* Primary score */}
+        <div className="shrink-0 flex flex-col items-start">
+          <p className={`text-[56px] font-bold leading-none tabular-nums tracking-tight ${c.text}`}>
+            {audit.score}
+          </p>
+          <p className={`text-[9px] font-bold uppercase tracking-widest mt-1.5 opacity-50 ${c.text}`}>
+            {scoreLabel(audit.score)}
+          </p>
+        </div>
+
+        {/* Identity + summary */}
+        <div className="flex-1 min-w-0 pt-1.5">
+          {/* Company */}
+          <div className="flex items-center gap-2.5 mb-2">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-foreground/[0.07]">
+              <span className="text-[12px] font-bold text-foreground/50">
                 {audit.input.company[0]?.toUpperCase() ?? "?"}
               </span>
             </div>
@@ -176,64 +183,33 @@ function HeroSection({ audit }: { audit: AuditResult }) {
               <h1 className="text-[17px] font-bold text-foreground tracking-[-0.02em] leading-none">
                 {audit.input.company}
               </h1>
-              <p className="text-[11px] text-muted-foreground/40 mt-0.5">{audit.input.url}</p>
+              <p className="text-[11px] text-muted-foreground/35 mt-0.5">{audit.input.url}</p>
             </div>
           </div>
 
-          {/* Chips */}
-          <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+          {/* Meta chips */}
+          <div className="flex flex-wrap items-center gap-1.5 mb-3">
             {audit.input.category && (
-              <span className="rounded bg-foreground/[0.05] px-2 py-px text-[10px] font-medium text-foreground/50">
+              <span className="rounded bg-foreground/[0.05] px-2 py-px text-[10px] font-medium text-foreground/45">
                 {audit.input.category}
               </span>
             )}
-            <span className="rounded bg-foreground/[0.05] px-2 py-px text-[10px] font-medium text-foreground/40">
+            <span className="rounded bg-foreground/[0.04] px-2 py-px text-[10px] font-medium text-foreground/35">
               {audit.input.prompts.length} prompts
             </span>
-            <span className="rounded bg-foreground/[0.05] px-2 py-px text-[10px] font-medium text-foreground/40">
+            <span className="rounded bg-foreground/[0.04] px-2 py-px text-[10px] font-medium text-foreground/35">
               {audit.input.competitors.length} competitors
             </span>
-            <span className="text-[10px] text-muted-foreground/30">
+            <span className="text-[10px] text-muted-foreground/25">
               {formatDate(audit.createdAt)}
             </span>
           </div>
-        </div>
 
-        {/* Score ring */}
-        <div className="relative shrink-0 flex items-center justify-center">
-          <svg width="96" height="96" className="-rotate-90">
-            <circle
-              cx="48" cy="48" r={r}
-              fill="none" stroke="currentColor"
-              strokeWidth="6"
-              className="text-foreground/[0.06]"
-            />
-            <circle
-              cx="48" cy="48" r={r}
-              fill="none"
-              strokeWidth="6"
-              strokeLinecap="round"
-              className={c.ring}
-              strokeDasharray={circ}
-              strokeDashoffset={circ * (1 - audit.score / 100)}
-            />
-          </svg>
-          <div className="absolute flex flex-col items-center">
-            <span className={`text-[22px] font-bold leading-none tabular-nums ${c.text}`}>
-              {audit.score}
-            </span>
-            <span className={`text-[9px] font-semibold mt-0.5 uppercase tracking-wide ${c.text} opacity-60`}>
-              {scoreLabel(audit.score)}
-            </span>
-          </div>
+          {/* Executive summary */}
+          <p className="text-[13px] font-medium leading-relaxed text-foreground/65 max-w-[70ch]">
+            {audit.executiveSummary}
+          </p>
         </div>
-      </div>
-
-      {/* Executive summary */}
-      <div className="border-t border-border pt-4">
-        <p className="text-[13px] font-medium leading-relaxed text-foreground/70 max-w-[70ch]">
-          {audit.executiveSummary}
-        </p>
       </div>
     </section>
   )
@@ -309,10 +285,10 @@ function BarriersSection({ barriers }: { barriers: RecommendationBarrier[] }) {
         {barriers.map((barrier, i) => {
           const Icon = BARRIER_ICONS[barrier.type]
           return (
-            <div key={i} className="card-cavro rounded-md px-5 py-4 flex gap-4">
+            <div key={i} className="card-cavro rounded-md px-4 py-3 flex gap-3">
               {/* Icon */}
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-foreground/[0.05] mt-0.5">
-                <Icon size={14} className={BARRIER_ICON_STYLES[barrier.type]} />
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-foreground/[0.05] mt-0.5">
+                <Icon size={13} className={BARRIER_ICON_STYLES[barrier.type]} />
               </div>
               {/* Content */}
               <div className="flex-1 min-w-0">
@@ -360,31 +336,6 @@ function yourStrengths(score: number): {
   return { categoryClarity: "weak", trustSignals: "weak", differentiation: "weak", recommendationLikelihood: "low" }
 }
 
-function AttributeRow({
-  label,
-  yourValue,
-  theirValue,
-  strengthStyle,
-}: {
-  label: string
-  yourValue: string
-  theirValue: string
-  strengthStyle: string
-}) {
-  return (
-    <div className="flex items-center gap-3 text-[11px]">
-      <span className="w-[130px] shrink-0 text-muted-foreground/40 font-medium">{label}</span>
-      <span className="text-muted-foreground/30 font-medium tabular-nums w-[64px] text-center">
-        <span className="rounded bg-foreground/[0.04] px-1.5 py-px text-foreground/40 font-semibold">
-          You: {yourValue}
-        </span>
-      </span>
-      <span className={`rounded px-1.5 py-px font-semibold ${strengthStyle}`}>
-        {theirValue}
-      </span>
-    </div>
-  )
-}
 
 function CompetitorSection({ rows, myScore }: { rows: CompetitorRow[]; myScore: number }) {
   if (rows.length === 0) return null
@@ -396,67 +347,101 @@ function CompetitorSection({ rows, myScore }: { rows: CompetitorRow[]; myScore: 
         label="Competitor comparison"
         sublabel="How AI assistants position you against each tracked competitor"
       />
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        {rows.map((row, i) => {
-          const delta = myScore - row.theirScore
-          return (
-            <div key={i} className="card-cavro rounded-md px-5 py-4 flex flex-col gap-3">
-              {/* Header */}
-              <div className="flex items-center gap-3">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-foreground/[0.07]">
-                  <span className="text-[11px] font-bold text-foreground/50">{row.name[0]}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-semibold text-foreground">{row.name}</p>
-                  <p className="text-[11px] text-muted-foreground/35">{row.url}</p>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="text-[14px] font-bold text-foreground/70 tabular-nums">
-                    {row.theirScore}
-                    <span className="text-[11px] font-normal text-muted-foreground/35"> /100</span>
-                  </p>
-                  <p className={`text-[11px] font-semibold tabular-nums ${delta >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
-                    {delta >= 0 ? `+${delta}` : `${delta}`} vs you
-                  </p>
-                </div>
-              </div>
-
-              {/* Attribute grid */}
-              <div className="card-cavro rounded-md flex flex-col gap-1.5 px-4 py-3">
-                <AttributeRow
-                  label="Category clarity"
-                  yourValue={STRENGTH_LABELS[yours.categoryClarity]}
-                  theirValue={STRENGTH_LABELS[row.categoryClarity]}
-                  strengthStyle={STRENGTH_STYLES[row.categoryClarity]}
-                />
-                <AttributeRow
-                  label="Trust signals"
-                  yourValue={STRENGTH_LABELS[yours.trustSignals]}
-                  theirValue={STRENGTH_LABELS[row.trustSignals]}
-                  strengthStyle={STRENGTH_STYLES[row.trustSignals]}
-                />
-                <AttributeRow
-                  label="Differentiation"
-                  yourValue={STRENGTH_LABELS[yours.differentiation]}
-                  theirValue={STRENGTH_LABELS[row.differentiation]}
-                  strengthStyle={STRENGTH_STYLES[row.differentiation]}
-                />
-                <AttributeRow
-                  label="Rec. likelihood"
-                  yourValue={LIKELIHOOD_LABELS[yours.recommendationLikelihood]}
-                  theirValue={LIKELIHOOD_LABELS[row.recommendationLikelihood]}
-                  strengthStyle={LIKELIHOOD_STYLES[row.recommendationLikelihood]}
-                />
-              </div>
-
-              {/* Advantage text */}
-              <p className="text-[12px] leading-relaxed text-foreground/50 border-t border-border pt-2.5">
-                {row.advantage}
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-border">
+            <th className="text-left pb-2.5 pr-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30">
+              Competitor
+            </th>
+            <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30">
+              Score
+            </th>
+            <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 hidden sm:table-cell">
+              Category
+            </th>
+            <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 hidden md:table-cell">
+              Trust
+            </th>
+            <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 hidden lg:table-cell">
+              Differentiation
+            </th>
+            <th className="text-right pb-2.5 pl-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30">
+              Rec. rate
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {/* Your row */}
+          <tr className="border-b border-border bg-foreground/[0.015]">
+            <td className="py-3 pr-4">
+              <p className="text-[12px] font-bold text-foreground">You</p>
+              <p className="text-[10px] text-muted-foreground/30">{myScore} / 100</p>
+            </td>
+            <td className="py-3 px-4 text-right">
+              <p className={`text-[15px] font-bold tabular-nums ${myScore >= 75 ? "text-emerald-600 dark:text-emerald-400" : myScore >= 50 ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400"}`}>
+                {myScore}
               </p>
-            </div>
-          )
-        })}
-      </div>
+            </td>
+            <td className="py-3 px-4 text-right hidden sm:table-cell">
+              <Pill label={STRENGTH_LABELS[yours.categoryClarity]} className={STRENGTH_STYLES[yours.categoryClarity]} />
+            </td>
+            <td className="py-3 px-4 text-right hidden md:table-cell">
+              <Pill label={STRENGTH_LABELS[yours.trustSignals]} className={STRENGTH_STYLES[yours.trustSignals]} />
+            </td>
+            <td className="py-3 px-4 text-right hidden lg:table-cell">
+              <Pill label={STRENGTH_LABELS[yours.differentiation]} className={STRENGTH_STYLES[yours.differentiation]} />
+            </td>
+            <td className="py-3 pl-4 text-right">
+              <Pill label={LIKELIHOOD_LABELS[yours.recommendationLikelihood]} className={LIKELIHOOD_STYLES[yours.recommendationLikelihood]} />
+            </td>
+          </tr>
+
+          {/* Competitor rows */}
+          {rows.map((row, i) => {
+            const delta = myScore - row.theirScore
+            return (
+              <Fragment key={i}>
+                <tr className="border-b border-border hover:bg-muted/20 transition-colors">
+                  <td className="py-3 pr-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-foreground/[0.06]">
+                        <span className="text-[10px] font-bold text-foreground/40">{row.name[0]}</span>
+                      </div>
+                      <div>
+                        <p className="text-[12px] font-semibold text-foreground">{row.name}</p>
+                        <p className="text-[10px] text-muted-foreground/30">{row.url}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 text-right">
+                    <p className="text-[15px] font-bold tabular-nums text-foreground/65">{row.theirScore}</p>
+                    <p className={`text-[10px] font-bold tabular-nums ${delta >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                      {delta >= 0 ? `+${delta}` : `${delta}`}
+                    </p>
+                  </td>
+                  <td className="py-3 px-4 text-right hidden sm:table-cell">
+                    <Pill label={STRENGTH_LABELS[row.categoryClarity]} className={STRENGTH_STYLES[row.categoryClarity]} />
+                  </td>
+                  <td className="py-3 px-4 text-right hidden md:table-cell">
+                    <Pill label={STRENGTH_LABELS[row.trustSignals]} className={STRENGTH_STYLES[row.trustSignals]} />
+                  </td>
+                  <td className="py-3 px-4 text-right hidden lg:table-cell">
+                    <Pill label={STRENGTH_LABELS[row.differentiation]} className={STRENGTH_STYLES[row.differentiation]} />
+                  </td>
+                  <td className="py-3 pl-4 text-right">
+                    <Pill label={LIKELIHOOD_LABELS[row.recommendationLikelihood]} className={LIKELIHOOD_STYLES[row.recommendationLikelihood]} />
+                  </td>
+                </tr>
+                <tr className="border-b border-border">
+                  <td colSpan={6} className="pb-3 pt-0 pl-[34px] pr-4">
+                    <p className="text-[11px] text-foreground/35 leading-snug">{row.advantage}</p>
+                  </td>
+                </tr>
+              </Fragment>
+            )
+          })}
+        </tbody>
+      </table>
     </section>
   )
 }
@@ -465,25 +450,6 @@ function CompetitorSection({ rows, myScore }: { rows: CompetitorRow[]; myScore: 
 // Section 5: Prompt Readiness
 // ---------------------------------------------------------------------------
 
-function ReadinessBar({ score }: { score: number }) {
-  const colour =
-    score >= 70 ? "bg-emerald-500" :
-    score >= 45 ? "bg-amber-500" :
-    "bg-rose-500"
-  return (
-    <div className="flex items-center gap-2.5">
-      <div className="flex-1 h-1.5 rounded-full bg-foreground/[0.06] overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all ${colour}`}
-          style={{ width: `${score}%` }}
-        />
-      </div>
-      <span className="shrink-0 text-[11px] font-semibold tabular-nums text-foreground/50 w-6 text-right">
-        {score}
-      </span>
-    </div>
-  )
-}
 
 function PromptReadinessSection({ results }: { results: PromptResult[] }) {
   if (results.length === 0) return null
@@ -493,50 +459,76 @@ function PromptReadinessSection({ results }: { results: PromptResult[] }) {
         label="Prompt readiness"
         sublabel="How you appear in AI responses to each tracked buyer prompt"
       />
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-        {results.map((r, i) => (
-          <div key={i} className="card-cavro rounded-md px-5 py-4 flex flex-col gap-3">
-            {/* Prompt + visibility */}
-            <div className="flex items-start justify-between gap-3">
-              <p className="text-[12px] font-medium text-foreground leading-snug flex-1">
-                &ldquo;{r.prompt}&rdquo;
-              </p>
-              <div className="shrink-0 flex items-center gap-2 mt-0.5">
-                {r.position !== null && (
-                  <span className="text-[11px] font-semibold text-foreground/35 tabular-nums">
-                    #{r.position}
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-border">
+            <th className="text-left pb-2.5 pr-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30">
+              Prompt
+            </th>
+            <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 hidden sm:table-cell">
+              Position
+            </th>
+            <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30">
+              Visibility
+            </th>
+            <th className="text-right pb-2.5 pl-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30">
+              Readiness
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {results.map((r, i) => (
+            <Fragment key={i}>
+              <tr className="border-b border-border hover:bg-muted/20 transition-colors">
+                <td className="py-3 pr-4">
+                  <p className="text-[12px] font-medium text-foreground leading-snug">
+                    &ldquo;{r.prompt}&rdquo;
+                  </p>
+                </td>
+                <td className="py-3 px-4 text-right hidden sm:table-cell">
+                  <span className="text-[12px] font-bold tabular-nums text-foreground/40">
+                    {r.position !== null ? `#${r.position}` : "—"}
                   </span>
-                )}
-                <Pill label={VISIBILITY_LABELS[r.visibility]} className={VISIBILITY_STYLES[r.visibility]} />
-              </div>
-            </div>
-
-            {/* Readiness bar */}
-            <div>
-              <p className="text-[10px] font-semibold text-muted-foreground/35 uppercase tracking-widest mb-1.5">
-                Readiness score
-              </p>
-              <ReadinessBar score={r.readinessScore} />
-            </div>
-
-            {/* Weakness + improvement */}
-            <div className="grid grid-cols-2 gap-3 border-t border-border pt-3">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-rose-500/60 mb-1">
-                  Current weakness
-                </p>
-                <p className="text-[11px] leading-snug text-foreground/50">{r.weakness}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-600/70 dark:text-emerald-400/70 mb-1">
-                  Suggested improvement
-                </p>
-                <p className="text-[11px] leading-snug text-foreground/60">{r.suggestedImprovement}</p>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+                </td>
+                <td className="py-3 px-4 text-right">
+                  <Pill label={VISIBILITY_LABELS[r.visibility]} className={VISIBILITY_STYLES[r.visibility]} />
+                </td>
+                <td className="py-3 pl-4">
+                  <div className="flex items-center gap-2 justify-end">
+                    <div className="w-16 h-1.5 rounded-full bg-foreground/[0.06] overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${r.readinessScore >= 70 ? "bg-emerald-500" : r.readinessScore >= 45 ? "bg-amber-500" : "bg-rose-500"}`}
+                        style={{ width: `${r.readinessScore}%` }}
+                      />
+                    </div>
+                    <span className="text-[11px] font-bold tabular-nums text-foreground/45 w-6 text-right">
+                      {r.readinessScore}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+              <tr className="border-b border-border">
+                <td colSpan={4} className="pb-3.5 pt-0 pr-4">
+                  <div className="grid grid-cols-2 gap-6 pt-0.5">
+                    <div>
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-rose-500/55 mb-1">
+                        Weakness
+                      </p>
+                      <p className="text-[11px] leading-snug text-foreground/45">{r.weakness}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-600/65 dark:text-emerald-400/65 mb-1">
+                        Improvement
+                      </p>
+                      <p className="text-[11px] leading-snug text-foreground/55">{r.suggestedImprovement}</p>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
     </section>
   )
 }
@@ -705,24 +697,21 @@ function NextActionsSection({ actions }: { actions: NextAction[] }) {
         label="Next actions"
         sublabel="Three prioritised steps — focus here first"
       />
-      <div className="card-cavro rounded-md divide-y divide-border overflow-hidden">
+      <div className="divide-y divide-border">
         {actions.map((a, i) => (
-          <div key={i} className="flex items-start gap-4 px-5 py-4">
-            {/* Number */}
-            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border mt-0.5">
-              <span className="text-[9px] font-bold text-foreground/35">{i + 1}</span>
-            </div>
-            {/* Content */}
+          <div key={i} className="flex items-start gap-4 py-4">
+            <span className="text-[11px] font-bold text-foreground/20 tabular-nums w-4 shrink-0 mt-0.5">
+              {i + 1}
+            </span>
             <div className="flex-1 min-w-0">
-              <p className="text-[13px] font-medium text-foreground/80 leading-snug">
+              <p className="text-[13px] font-semibold text-foreground/80 leading-snug">
                 {a.action}
               </p>
-              <p className="text-[11px] text-muted-foreground/45 mt-0.5 leading-snug">
+              <p className="text-[11px] text-muted-foreground/40 mt-0.5 leading-snug">
                 {a.impact}
               </p>
             </div>
-            {/* Effort badge */}
-            <Pill label={a.effort} className={`mt-0.5 ${EFFORT_STYLES[a.effort]}`} />
+            <Pill label={a.effort} className={`mt-0.5 shrink-0 ${EFFORT_STYLES[a.effort]}`} />
           </div>
         ))}
       </div>
@@ -794,17 +783,22 @@ export default function AuditResultPage() {
     <div className="flex flex-col gap-8 w-full">
 
       {/* Nav row */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4 -mt-1">
         <Link
           href="/audits"
-          className="flex items-center gap-1.5 text-[12px] text-muted-foreground/50 hover:text-foreground transition-colors"
+          className="flex items-center gap-1.5 text-[11px] text-muted-foreground/35 hover:text-foreground transition-colors"
         >
-          <ArrowLeft size={13} />
+          <ArrowLeft size={12} />
           All audits
         </Link>
-        <span className="text-[11px] text-muted-foreground/30">
-          {formatDate(audit.createdAt)}
-        </span>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/audits/new"
+            className="btn-cavro-primary rounded-md px-3 text-[11px] font-semibold text-primary-foreground"
+          >
+            Run again
+          </Link>
+        </div>
       </div>
 
       {/* 1 — Hero */}
@@ -832,18 +826,18 @@ export default function AuditResultPage() {
       <NextActionsSection actions={audit.nextActions} />
 
       {/* Footer CTAs */}
-      <div className="flex items-center gap-2.5 pb-4">
-        <Link
-          href="/audits/new"
-          className="btn-cavro-primary rounded-md px-4 text-[13px] font-semibold text-primary-foreground"
-        >
-          Run another audit
-        </Link>
+      <div className="flex items-center gap-2.5 pb-4 pt-2 border-t border-border">
         <Link
           href="/recommendations"
-          className="btn-cavro-secondary rounded-md border px-4 text-[13px] font-medium text-foreground/70"
+          className="btn-cavro-primary rounded-md px-4 text-[12px] font-semibold text-primary-foreground"
         >
           View recommendations
+        </Link>
+        <Link
+          href="/audits"
+          className="text-[12px] text-muted-foreground/35 hover:text-foreground transition-colors"
+        >
+          All audits →
         </Link>
       </div>
 

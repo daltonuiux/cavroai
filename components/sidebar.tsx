@@ -13,16 +13,27 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-const nav = [
-  { label: "Overview",        href: "/overview",        icon: LayoutDashboard },
-  { label: "Audits",          href: "/audits",           icon: ClipboardList   },
-  { label: "Competitors",     href: "/competitors",      icon: Users2          },
-  { label: "Prompts",         href: "/prompts",          icon: MessageSquare   },
-  { label: "Recommendations", href: "/recommendations",  icon: Lightbulb       },
-]
-
-const bottomNav = [
-  { label: "Settings", href: "/settings", icon: Settings2 },
+const navSections = [
+  {
+    group: null,
+    items: [
+      { label: "Overview", href: "/overview", icon: LayoutDashboard },
+    ],
+  },
+  {
+    group: "Research",
+    items: [
+      { label: "Audits",      href: "/audits",      icon: ClipboardList },
+      { label: "Competitors", href: "/competitors",  icon: Users2        },
+      { label: "Prompts",     href: "/prompts",      icon: MessageSquare },
+    ],
+  },
+  {
+    group: "Improve",
+    items: [
+      { label: "Recommendations", href: "/recommendations", icon: Lightbulb },
+    ],
+  },
 ]
 
 function NavItem({
@@ -43,7 +54,7 @@ function NavItem({
         "group flex items-center gap-2.5 rounded-md px-3 py-[7px] text-[13px] leading-none transition-colors duration-75",
         active
           ? "font-semibold text-foreground"
-          : "font-medium text-foreground/55 hover:text-foreground/90",
+          : "font-medium text-foreground/50 hover:text-foreground/90",
       )}
       style={active ? { backgroundColor: "rgba(24, 24, 27, 0.06)" } : undefined}
     >
@@ -52,7 +63,7 @@ function NavItem({
           "size-[14px] shrink-0",
           active
             ? "text-foreground"
-            : "text-foreground/40 group-hover:text-foreground/60",
+            : "text-foreground/35 group-hover:text-foreground/55",
         )}
         strokeWidth={active ? 2.25 : 1.75}
       />
@@ -70,42 +81,50 @@ export function Sidebar() {
       {/* Logo */}
       <Link
         href="/overview"
-        className="flex h-12 items-center border-b border-sidebar-border px-4"
+        className="flex h-11 items-center border-b border-sidebar-border px-4"
       >
         <Image
           src="/logo.svg"
           alt="Cavro AI"
-          width={94}
-          height={17}
+          width={88}
+          height={16}
           priority
           className="dark:invert"
         />
       </Link>
 
       {/* Main nav */}
-      <nav className="flex flex-1 flex-col gap-px overflow-y-auto px-2 py-2.5">
-        {nav.map(({ label, href, icon }) => (
-          <NavItem
-            key={href}
-            href={href}
-            label={label}
-            icon={icon}
-            active={pathname === href || pathname.startsWith(href + "/")}
-          />
+      <nav className="flex flex-1 flex-col overflow-y-auto px-2 py-3 gap-4">
+        {navSections.map(({ group, items }) => (
+          <div key={group ?? "__main"}>
+            {group && (
+              <p className="px-3 pb-1.5 text-[9px] font-bold uppercase tracking-widest text-foreground/25">
+                {group}
+              </p>
+            )}
+            <div className="flex flex-col gap-px">
+              {items.map(({ label, href, icon }) => (
+                <NavItem
+                  key={href}
+                  href={href}
+                  label={label}
+                  icon={icon}
+                  active={pathname === href || pathname.startsWith(href + "/")}
+                />
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 
       {/* Bottom nav */}
       <div className="border-t border-sidebar-border px-2 py-2.5">
-        {bottomNav.map(({ label, href, icon }) => (
-          <NavItem
-            key={href}
-            href={href}
-            label={label}
-            icon={icon}
-            active={pathname === href}
-          />
-        ))}
+        <NavItem
+          href="/settings"
+          label="Settings"
+          icon={Settings2}
+          active={pathname === "/settings"}
+        />
       </div>
 
     </aside>

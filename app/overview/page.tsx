@@ -14,7 +14,7 @@ const MOCK_AUDIT = {
   summary: "AI assistants recognise your brand but rarely recommend you first. Your positioning is too generic to win competitive prompts.",
 }
 
-const MOCK_PROMPTS_TRACKED   = 7
+const MOCK_PROMPTS_TRACKED     = 7
 const MOCK_COMPETITORS_TRACKED = 4
 
 const MOCK_RISKS = [
@@ -28,14 +28,14 @@ const MOCK_RISKS = [
   {
     id:       "r-2",
     title:    "No social proof AI can cite",
-    detail:   "Case studies aren't indexed. Competitors are cited 3x more in trust-driven prompts.",
+    detail:   "Case studies are not indexed. Competitors are cited 3x more in trust-driven prompts.",
     severity: "high" as const,
     action:   "Publish /customers page",
   },
   {
     id:       "r-3",
     title:    "Pricing invisible to AI",
-    detail:   "Buyers asking about cost get \"pricing unavailable\" — then a competitor recommendation.",
+    detail:   "Buyers asking about cost get no answer, then a competitor recommendation.",
     severity: "medium" as const,
     action:   "Add pricing FAQ",
   },
@@ -105,10 +105,14 @@ const MOCK_RECENT_AUDITS = [
 // Helpers
 // ---------------------------------------------------------------------------
 
+type Severity   = "high" | "medium" | "low"
+type Visibility = "high" | "medium" | "low" | "none"
+type Effort     = "quick" | "medium" | "large"
+
 function scoreColour(score: number) {
-  if (score >= 75) return { text: "text-emerald-600 dark:text-emerald-400", ring: "stroke-emerald-500", bg: "bg-emerald-500/10" }
-  if (score >= 50) return { text: "text-amber-600 dark:text-amber-400",    ring: "stroke-amber-500",   bg: "bg-amber-500/10"   }
-  return               { text: "text-rose-600 dark:text-rose-400",          ring: "stroke-rose-500",    bg: "bg-rose-500/10"    }
+  if (score >= 75) return { text: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10" }
+  if (score >= 50) return { text: "text-amber-600 dark:text-amber-400",    bg: "bg-amber-500/10"   }
+  return               { text: "text-rose-600 dark:text-rose-400",          bg: "bg-rose-500/10"    }
 }
 
 function scoreLabel(score: number) {
@@ -116,10 +120,6 @@ function scoreLabel(score: number) {
   if (score >= 50) return "Developing"
   return "Weak"
 }
-
-type Severity   = "high" | "medium" | "low"
-type Visibility = "high" | "medium" | "low" | "none"
-type Effort     = "quick" | "medium" | "large"
 
 const SEVERITY_DOT: Record<Severity, string> = {
   high:   "bg-rose-500",
@@ -154,271 +154,304 @@ const EFFORT_BADGE: Record<Effort, string> = {
 }
 
 // ---------------------------------------------------------------------------
-// Score ring
-// ---------------------------------------------------------------------------
-
-function ScoreRing({ score, size = 80 }: { score: number; size?: number }) {
-  const c    = scoreColour(score)
-  const r    = (size - 12) / 2
-  const circ = 2 * Math.PI * r
-  const cx   = size / 2
-  return (
-    <div className="relative flex items-center justify-center shrink-0">
-      <svg width={size} height={size} className="-rotate-90">
-        <circle
-          cx={cx} cy={cx} r={r}
-          fill="none" stroke="currentColor"
-          strokeWidth="5"
-          className="text-foreground/[0.06]"
-        />
-        <circle
-          cx={cx} cy={cx} r={r}
-          fill="none"
-          strokeWidth="5"
-          strokeLinecap="round"
-          className={c.ring}
-          strokeDasharray={circ}
-          strokeDashoffset={circ * (1 - score / 100)}
-        />
-      </svg>
-      <div className="absolute flex flex-col items-center leading-none">
-        <span className={`text-[19px] font-bold tabular-nums ${c.text}`}>{score}</span>
-        <span className="text-[8px] text-muted-foreground/35 mt-0.5 uppercase tracking-wide">/ 100</span>
-      </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
 export default function OverviewPage() {
-  const c = scoreColour(MOCK_SCORE)
+  const c        = scoreColour(MOCK_SCORE)
+  const highRisks = MOCK_RISKS.filter((r) => r.severity === "high").length
 
   return (
-    <div className="flex flex-col gap-5 w-full">
+    <div className="flex flex-col w-full">
 
-      {/* ── 1. Hero ─────────────────────────────────────────────────────────── */}
-      <div className="card-cavro rounded-md p-5">
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-5 items-center">
+      {/* ── Hero zone (bare — no card) ──────────────────────────────────── */}
+      <div className="flex items-start justify-between gap-8 pb-7 border-b border-border">
 
-          {/* Left: status + summary + meta + CTA */}
-          <div className="flex flex-col gap-3 min-w-0">
+        <div className="flex items-start gap-5 min-w-0">
+          {/* Primary score */}
+          <div className="shrink-0">
+            <p className={`text-[56px] font-bold leading-none tabular-nums tracking-tight ${c.text}`}>
+              {MOCK_SCORE}
+            </p>
+            <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 mt-1.5">
+              / 100
+            </p>
+          </div>
 
-            {/* Status + label */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${c.bg} ${c.text}`}>
+          {/* Status + summary */}
+          <div className="pt-2 min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5 mb-2">
+              <span className={`text-[10px] font-bold uppercase tracking-widest ${c.text}`}>
                 {scoreLabel(MOCK_SCORE)}
               </span>
-              <span className="text-[12px] text-muted-foreground/45">
+              <span className="text-foreground/15">·</span>
+              <span className="text-[11px] text-muted-foreground/40">
                 AI Recommendation Score
               </span>
-            </div>
-
-            {/* Summary */}
-            <p className="text-[13px] leading-relaxed text-foreground/70 max-w-[60ch]">
-              {MOCK_AUDIT.summary}
-            </p>
-
-            {/* Metadata */}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground/40">
-              <span>Last audit: {MOCK_AUDIT.date}</span>
               <span className="text-foreground/15">·</span>
-              <span>{MOCK_PROMPTS_TRACKED} prompts</span>
-              <span className="text-foreground/15">·</span>
-              <span>{MOCK_COMPETITORS_TRACKED} competitors</span>
-              <span className="text-foreground/15">·</span>
-              <span className={`font-semibold ${c.text}`}>
-                {MOCK_RISKS.filter(r => r.severity === "high").length} high-priority gaps
+              <span className="text-[11px] text-muted-foreground/30">
+                {MOCK_AUDIT.date}
               </span>
             </div>
-
-            {/* CTA */}
-            <div className="flex items-center gap-2.5">
-              <Link
-                href="/audits/new"
-                className="btn-cavro-primary rounded-md px-3.5 text-[12px] font-semibold text-primary-foreground"
-              >
-                Run new audit
-              </Link>
-              <Link
-                href="/audits"
-                className="text-[12px] text-muted-foreground/45 hover:text-foreground transition-colors"
-              >
-                View all audits →
-              </Link>
-            </div>
+            <p className="text-[13px] leading-relaxed text-foreground/60 max-w-[58ch]">
+              {MOCK_AUDIT.summary}
+            </p>
           </div>
-
-          {/* Right: score ring */}
-          <div className="flex sm:justify-end">
-            <ScoreRing score={MOCK_SCORE} size={84} />
-          </div>
-
         </div>
-      </div>
 
-      {/* ── 2. Main grid: risks + quick wins ─────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-        {/* LEFT: Recommendation risks */}
-        <section className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <h2 className="text-[13px] font-semibold text-foreground">Recommendation risks</h2>
-            <Link
-              href="/recommendations"
-              className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors"
-            >
-              All →
-            </Link>
-          </div>
-
-          <div className="card-cavro rounded-md divide-y divide-border/60 overflow-hidden">
-            {MOCK_RISKS.map((risk) => (
-              <div key={risk.id} className="flex items-start gap-3 px-4 py-3">
-                {/* Severity dot */}
-                <div className={`mt-[5px] h-1.5 w-1.5 rounded-full shrink-0 ${SEVERITY_DOT[risk.severity]}`} />
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2 mb-0.5">
-                    <p className="text-[12px] font-semibold text-foreground leading-snug">
-                      {risk.title}
-                    </p>
-                    <span className={`shrink-0 rounded px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide ${SEVERITY_BADGE[risk.severity]}`}>
-                      {risk.severity}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground/55 leading-snug">
-                    {risk.detail}
-                  </p>
-                  <p className="text-[11px] font-medium text-foreground/50 mt-1.5">
-                    Fix: {risk.action}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* RIGHT: Quick wins */}
-        <section className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <h2 className="text-[13px] font-semibold text-foreground">Quick wins</h2>
-            <Link
-              href="/recommendations"
-              className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors"
-            >
-              All →
-            </Link>
-          </div>
-
-          <div className="card-cavro rounded-md divide-y divide-border/60 overflow-hidden">
-            {MOCK_QUICK_WINS.map((win, i) => (
-              <div key={win.id} className="flex items-center gap-3 px-4 py-3">
-                {/* Number */}
-                <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border/70">
-                  <span className="text-[8px] font-bold text-foreground/30">{i + 1}</span>
-                </div>
-                {/* Action */}
-                <p className="flex-1 text-[12px] font-medium text-foreground/75 leading-snug min-w-0">
-                  {win.action}
-                </p>
-                {/* Effort */}
-                <span className={`shrink-0 rounded px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide ${EFFORT_BADGE[win.effort]}`}>
-                  {win.effort}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-      </div>
-
-      {/* ── 3. Prompt readiness ───────────────────────────────────────────────── */}
-      <section className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <h2 className="text-[13px] font-semibold text-foreground">Prompt readiness</h2>
+        {/* Actions */}
+        <div className="flex items-center gap-2.5 shrink-0 pt-2">
           <Link
-            href="/prompts"
-            className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors"
+            href="/audits/new"
+            className="btn-cavro-primary rounded-md px-3.5 text-[12px] font-semibold text-primary-foreground"
           >
-            All prompts →
+            Run new audit
           </Link>
-        </div>
-
-        <div className="card-cavro rounded-md overflow-hidden divide-y divide-border/60">
-          {MOCK_PROMPTS.map((p) => {
-            const vc = scoreColour(p.score)
-            const barColor =
-              p.score >= 70 ? "bg-emerald-500" :
-              p.score >= 45 ? "bg-amber-400" :
-              "bg-rose-500"
-            return (
-              <div
-                key={p.id}
-                className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 transition-colors"
-              >
-                {/* Prompt text */}
-                <p className="flex-1 text-[12px] text-foreground/65 truncate min-w-0">
-                  &ldquo;{p.text}&rdquo;
-                </p>
-                {/* Position */}
-                <span className={`shrink-0 text-[11px] font-semibold tabular-nums ${vc.text}`}>
-                  #{p.position}
-                </span>
-                {/* Visibility badge */}
-                <span className={`shrink-0 hidden sm:inline rounded px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide ${VISIBILITY_BADGE[p.visibility]}`}>
-                  {VISIBILITY_LABEL[p.visibility]}
-                </span>
-                {/* Progress bar */}
-                <div className="shrink-0 w-14 h-1 rounded-full bg-foreground/[0.07] overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${barColor}`}
-                    style={{ width: `${p.score}%` }}
-                  />
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-      {/* ── 4. Recent audits ─────────────────────────────────────────────────── */}
-      <section className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <h2 className="text-[13px] font-semibold text-foreground">Recent audits</h2>
           <Link
             href="/audits"
-            className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors"
+            className="text-[12px] text-muted-foreground/35 hover:text-foreground transition-colors"
           >
-            All audits →
+            History →
           </Link>
         </div>
+      </div>
 
-        <div className="card-cavro rounded-md overflow-hidden divide-y divide-border/60">
-          {MOCK_RECENT_AUDITS.map((audit) => {
-            const ac = scoreColour(audit.score)
-            return (
+      {/* ── Stat strip ──────────────────────────────────────────────────── */}
+      <div className="flex items-stretch border-b border-border">
+        {[
+          { label: "Prompts tracked",    value: String(MOCK_PROMPTS_TRACKED),     colour: ""                                    },
+          { label: "Competitors",        value: String(MOCK_COMPETITORS_TRACKED), colour: ""                                    },
+          { label: "High-priority gaps", value: String(highRisks),                colour: "text-rose-600 dark:text-rose-400"    },
+          { label: "AI assistants",      value: "7",                              colour: ""                                    },
+        ].map((stat, i) => (
+          <div
+            key={stat.label}
+            className={`flex flex-col gap-1 py-4 px-6 ${i > 0 ? "border-l border-border" : ""}`}
+          >
+            <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 whitespace-nowrap">
+              {stat.label}
+            </p>
+            <p className={`text-[22px] font-bold leading-none tabular-nums ${stat.colour || "text-foreground"}`}>
+              {stat.value}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Main workspace ──────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] xl:grid-cols-[1fr_300px] items-start">
+
+        {/* Primary column */}
+        <div className="py-8 lg:pr-10 flex flex-col gap-10">
+
+          {/* Recommendation risks */}
+          <section>
+            <div className="flex items-center justify-between mb-3.5">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/35">
+                Recommendation risks
+              </p>
               <Link
-                key={audit.id}
-                href="/audits"
-                className="flex items-center gap-4 px-4 py-2.5 hover:bg-muted/30 transition-colors"
+                href="/recommendations"
+                className="text-[11px] text-muted-foreground/30 hover:text-foreground transition-colors"
               >
-                <span className={`shrink-0 text-[13px] font-bold tabular-nums w-7 ${ac.text}`}>
-                  {audit.score}
-                </span>
-                <span className="flex-1 text-[12px] text-foreground/65 truncate">
-                  {audit.label}
-                </span>
-                <span className="shrink-0 text-[11px] text-muted-foreground/35">
-                  {audit.date}
-                </span>
+                All →
               </Link>
-            )
-          })}
+            </div>
+            <div className="divide-y divide-border">
+              {MOCK_RISKS.map((risk) => (
+                <div key={risk.id} className="flex items-start gap-3 py-3.5">
+                  <div className={`mt-[6px] h-1.5 w-1.5 rounded-full shrink-0 ${SEVERITY_DOT[risk.severity]}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-3 mb-0.5">
+                      <p className="text-[12px] font-semibold text-foreground leading-snug">
+                        {risk.title}
+                      </p>
+                      <span className={`shrink-0 rounded px-1.5 py-px text-[9px] font-bold uppercase tracking-wide ${SEVERITY_BADGE[risk.severity]}`}>
+                        {risk.severity}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground/45 leading-snug">{risk.detail}</p>
+                    <p className="text-[11px] font-medium text-foreground/35 mt-1.5">
+                      Fix: {risk.action}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Quick wins */}
+          <section>
+            <div className="flex items-center justify-between mb-3.5">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/35">
+                Quick wins
+              </p>
+              <Link
+                href="/recommendations"
+                className="text-[11px] text-muted-foreground/30 hover:text-foreground transition-colors"
+              >
+                All →
+              </Link>
+            </div>
+            <div className="divide-y divide-border">
+              {MOCK_QUICK_WINS.map((win, i) => (
+                <div key={win.id} className="flex items-center gap-4 py-3">
+                  <span className="text-[11px] font-bold text-foreground/18 tabular-nums w-3.5 shrink-0">
+                    {i + 1}
+                  </span>
+                  <p className="flex-1 text-[12px] text-foreground/65 leading-snug">
+                    {win.action}
+                  </p>
+                  <span className={`shrink-0 rounded px-1.5 py-px text-[9px] font-bold uppercase tracking-wide ${EFFORT_BADGE[win.effort]}`}>
+                    {win.effort}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Prompt readiness — table */}
+          <section>
+            <div className="flex items-center justify-between mb-3.5">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/35">
+                Prompt readiness
+              </p>
+              <Link
+                href="/prompts"
+                className="text-[11px] text-muted-foreground/30 hover:text-foreground transition-colors"
+              >
+                All prompts →
+              </Link>
+            </div>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left pb-2.5 pr-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30">
+                    Prompt
+                  </th>
+                  <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30">
+                    Position
+                  </th>
+                  <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 hidden sm:table-cell">
+                    Visibility
+                  </th>
+                  <th className="text-right pb-2.5 pl-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30">
+                    Score
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {MOCK_PROMPTS.map((p) => {
+                  const vc = scoreColour(p.score)
+                  const barColor =
+                    p.score >= 70 ? "bg-emerald-500" :
+                    p.score >= 45 ? "bg-amber-400" :
+                    "bg-rose-500"
+                  return (
+                    <tr key={p.id} className="border-b border-border hover:bg-muted/20 transition-colors">
+                      <td className="py-2.5 pr-4">
+                        <p className="text-[12px] text-foreground/60 truncate max-w-[240px] xl:max-w-none">
+                          &ldquo;{p.text}&rdquo;
+                        </p>
+                      </td>
+                      <td className="py-2.5 px-4 text-right">
+                        <span className={`text-[12px] font-bold tabular-nums ${vc.text}`}>
+                          #{p.position}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-4 text-right hidden sm:table-cell">
+                        <span className={`rounded px-1.5 py-px text-[9px] font-bold uppercase tracking-wide ${VISIBILITY_BADGE[p.visibility]}`}>
+                          {VISIBILITY_LABEL[p.visibility]}
+                        </span>
+                      </td>
+                      <td className="py-2.5 pl-4">
+                        <div className="flex items-center gap-2 justify-end">
+                          <div className="w-12 h-1 rounded-full bg-foreground/[0.07] overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${barColor}`}
+                              style={{ width: `${p.score}%` }}
+                            />
+                          </div>
+                          <span className={`text-[11px] font-bold tabular-nums w-6 text-right ${vc.text}`}>
+                            {p.score}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </section>
+
         </div>
-      </section>
+
+        {/* Right rail */}
+        <div className="border-t border-border lg:border-t-0 lg:border-l border-border pt-8 lg:pt-0 lg:pl-10 py-8 flex flex-col gap-8">
+
+          {/* Audit history */}
+          <section>
+            <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/35 mb-3.5">
+              Audit history
+            </p>
+            <div className="divide-y divide-border">
+              {MOCK_RECENT_AUDITS.map((audit) => {
+                const ac = scoreColour(audit.score)
+                return (
+                  <Link
+                    key={audit.id}
+                    href="/audits"
+                    className="flex items-center justify-between py-3.5 hover:bg-muted/20 -mx-2 px-2 rounded-sm transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-[12px] font-medium text-foreground/70 truncate">
+                        {audit.label}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground/30 mt-0.5">{audit.date}</p>
+                    </div>
+                    <span className={`shrink-0 text-[22px] font-bold tabular-nums ml-4 ${ac.text}`}>
+                      {audit.score}
+                    </span>
+                  </Link>
+                )
+              })}
+            </div>
+          </section>
+
+          {/* Score trend */}
+          <section>
+            <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/35 mb-3">
+              Score trend
+            </p>
+            <div className="flex items-end gap-1.5 h-8">
+              {MOCK_RECENT_AUDITS.slice().reverse().map((a) => {
+                const h   = Math.max((a.score / 100) * 32, 4)
+                const col = a.score >= 75
+                  ? "bg-emerald-400"
+                  : a.score >= 50
+                  ? "bg-amber-400"
+                  : "bg-rose-400"
+                return (
+                  <div
+                    key={a.id}
+                    title={`${a.score} — ${a.date}`}
+                    className={`flex-1 rounded-sm opacity-50 ${col}`}
+                    style={{ height: `${h}px` }}
+                  />
+                )
+              })}
+            </div>
+            <div className="flex justify-between mt-1.5">
+              {MOCK_RECENT_AUDITS.slice().reverse().map((a) => (
+                <p key={a.id} className="text-[9px] text-muted-foreground/25 tabular-nums">
+                  {a.score}
+                </p>
+              ))}
+            </div>
+          </section>
+
+        </div>
+      </div>
 
     </div>
   )

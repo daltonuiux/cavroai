@@ -19,7 +19,8 @@
       "Bash(mkdir -p '/Users/daltonuiux/dev/ai-intelligence-layer/app/\\(app\\)/clients/[id]')",
       "Bash(mv '/Users/daltonuiux/dev/ai-intelligence-layer/app/clients/[id]/page.tsx' '/Users/daltonuiux/dev/ai-intelligence-layer/app/\\(app\\)/clients/[id]/page.tsx')",
       "Bash(rm -rf '/Users/daltonuiux/dev/ai-intelligence-layer/app/clients/[id]')",
-      "Bash(grep -v \"^$\")"
+      "Bash(grep -v \"^$\")",
+      "Bash(npx next *)"
     ]
   }
 }
