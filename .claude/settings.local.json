@@ -20,7 +20,9 @@
       "Bash(mv '/Users/daltonuiux/dev/ai-intelligence-layer/app/clients/[id]/page.tsx' '/Users/daltonuiux/dev/ai-intelligence-layer/app/\\(app\\)/clients/[id]/page.tsx')",
       "Bash(rm -rf '/Users/daltonuiux/dev/ai-intelligence-layer/app/clients/[id]')",
       "Bash(grep -v \"^$\")",
-      "Bash(npx next *)"
+      "Bash(npx next *)",
+      "Bash(xargs perl -i -pe ' *)",
+      "Bash(xargs perl -i -pe 's/text-foreground\\\\/55\\(?=[^0-9]\\)/text-zinc-500/g')"
     ]
   }
 }

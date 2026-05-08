@@ -72,7 +72,7 @@ function scoreColour(score: number) {
 function deltaColour(delta: number) {
   if (delta > 0)  return "text-emerald-600 dark:text-emerald-400"
   if (delta < 0)  return "text-rose-600 dark:text-rose-400"
-  return               "text-foreground/35"
+  return               "text-zinc-500"
 }
 
 // ---------------------------------------------------------------------------
@@ -91,13 +91,13 @@ export default function CompetitorsPage() {
           <h1 className="text-[18px] font-bold tracking-[-0.02em] text-foreground">
             Competitors
           </h1>
-          <p className="mt-0.5 text-[12px] text-muted-foreground/50">
+          <p className="mt-0.5 text-[12px] text-zinc-500">
             How AI assistants compare you against tracked competitors
           </p>
         </div>
         <button
           disabled
-          className="shrink-0 btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-foreground/50 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="shrink-0 btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Add competitor
         </button>
@@ -106,7 +106,7 @@ export default function CompetitorsPage() {
       {/* Your position strip */}
       <div className="flex items-center gap-6 py-4 border-b border-border">
         <div>
-          <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 mb-1">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-1">
             Your AI score
           </p>
           <p className={`text-[24px] font-bold tabular-nums leading-none ${yourColour}`}>
@@ -114,7 +114,7 @@ export default function CompetitorsPage() {
           </p>
         </div>
         <div className="h-8 w-px bg-border" />
-        <p className="text-[12px] text-foreground/50">
+        <p className="text-[12px] text-zinc-500">
           Developing — ranked below 2 of 4 tracked competitors
         </p>
       </div>
@@ -123,22 +123,22 @@ export default function CompetitorsPage() {
       <div>
         {/* Table header — desktop */}
         <div className="hidden lg:grid lg:grid-cols-[1fr_72px_72px_56px_56px_64px] gap-5 py-3 border-b border-border">
-          <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
             Competitor
           </p>
-          <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 text-right">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 text-right">
             AI score
           </p>
-          <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 text-right">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 text-right">
             vs you
           </p>
-          <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 text-right">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 text-right">
             Wins
           </p>
-          <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 text-right">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 text-right">
             Ties
           </p>
-          <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 text-right">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 text-right">
             Your wins
           </p>
         </div>
@@ -155,19 +155,19 @@ export default function CompetitorsPage() {
                 {/* Identity */}
                 <div className="flex items-start gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-foreground/[0.06] mt-0.5">
-                    <span className="text-[12px] font-bold text-foreground/40">{c.name[0]}</span>
+                    <span className="text-[12px] font-bold text-zinc-500">{c.name[0]}</span>
                   </div>
                   <div className="min-w-0">
                     <p className="text-[13px] font-semibold text-foreground tracking-[-0.01em]">
                       {c.name}
                     </p>
-                    <p className="text-[11px] text-muted-foreground/35">{c.domain}</p>
+                    <p className="text-[11px] text-zinc-400">{c.domain}</p>
                   </div>
                 </div>
 
                 {/* Score */}
                 <div className="flex items-center gap-2 lg:block lg:text-right">
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 lg:hidden">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 lg:hidden">
                     AI score:
                   </p>
                   <p className={`text-[17px] font-bold tabular-nums leading-none ${scoreColour(c.score)}`}>
@@ -177,7 +177,7 @@ export default function CompetitorsPage() {
 
                 {/* Delta */}
                 <div className="flex items-center gap-2 lg:block lg:text-right">
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 lg:hidden">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 lg:hidden">
                     vs you:
                   </p>
                   <p className={`text-[13px] font-bold tabular-nums ${deltaColour(delta)}`}>
@@ -187,7 +187,7 @@ export default function CompetitorsPage() {
 
                 {/* Wins */}
                 <div className="flex items-center gap-2 lg:block lg:text-right">
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 lg:hidden">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 lg:hidden">
                     Their wins:
                   </p>
                   <p className="text-[13px] font-bold tabular-nums text-rose-600 dark:text-rose-400">
@@ -197,17 +197,17 @@ export default function CompetitorsPage() {
 
                 {/* Ties */}
                 <div className="flex items-center gap-2 lg:block lg:text-right">
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 lg:hidden">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 lg:hidden">
                     Ties:
                   </p>
-                  <p className="text-[13px] font-bold tabular-nums text-foreground/35">
+                  <p className="text-[13px] font-bold tabular-nums text-zinc-500">
                     {c.ties}
                   </p>
                 </div>
 
                 {/* Your wins */}
                 <div className="flex items-center gap-2 lg:block lg:text-right">
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 lg:hidden">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 lg:hidden">
                     Your wins:
                   </p>
                   <p className="text-[13px] font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
@@ -219,14 +219,14 @@ export default function CompetitorsPage() {
 
               {/* Advantage + tracked prompts */}
               <div className="mt-2.5 pl-0 lg:pl-11 flex flex-col gap-2">
-                <p className="text-[11px] text-foreground/40 leading-snug">
+                <p className="text-[11px] text-zinc-500 leading-snug">
                   {c.advantage}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {c.prompts.map((p) => (
                     <span
                       key={p}
-                      className="rounded bg-foreground/[0.04] px-2 py-px text-[10px] font-medium text-foreground/35"
+                      className="rounded bg-foreground/[0.04] px-2 py-px text-[10px] font-medium text-zinc-500"
                     >
                       {p}
                     </span>
@@ -240,13 +240,13 @@ export default function CompetitorsPage() {
 
       {/* Empty CTA */}
       <div className="mt-6 rounded-md border border-dashed border-border px-6 py-8 flex flex-col items-center gap-3 text-center">
-        <p className="text-[13px] font-medium text-foreground/55">Track another competitor</p>
-        <p className="text-[12px] text-muted-foreground/40 max-w-xs leading-relaxed">
+        <p className="text-[13px] font-medium text-zinc-500">Track another competitor</p>
+        <p className="text-[12px] text-zinc-400 max-w-xs leading-relaxed">
           Add up to 10 competitors. Cavro AI will include them in every audit run.
         </p>
         <button
           disabled
-          className="mt-1 btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-foreground/50 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="mt-1 btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Add competitor
         </button>

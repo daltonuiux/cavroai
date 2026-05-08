@@ -54,7 +54,7 @@ function NavItem({
         "group flex items-center gap-2.5 rounded-md px-3 py-[7px] text-[13px] leading-none transition-colors duration-75",
         active
           ? "font-semibold text-foreground"
-          : "font-medium text-foreground/50 hover:text-foreground/90",
+          : "font-medium text-zinc-500 hover:text-foreground/90",
       )}
       style={active ? { backgroundColor: "rgba(24, 24, 27, 0.06)" } : undefined}
     >
@@ -63,7 +63,7 @@ function NavItem({
           "size-[14px] shrink-0",
           active
             ? "text-foreground"
-            : "text-foreground/35 group-hover:text-foreground/55",
+            : "text-zinc-500 group-hover:text-foreground/55",
         )}
         strokeWidth={active ? 2.25 : 1.75}
       />
@@ -98,7 +98,7 @@ export function Sidebar() {
         {navSections.map(({ group, items }) => (
           <div key={group ?? "__main"}>
             {group && (
-              <p className="px-3 pb-1.5 text-[9px] font-bold uppercase tracking-widest text-foreground/25">
+              <p className="px-3 pb-1.5 text-[9px] font-bold uppercase tracking-widest text-zinc-400">
                 {group}
               </p>
             )}

@@ -99,11 +99,11 @@ export default function AuditsPage() {
                     <span className="text-[13px] font-semibold text-foreground tracking-[-0.01em]">
                       {audit.label}
                     </span>
-                    <span className="rounded bg-foreground/[0.05] px-1.5 py-px text-[10px] font-semibold text-foreground/50">
+                    <span className="rounded bg-foreground/[0.05] px-1.5 py-px text-[10px] font-semibold text-zinc-500">
                       {audit.status}
                     </span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground/40">{audit.date}</p>
+                  <p className="text-[11px] text-zinc-400">{audit.date}</p>
                 </div>
 
                 {/* Score */}
@@ -118,7 +118,7 @@ export default function AuditsPage() {
               </div>
 
               {/* Summary */}
-              <p className="text-[12px] leading-relaxed text-foreground/55">
+              <p className="text-[12px] leading-relaxed text-zinc-500">
                 {audit.summary}
               </p>
 
@@ -126,15 +126,15 @@ export default function AuditsPage() {
               <div className="flex items-center gap-5">
                 <span className="flex items-center gap-1.5 text-[11px]">
                   <span className="font-semibold text-foreground/70">{audit.prompts}</span>
-                  <span className="text-muted-foreground/40">prompts tested</span>
+                  <span className="text-zinc-400">prompts tested</span>
                 </span>
                 <span className="flex items-center gap-1.5 text-[11px]">
                   <span className="font-semibold text-rose-600 dark:text-rose-400">{audit.gaps}</span>
-                  <span className="text-muted-foreground/40">gaps found</span>
+                  <span className="text-zinc-400">gaps found</span>
                 </span>
                 <Link
                   href="/recommendations"
-                  className="ml-auto text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors"
+                  className="ml-auto text-[11px] text-zinc-400 hover:text-foreground transition-colors"
                 >
                   View recommendations →
                 </Link>

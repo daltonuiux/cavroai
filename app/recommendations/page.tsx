@@ -96,19 +96,19 @@ const MOCK_RECS = [
 const PRIORITY_STYLES: Record<Priority, string> = {
   high:   "bg-rose-500/10 text-rose-600 dark:text-rose-400",
   medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  low:    "bg-foreground/[0.04] text-foreground/40",
+  low:    "bg-foreground/[0.04] text-zinc-500",
 }
 
 const CATEGORY_STYLES: Record<Category, string> = {
   positioning: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
   trust:       "bg-sky-500/10 text-sky-600 dark:text-sky-400",
   content:     "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  technical:   "bg-foreground/[0.04] text-foreground/50",
+  technical:   "bg-foreground/[0.04] text-zinc-500",
   pricing:     "bg-amber-500/10 text-amber-600 dark:text-amber-400",
 }
 
 const STATUS_STYLES: Record<Status, string> = {
-  pending:     "bg-foreground/[0.04] text-foreground/40",
+  pending:     "bg-foreground/[0.04] text-zinc-500",
   "in-progress": "bg-sky-500/10 text-sky-600 dark:text-sky-400",
   done:        "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
 }
@@ -143,19 +143,19 @@ export default function RecommendationsPage() {
       <div className="flex items-center gap-6 card-cavro rounded-md px-4 py-3">
         <span className="flex items-center gap-1.5 text-[12px]">
           <span className="font-semibold text-foreground/70">{MOCK_RECS.length}</span>
-          <span className="text-muted-foreground/40">total</span>
+          <span className="text-zinc-400">total</span>
         </span>
         <span className="flex items-center gap-1.5 text-[12px]">
           <span className="font-semibold text-emerald-600 dark:text-emerald-400">{done}</span>
-          <span className="text-muted-foreground/40">done</span>
+          <span className="text-zinc-400">done</span>
         </span>
         <span className="flex items-center gap-1.5 text-[12px]">
           <span className="font-semibold text-sky-600 dark:text-sky-400">{inProg}</span>
-          <span className="text-muted-foreground/40">in progress</span>
+          <span className="text-zinc-400">in progress</span>
         </span>
         <span className="flex items-center gap-1.5 text-[12px]">
-          <span className="font-semibold text-foreground/50">{pending}</span>
-          <span className="text-muted-foreground/40">pending</span>
+          <span className="font-semibold text-zinc-500">{pending}</span>
+          <span className="text-zinc-400">pending</span>
         </span>
 
         {/* Progress bar */}
@@ -165,7 +165,7 @@ export default function RecommendationsPage() {
             style={{ width: `${(done / MOCK_RECS.length) * 100}%` }}
           />
         </div>
-        <span className="text-[11px] text-muted-foreground/40 tabular-nums">
+        <span className="text-[11px] text-zinc-400 tabular-nums">
           {Math.round((done / MOCK_RECS.length) * 100)}%
         </span>
       </div>
@@ -188,7 +188,7 @@ export default function RecommendationsPage() {
             </div>
 
             {/* Detail */}
-            <p className="text-[12px] leading-relaxed text-foreground/55">
+            <p className="text-[12px] leading-relaxed text-zinc-500">
               {rec.detail}
             </p>
 
@@ -197,7 +197,7 @@ export default function RecommendationsPage() {
               <div className="flex flex-col gap-1.5 card-cavro rounded-md px-4 py-3">
                 <div className="flex items-start gap-2">
                   <span className="shrink-0 text-[10px] font-semibold text-rose-500/60 mt-px w-10">Before</span>
-                  <p className="text-[11px] text-foreground/45 leading-snug">{rec.snippet.before}</p>
+                  <p className="text-[11px] text-zinc-500 leading-snug">{rec.snippet.before}</p>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="shrink-0 text-[10px] font-semibold text-emerald-500/70 mt-px w-10">After</span>

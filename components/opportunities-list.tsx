@@ -54,7 +54,7 @@ function CopyButton({ text }: { text: string }) {
           setTimeout(() => setCopied(false), 2000)
         })
       }}
-      className="text-[11px] font-medium text-muted-foreground/50 transition-colors hover:text-foreground"
+      className="text-[11px] font-medium text-zinc-500 transition-colors hover:text-foreground"
     >
       {copied ? "Copied" : "Copy"}
     </button>
@@ -141,15 +141,15 @@ function ProspectCard({ row }: { row: ProspectOpportunityRow }) {
 
           {/* Relationship chain */}
           <div className="flex items-center gap-1 flex-wrap mb-1">
-            <span className="text-[11px] text-muted-foreground/40">You</span>
-            <span className="text-[10px] text-muted-foreground/25">→</span>
+            <span className="text-[11px] text-zinc-400">You</span>
+            <span className="text-[10px] text-zinc-300">→</span>
             <Link
               href={`/clients/${row.sourceClientId}`}
               className="text-[11px] font-medium text-foreground/60 hover:text-foreground transition-colors"
             >
               {row.sourceClientName}
             </Link>
-            <span className="text-[10px] text-muted-foreground/25">→</span>
+            <span className="text-[10px] text-zinc-300">→</span>
             <span className="text-[11px] font-semibold text-foreground">{row.name}</span>
           </div>
 
@@ -167,7 +167,7 @@ function ProspectCard({ row }: { row: ProspectOpportunityRow }) {
             </button>
           )}
           {state === "loading" && (
-            <span className="text-[11px] text-muted-foreground/50">Adding…</span>
+            <span className="text-[11px] text-zinc-500">Adding…</span>
           )}
           {state === "done" && (
             <span className="rounded-md px-3 py-1.5 text-[11px] font-semibold bg-foreground/[0.04] text-foreground/40">
@@ -195,7 +195,7 @@ function ProspectCard({ row }: { row: ProspectOpportunityRow }) {
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-            className="flex-1 h-7 rounded-md border border-border bg-background px-2.5 text-[12px] text-foreground placeholder:text-muted-foreground/40 outline-none focus:border-foreground/30 focus:ring-1 focus:ring-foreground/10"
+            className="flex-1 h-7 rounded-md border border-border bg-background px-2.5 text-[12px] text-foreground placeholder:text-zinc-400 outline-none focus:border-foreground/30 focus:ring-1 focus:ring-foreground/10"
           />
           <button
             onClick={handleAdd}
@@ -205,7 +205,7 @@ function ProspectCard({ row }: { row: ProspectOpportunityRow }) {
           </button>
           <button
             onClick={() => { setState("idle"); setUrl(""); setErrorMsg("") }}
-            className="text-[11px] text-muted-foreground/50 hover:text-foreground transition-colors"
+            className="text-[11px] text-zinc-500 hover:text-foreground transition-colors"
           >
             Cancel
           </button>
@@ -245,7 +245,7 @@ function ClientCard({ row, onDone }: { row: ClientOpportunityRow; onDone: () => 
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0 mt-0.5">
-          <span className="text-[11px] text-muted-foreground/35">{expanded ? "Less" : "More"}</span>
+          <span className="text-[11px] text-zinc-400">{expanded ? "Less" : "More"}</span>
           <button
             onClick={(e) => { e.stopPropagation(); onDone() }}
             className="btn-cavro-secondary border rounded-md px-2.5 text-[11px] font-medium text-zinc-900 dark:text-zinc-100 transition-colors"
@@ -259,7 +259,7 @@ function ClientCard({ row, onDone }: { row: ClientOpportunityRow; onDone: () => 
         <div className="border-t border-border divide-y divide-border">
           {row.fitReason && (
             <div className="px-4 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 mb-1">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1">
                 Why this fits
               </p>
               <p className="text-[12px] leading-relaxed text-foreground/75">{row.fitReason}</p>
@@ -268,7 +268,7 @@ function ClientCard({ row, onDone }: { row: ClientOpportunityRow; onDone: () => 
 
           {row.whatsHappening && (
             <div className="px-4 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 mb-1">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1">
                 What&apos;s happening
               </p>
               <p className="text-[12px] leading-relaxed text-foreground/75">{row.whatsHappening}</p>
@@ -277,7 +277,7 @@ function ClientCard({ row, onDone }: { row: ClientOpportunityRow; onDone: () => 
 
           {row.whatToDo && (
             <div className="px-4 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 mb-1">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1">
                 What to do
               </p>
               <p className="text-[12px] leading-relaxed text-foreground/75">{row.whatToDo}</p>
@@ -287,7 +287,7 @@ function ClientCard({ row, onDone }: { row: ClientOpportunityRow; onDone: () => 
           {row.outreach && (
             <div className="px-4 py-3">
               <div className="flex items-center justify-between mb-1.5">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
                   Outreach
                 </p>
                 <CopyButton text={row.outreach} />
@@ -300,14 +300,14 @@ function ClientCard({ row, onDone }: { row: ClientOpportunityRow; onDone: () => 
 
           {row.evidence && row.evidence.length > 0 && (
             <div className="px-4 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 mb-2">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-2">
                 Evidence
               </p>
               <ul className="flex flex-col gap-2">
                 {row.evidence.map((e, i) => (
                   <li key={i} className="flex flex-col gap-0.5">
                     <span className="text-[12px] leading-snug text-foreground/75">{e.claim}</span>
-                    <span className="text-[11px] leading-snug text-muted-foreground/50 italic">
+                    <span className="text-[11px] leading-snug text-zinc-500 italic">
                       &ldquo;{e.sourceText}&rdquo;
                     </span>
                   </li>
@@ -319,7 +319,7 @@ function ClientCard({ row, onDone }: { row: ClientOpportunityRow; onDone: () => 
           <div className="px-4 py-3">
             <Link
               href={`/clients/${row.id}`}
-              className="text-[11px] font-medium text-muted-foreground/50 hover:text-foreground transition-colors"
+              className="text-[11px] font-medium text-zinc-500 hover:text-foreground transition-colors"
             >
               View full analysis →
             </Link>
@@ -431,13 +431,13 @@ export function OpportunitiesPage({
         <div className="flex flex-col gap-2">
           <div className="flex items-start justify-between gap-3 px-0.5 mb-1">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500">
                 Deal Opportunities
-                <span className="ml-1.5 font-normal tabular-nums text-muted-foreground/35">
+                <span className="ml-1.5 font-normal tabular-nums text-zinc-400">
                   {dealOpps.length}
                 </span>
               </p>
-              <p className="text-[11px] text-muted-foreground/40 mt-0.5">
+              <p className="text-[11px] text-zinc-400 mt-0.5">
                 Companies you can realistically sell to — ranked by how actionable they are right now
               </p>
             </div>
@@ -451,13 +451,13 @@ export function OpportunitiesPage({
       {networkOpps.length > 0 && (
         <div className="flex flex-col gap-2">
           <div className="px-0.5 mb-1">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500">
               Networking Opportunities
-              <span className="ml-1.5 font-normal tabular-nums text-muted-foreground/35">
+              <span className="ml-1.5 font-normal tabular-nums text-zinc-400">
                 {networkOpps.length}
               </span>
             </p>
-            <p className="text-[11px] text-muted-foreground/40 mt-0.5">
+            <p className="text-[11px] text-zinc-400 mt-0.5">
               Warm paths to valuable people — connect now while there's a reason
             </p>
           </div>
@@ -488,7 +488,7 @@ export function OpportunitiesPage({
       {/* ── Discovered through client network ────────────────────────────────── */}
       {prospects.length > 0 && (
         <div className="flex flex-col gap-2">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50 px-0.5">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500 px-0.5">
             Discovered through your client network
           </p>
           {prospects.map((row) => (
@@ -612,7 +612,7 @@ function RebuildButton() {
       {state === "done" && result && (
         <div className="space-y-1">
           {/* One-liner */}
-          <p className="text-[11px] text-muted-foreground/50">
+          <p className="text-[11px] text-zinc-500">
             Removed {result.cleanse.deleted} stale contact{result.cleanse.deleted === 1 ? "" : "s"},
             {" "}kept {result.cleanse.kept},{" "}
             found <span className="font-medium text-foreground/60">{result.opportunitiesFound}</span> opportunit{result.opportunitiesFound === 1 ? "y" : "ies"}
@@ -620,7 +620,7 @@ function RebuildButton() {
           </p>
 
           {/* X signal breakdown */}
-          <div className="text-[10px] text-muted-foreground/40 space-y-0.5 pl-0.5">
+          <div className="text-[10px] text-zinc-400 space-y-0.5 pl-0.5">
             {result.xStats && (
               <p>· {result.xStats.contactsWithX} contacts with X data · {result.xStats.contactsWithSignals} with intent signals · {result.xStats.signalsLoaded} signals loaded</p>
             )}
@@ -652,13 +652,13 @@ function RebuildButton() {
             <div>
               <button
                 onClick={() => setShowDebug((v) => !v)}
-                className="text-[10px] text-muted-foreground/35 hover:text-foreground/50 underline underline-offset-2 transition-colors"
+                className="text-[10px] text-zinc-400 hover:text-foreground/50 underline underline-offset-2 transition-colors"
               >
                 {showDebug ? "Hide" : "Show"} X signal trace ({result.xDebug.length} domain{result.xDebug.length === 1 ? "" : "s"})
               </button>
 
               {showDebug && (
-                <ul className="mt-1.5 space-y-1 text-[10px] font-mono text-muted-foreground/40">
+                <ul className="mt-1.5 space-y-1 text-[10px] font-mono text-zinc-400">
                   {result.xDebug.map((e) => (
                     <li key={e.domain} className={`flex flex-col gap-0.5 rounded px-2 py-1.5 ${e.included ? "bg-emerald-500/5" : "bg-foreground/[0.02]"}`}>
                       <span>
@@ -666,7 +666,7 @@ function RebuildButton() {
                           {e.included ? "✓" : "✗"}
                         </span>
                         {" "}<span className="font-semibold text-foreground/50">{e.company}</span>
-                        {" "}<span className="text-muted-foreground/30">({e.domain})</span>
+                        {" "}<span className="text-zinc-400">({e.domain})</span>
                       </span>
                       <span>signals=[{e.signals.join(", ")}] base={e.baseScore.toFixed(1)} sig={e.signalScore.toFixed(2)} score={e.finalScore.toFixed(2)} fit={e.fitTier}{e.icpBypassed ? " (bypassed)" : ""}{e.companySize ? ` size=${e.companySize}` : ""}{e.buyerLikelihood ? ` buyer=${e.buyerLikelihood}` : ""}{e.isHouseholdName ? " 🏠" : ""}</span>
                       {e.skipReason && <span className="text-destructive/50">→ {e.skipReason}</span>}
@@ -751,7 +751,7 @@ function CompanyOpportunityCard({ row }: { row: CompanyOpportunityRow }) {
             {row.signals.map((s) => <SignalBadge key={s} signal={s} />)}
           </div>
           {recencyLabel && (
-            <p className="text-[11px] text-muted-foreground/45">{recencyLabel}</p>
+            <p className="text-[11px] text-zinc-500">{recencyLabel}</p>
           )}
         </div>
 
@@ -759,14 +759,14 @@ function CompanyOpportunityCard({ row }: { row: CompanyOpportunityRow }) {
         {row.recentInteractions >= 2 && (
           <div className="flex items-center gap-1 shrink-0 mt-0.5">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            <span className="text-[10px] text-muted-foreground/40">Active</span>
+            <span className="text-[10px] text-zinc-400">Active</span>
           </div>
         )}
       </div>
 
       {/* 1. Action headline — the verdict */}
       <div className="border-t border-border pt-3 flex flex-col gap-1.5">
-        <p className="text-[11px] text-muted-foreground/45 leading-none">{row.relationshipContext}</p>
+        <p className="text-[11px] text-zinc-500 leading-none">{row.relationshipContext}</p>
         <p className="text-[13px] leading-snug font-semibold text-foreground/90">{row.actionReason}</p>
 
         {/* 2. Why now — richer context */}
@@ -780,7 +780,7 @@ function CompanyOpportunityCard({ row }: { row: CompanyOpportunityRow }) {
         <div>
           <button
             onClick={() => setShowEvidence((v) => !v)}
-            className="text-[11px] text-muted-foreground/35 hover:text-foreground transition-colors"
+            className="text-[11px] text-zinc-400 hover:text-foreground transition-colors"
           >
             {showEvidence ? "Hide evidence" : "Show evidence"}
           </button>
@@ -789,18 +789,18 @@ function CompanyOpportunityCard({ row }: { row: CompanyOpportunityRow }) {
             <div className="mt-2 flex flex-col gap-2">
               {row.subjects.slice(0, 3).map((s, i) => (
                 <div key={i} className="rounded-md bg-foreground/[0.03] border border-border/60 px-3 py-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/35 mb-0.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-0.5">
                     Detected in email
                   </p>
-                  <p className="text-[11px] text-muted-foreground/55 italic truncate">&ldquo;{s}&rdquo;</p>
+                  <p className="text-[11px] text-zinc-500 italic truncate">&ldquo;{s}&rdquo;</p>
                 </div>
               ))}
               {row.signalEvidence.filter((e) => e.source === "twitter").slice(0, 2).map((e, i) => (
                 <div key={i} className="rounded-md bg-foreground/[0.03] border border-border/60 px-3 py-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/35 mb-0.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-0.5">
                     Detected on X · {e.signal}
                   </p>
-                  <p className="text-[11px] text-muted-foreground/55 italic leading-relaxed">
+                  <p className="text-[11px] text-zinc-500 italic leading-relaxed">
                     &ldquo;{e.snippet}&rdquo;
                   </p>
                 </div>
@@ -814,7 +814,7 @@ function CompanyOpportunityCard({ row }: { row: CompanyOpportunityRow }) {
       <div className="border-t border-border pt-2">
         <button
           onClick={() => setShowContacts(!showContacts)}
-          className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors"
+          className="text-[11px] text-zinc-400 hover:text-foreground transition-colors"
         >
           {showContacts
             ? "Hide contacts"
@@ -830,14 +830,14 @@ function CompanyOpportunityCard({ row }: { row: CompanyOpportunityRow }) {
                 <div className="flex items-center gap-2 flex-wrap text-[11px]">
                   <span className="text-foreground/70 font-medium">{c.name ?? c.email}</span>
                   {c.name && (
-                    <span className="text-muted-foreground/35">{c.email}</span>
+                    <span className="text-zinc-400">{c.email}</span>
                   )}
                   {c.twitterHandle && (
                     <a
                       href={`https://x.com/${c.twitterHandle}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-0.5 text-muted-foreground/40 hover:text-foreground transition-colors"
+                      className="inline-flex items-center gap-0.5 text-zinc-400 hover:text-foreground transition-colors"
                     >
                       <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                         <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
@@ -1102,10 +1102,10 @@ function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
           </div>
           <div className="flex items-center gap-1.5">
             {/* X / Twitter source indicator */}
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" className="text-muted-foreground/30 shrink-0" aria-hidden="true">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" className="text-zinc-400 shrink-0" aria-hidden="true">
               <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
             </svg>
-            <span className="text-[10px] text-muted-foreground/35">Public signal</span>
+            <span className="text-[10px] text-zinc-400">Public signal</span>
             <span className="text-muted-foreground/20">·</span>
             <ProximityBadge proximity={row.proximity} />
           </div>
@@ -1114,7 +1114,7 @@ function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
         <button
           onClick={() => setShowScore((v) => !v)}
           title="Show action score breakdown"
-          className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground/40 bg-foreground/[0.03] border border-border/60 hover:border-border transition-colors"
+          className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-zinc-400 bg-foreground/[0.03] border border-border/60 hover:border-border transition-colors"
         >
           {row.actionScore}
         </button>
@@ -1122,7 +1122,7 @@ function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
 
       {/* Score breakdown (revealed on click) */}
       {showScore && row.scoreBreakdown && (
-        <div className="rounded bg-foreground/[0.025] border border-border/60 px-3 py-2 text-[10px] text-muted-foreground/50 font-mono space-y-0.5">
+        <div className="rounded bg-foreground/[0.025] border border-border/60 px-3 py-2 text-[10px] text-zinc-500 font-mono space-y-0.5">
           <div className="font-semibold text-muted-foreground/60 mb-1">Action Score breakdown</div>
           <div>relationship        {row.scoreBreakdown.actionRelScore?.toFixed(1) ?? "–"}</div>
           <div>signal weight       +{row.scoreBreakdown.actionSigScore?.toFixed(1) ?? "–"}</div>
@@ -1140,7 +1140,7 @@ function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
 
       {/* 1. Action headline — the verdict */}
       <div className="border-t border-border pt-3 flex flex-col gap-1.5">
-        <p className="text-[11px] text-muted-foreground/45 leading-none">{row.relationshipContext}</p>
+        <p className="text-[11px] text-zinc-500 leading-none">{row.relationshipContext}</p>
         <p className="text-[13px] leading-snug font-semibold text-foreground/90">{row.actionReason}</p>
 
         {/* 2. Why now — richer context */}
@@ -1154,7 +1154,7 @@ function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
         <div>
           <button
             onClick={() => setShowEvidence((v) => !v)}
-            className="text-[11px] text-muted-foreground/35 hover:text-foreground transition-colors"
+            className="text-[11px] text-zinc-400 hover:text-foreground transition-colors"
           >
             {showEvidence ? "Hide evidence" : `Show evidence (${tweetEvidence.length} tweet${tweetEvidence.length === 1 ? "" : "s"})`}
           </button>
@@ -1163,7 +1163,7 @@ function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
             <div className="mt-2 flex flex-col gap-2">
               {tweetEvidence.slice(0, 3).map((e, i) => (
                 <div key={i} className="rounded-md bg-foreground/[0.03] border-l-2 border-foreground/10 pl-3 pr-2 py-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/35 mb-0.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-0.5">
                     {PUBLIC_SIGNAL_LABELS[e.signal] ?? e.signal} · X
                   </p>
                   <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
@@ -1180,7 +1180,7 @@ function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
       {row.topics.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {row.topics.slice(0, 4).map((t) => (
-            <span key={t} className="rounded px-1.5 py-px text-[10px] text-muted-foreground/40 bg-foreground/[0.03] border border-border/60">
+            <span key={t} className="rounded px-1.5 py-px text-[10px] text-zinc-400 bg-foreground/[0.03] border border-border/60">
               {t}
             </span>
           ))}
@@ -1191,7 +1191,7 @@ function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
       <div className="border-t border-border pt-2">
         <button
           onClick={() => setShowContacts(!showContacts)}
-          className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors"
+          className="text-[11px] text-zinc-400 hover:text-foreground transition-colors"
         >
           {showContacts
             ? "Hide contacts"
@@ -1210,7 +1210,7 @@ function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
                     href={`https://x.com/${c.twitterHandle}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-0.5 text-muted-foreground/40 hover:text-foreground transition-colors"
+                    className="inline-flex items-center gap-0.5 text-zinc-400 hover:text-foreground transition-colors"
                   >
                     <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                       <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
@@ -1219,7 +1219,7 @@ function PublicSignalCard({ row }: { row: PublicSignalOpportunityRow }) {
                   </a>
                 </div>
                 {c.bio && (
-                  <p className="text-[11px] text-muted-foreground/40 italic">{c.bio}</p>
+                  <p className="text-[11px] text-zinc-400 italic">{c.bio}</p>
                 )}
                 {c.twitterSignals.length > 0 && (
                   <div className="flex gap-1 flex-wrap">
@@ -1254,13 +1254,13 @@ function ClientExpansionSection({
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-2 mb-3 group"
       >
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 group-hover:text-muted-foreground/60 transition-colors">
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 group-hover:text-muted-foreground/60 transition-colors">
           Existing clients with expansion signals
         </span>
         <span className="text-[10px] font-medium tabular-nums rounded-full bg-foreground/[0.06] text-foreground/40 px-1.5 py-px">
           {rows.length}
         </span>
-        <span className="text-[10px] text-muted-foreground/30 group-hover:text-muted-foreground/50 transition-colors">
+        <span className="text-[10px] text-zinc-400 group-hover:text-zinc-500 transition-colors">
           {open ? "Hide" : "Show"}
         </span>
       </button>

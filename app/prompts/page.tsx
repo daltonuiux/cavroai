@@ -96,7 +96,7 @@ const TREND_ICON: Record<string, string> = {
 const TREND_COLOUR: Record<string, string> = {
   up:     "text-emerald-600 dark:text-emerald-400",
   down:   "text-rose-600 dark:text-rose-400",
-  stable: "text-foreground/35",
+  stable: "text-zinc-500",
 }
 
 function positionLabel(pos: number) {
@@ -136,15 +136,15 @@ export default function PromptsPage() {
       <div className="flex items-center gap-6 card-cavro rounded-md px-4 py-3">
         <span className="flex items-center gap-1.5 text-[12px]">
           <span className="font-semibold text-foreground/70">{MOCK_PROMPTS.length}</span>
-          <span className="text-muted-foreground/40">prompts tracked</span>
+          <span className="text-zinc-400">prompts tracked</span>
         </span>
         <span className="flex items-center gap-1.5 text-[12px]">
           <span className="font-semibold text-emerald-600 dark:text-emerald-400">{winning}</span>
-          <span className="text-muted-foreground/40">you rank #1</span>
+          <span className="text-zinc-400">you rank #1</span>
         </span>
         <span className="flex items-center gap-1.5 text-[12px]">
           <span className="font-semibold text-foreground/70">7</span>
-          <span className="text-muted-foreground/40">AI assistants tested</span>
+          <span className="text-zinc-400">AI assistants tested</span>
         </span>
       </div>
 
@@ -152,7 +152,7 @@ export default function PromptsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
         {MOCK_PROMPTS.map((p) => {
           const pos     = positionLabel(p.yourPosition)
-          const catStyle = CATEGORY_STYLES[p.category] ?? "bg-foreground/[0.04] text-foreground/40"
+          const catStyle = CATEGORY_STYLES[p.category] ?? "bg-foreground/[0.04] text-zinc-500"
           return (
             <div
               key={p.id}
@@ -168,7 +168,7 @@ export default function PromptsPage() {
                 {/* Position */}
                 <span className="flex items-center gap-1.5 text-[11px]">
                   <span className={`font-bold tabular-nums ${pos.colour}`}>{pos.label}</span>
-                  <span className="text-muted-foreground/40">your position</span>
+                  <span className="text-zinc-400">your position</span>
                 </span>
 
                 {/* Appearances */}
@@ -176,13 +176,13 @@ export default function PromptsPage() {
                   <span className="font-semibold text-foreground/70">
                     {p.appearances}/{p.total}
                   </span>
-                  <span className="text-muted-foreground/40">AI assistants mention you</span>
+                  <span className="text-zinc-400">AI assistants mention you</span>
                 </span>
 
                 {/* Top result */}
                 {p.topResult !== "You" && (
                   <span className="flex items-center gap-1 text-[11px]">
-                    <span className="text-muted-foreground/35">Top result:</span>
+                    <span className="text-zinc-400">Top result:</span>
                     <span className="font-semibold text-foreground/60">{p.topResult}</span>
                   </span>
                 )}
@@ -217,7 +217,7 @@ export default function PromptsPage() {
         </p>
         <button
           disabled
-          className="mt-1 btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-foreground/50 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="mt-1 btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Add prompt
         </button>

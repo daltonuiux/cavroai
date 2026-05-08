@@ -130,14 +130,14 @@ const SEVERITY_DOT: Record<Severity, string> = {
 const SEVERITY_BADGE: Record<Severity, string> = {
   high:   "bg-rose-500/10 text-rose-600 dark:text-rose-400",
   medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  low:    "bg-foreground/[0.04] text-foreground/40",
+  low:    "bg-foreground/[0.04] text-zinc-500",
 }
 
 const VISIBILITY_BADGE: Record<Visibility, string> = {
   high:   "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   low:    "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-  none:   "bg-foreground/[0.04] text-foreground/40",
+  none:   "bg-foreground/[0.04] text-zinc-500",
 }
 
 const VISIBILITY_LABEL: Record<Visibility, string> = {
@@ -150,7 +150,7 @@ const VISIBILITY_LABEL: Record<Visibility, string> = {
 const EFFORT_BADGE: Record<Effort, string> = {
   quick:  "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  large:  "bg-foreground/[0.04] text-foreground/40",
+  large:  "bg-foreground/[0.04] text-zinc-500",
 }
 
 // ---------------------------------------------------------------------------
@@ -173,7 +173,7 @@ export default function OverviewPage() {
             <p className={`text-[56px] font-bold leading-none tabular-nums tracking-tight ${c.text}`}>
               {MOCK_SCORE}
             </p>
-            <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 mt-1.5">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mt-1.5">
               / 100
             </p>
           </div>
@@ -185,11 +185,11 @@ export default function OverviewPage() {
                 {scoreLabel(MOCK_SCORE)}
               </span>
               <span className="text-foreground/15">·</span>
-              <span className="text-[11px] text-muted-foreground/40">
+              <span className="text-[11px] text-zinc-400">
                 AI Recommendation Score
               </span>
               <span className="text-foreground/15">·</span>
-              <span className="text-[11px] text-muted-foreground/30">
+              <span className="text-[11px] text-zinc-400">
                 {MOCK_AUDIT.date}
               </span>
             </div>
@@ -209,7 +209,7 @@ export default function OverviewPage() {
           </Link>
           <Link
             href="/audits"
-            className="text-[12px] text-muted-foreground/35 hover:text-foreground transition-colors"
+            className="text-[12px] text-zinc-400 hover:text-foreground transition-colors"
           >
             History →
           </Link>
@@ -228,7 +228,7 @@ export default function OverviewPage() {
             key={stat.label}
             className={`flex flex-col gap-1 py-4 px-6 ${i > 0 ? "border-l border-border" : ""}`}
           >
-            <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 whitespace-nowrap">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 whitespace-nowrap">
               {stat.label}
             </p>
             <p className={`text-[22px] font-bold leading-none tabular-nums ${stat.colour || "text-foreground"}`}>
@@ -247,12 +247,12 @@ export default function OverviewPage() {
           {/* Recommendation risks */}
           <section>
             <div className="flex items-center justify-between mb-3.5">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/35">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
                 Recommendation risks
               </p>
               <Link
                 href="/recommendations"
-                className="text-[11px] text-muted-foreground/30 hover:text-foreground transition-colors"
+                className="text-[11px] text-zinc-400 hover:text-foreground transition-colors"
               >
                 All →
               </Link>
@@ -270,8 +270,8 @@ export default function OverviewPage() {
                         {risk.severity}
                       </span>
                     </div>
-                    <p className="text-[11px] text-muted-foreground/45 leading-snug">{risk.detail}</p>
-                    <p className="text-[11px] font-medium text-foreground/35 mt-1.5">
+                    <p className="text-[11px] text-zinc-500 leading-snug">{risk.detail}</p>
+                    <p className="text-[11px] font-medium text-zinc-500 mt-1.5">
                       Fix: {risk.action}
                     </p>
                   </div>
@@ -283,12 +283,12 @@ export default function OverviewPage() {
           {/* Quick wins */}
           <section>
             <div className="flex items-center justify-between mb-3.5">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/35">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
                 Quick wins
               </p>
               <Link
                 href="/recommendations"
-                className="text-[11px] text-muted-foreground/30 hover:text-foreground transition-colors"
+                className="text-[11px] text-zinc-400 hover:text-foreground transition-colors"
               >
                 All →
               </Link>
@@ -296,7 +296,7 @@ export default function OverviewPage() {
             <div className="divide-y divide-border">
               {MOCK_QUICK_WINS.map((win, i) => (
                 <div key={win.id} className="flex items-center gap-4 py-3">
-                  <span className="text-[11px] font-bold text-foreground/18 tabular-nums w-3.5 shrink-0">
+                  <span className="text-[11px] font-bold text-zinc-300 tabular-nums w-3.5 shrink-0">
                     {i + 1}
                   </span>
                   <p className="flex-1 text-[12px] text-foreground/65 leading-snug">
@@ -313,12 +313,12 @@ export default function OverviewPage() {
           {/* Prompt readiness — table */}
           <section>
             <div className="flex items-center justify-between mb-3.5">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/35">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
                 Prompt readiness
               </p>
               <Link
                 href="/prompts"
-                className="text-[11px] text-muted-foreground/30 hover:text-foreground transition-colors"
+                className="text-[11px] text-zinc-400 hover:text-foreground transition-colors"
               >
                 All prompts →
               </Link>
@@ -326,16 +326,16 @@ export default function OverviewPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="text-left pb-2.5 pr-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30">
+                  <th className="text-left pb-2.5 pr-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">
                     Prompt
                   </th>
-                  <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30">
+                  <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">
                     Position
                   </th>
-                  <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 hidden sm:table-cell">
+                  <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400 hidden sm:table-cell">
                     Visibility
                   </th>
-                  <th className="text-right pb-2.5 pl-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30">
+                  <th className="text-right pb-2.5 pl-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">
                     Score
                   </th>
                 </tr>
@@ -391,7 +391,7 @@ export default function OverviewPage() {
 
           {/* Audit history */}
           <section>
-            <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/35 mb-3.5">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3.5">
               Audit history
             </p>
             <div className="divide-y divide-border">
@@ -407,7 +407,7 @@ export default function OverviewPage() {
                       <p className="text-[12px] font-medium text-foreground/70 truncate">
                         {audit.label}
                       </p>
-                      <p className="text-[10px] text-muted-foreground/30 mt-0.5">{audit.date}</p>
+                      <p className="text-[10px] text-zinc-400 mt-0.5">{audit.date}</p>
                     </div>
                     <span className={`shrink-0 text-[22px] font-bold tabular-nums ml-4 ${ac.text}`}>
                       {audit.score}
@@ -420,7 +420,7 @@ export default function OverviewPage() {
 
           {/* Score trend */}
           <section>
-            <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/35 mb-3">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3">
               Score trend
             </p>
             <div className="flex items-end gap-1.5 h-8">
@@ -443,7 +443,7 @@ export default function OverviewPage() {
             </div>
             <div className="flex justify-between mt-1.5">
               {MOCK_RECENT_AUDITS.slice().reverse().map((a) => (
-                <p key={a.id} className="text-[9px] text-muted-foreground/25 tabular-nums">
+                <p key={a.id} className="text-[9px] text-zinc-300 tabular-nums">
                   {a.score}
                 </p>
               ))}

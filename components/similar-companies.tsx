@@ -92,7 +92,7 @@ function AddForm({
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://company.com"
-          className="h-7 flex-1 rounded-md border border-border bg-background px-2.5 text-[12px] text-foreground placeholder:text-muted-foreground/40 outline-none focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10 transition-colors"
+          className="h-7 flex-1 rounded-md border border-border bg-background px-2.5 text-[12px] text-foreground placeholder:text-zinc-400 outline-none focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10 transition-colors"
         />
         <button
           type="submit"
@@ -211,13 +211,13 @@ export function SimilarCompanies({ clientId, initialProspects, hasAnalysis }: Pr
   return (
     <div className="card-cavro rounded-md px-4 py-3.5">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
           Similar companies to target
         </p>
         <button
           onClick={handleGenerate}
           disabled={generating}
-          className="text-[11px] font-medium text-muted-foreground/50 hover:text-foreground transition-colors disabled:opacity-40"
+          className="text-[11px] font-medium text-zinc-500 hover:text-foreground transition-colors disabled:opacity-40"
         >
           {generating ? "Generating…" : prospects === null ? "Find similar" : "Regenerate"}
         </button>
@@ -228,7 +228,7 @@ export function SimilarCompanies({ clientId, initialProspects, hasAnalysis }: Pr
       )}
 
       {prospects === null && !generating && (
-        <p className="text-[12px] text-muted-foreground/50 italic">
+        <p className="text-[12px] text-zinc-500 italic">
           Click &ldquo;Find similar&rdquo; to discover companies like this one.
         </p>
       )}
@@ -236,12 +236,12 @@ export function SimilarCompanies({ clientId, initialProspects, hasAnalysis }: Pr
       {generating && (
         <div className="flex items-center gap-2 py-1">
           <span className="size-1.5 rounded-full bg-foreground/20 animate-pulse" />
-          <p className="text-[12px] text-muted-foreground/50">Identifying similar companies…</p>
+          <p className="text-[12px] text-zinc-500">Identifying similar companies…</p>
         </div>
       )}
 
       {!generating && prospects !== null && prospects.length === 0 && (
-        <p className="text-[12px] text-muted-foreground/50 italic">
+        <p className="text-[12px] text-zinc-500 italic">
           Not enough context to suggest similar companies. Try running analysis again.
         </p>
       )}

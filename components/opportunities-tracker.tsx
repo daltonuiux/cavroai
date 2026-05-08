@@ -72,7 +72,7 @@ export function OpportunitiesTracker({ leads }: { leads: OpportunityLead[] }) {
 
       {top3.length > 0 && (
         <section>
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
             Top this week
           </p>
           <div className="card-cavro rounded-md divide-y divide-border overflow-hidden">
@@ -109,7 +109,7 @@ export function OpportunitiesTracker({ leads }: { leads: OpportunityLead[] }) {
 
       {completed.length > 0 && (
         <section>
-          <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+          <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
             Completed — {completed.length}
           </p>
           <div className="flex flex-col gap-2">
@@ -140,7 +140,7 @@ function TopRow({
 }) {
   return (
     <div className="flex items-start gap-3 px-4 py-3">
-      <span className="mt-0.5 shrink-0 w-4 text-[12px] font-semibold tabular-nums text-muted-foreground/30">
+      <span className="mt-0.5 shrink-0 w-4 text-[12px] font-semibold tabular-nums text-zinc-400">
         {rank}
       </span>
       <div className="min-w-0 flex-1">
@@ -163,7 +163,7 @@ function TopRow({
           </ActionButton>
         )}
         {(entry.status === "in_progress" || entry.status === "contacted") && (
-          <span className="text-[11px] text-muted-foreground/50">{STATUS_LABEL[entry.status]}</span>
+          <span className="text-[11px] text-zinc-500">{STATUS_LABEL[entry.status]}</span>
         )}
       </div>
     </div>
@@ -183,7 +183,7 @@ function LeadGroup({
 }) {
   return (
     <section>
-      <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+      <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
         {label}
       </p>
       <div className="flex flex-col gap-3">
@@ -226,13 +226,13 @@ function OpportunityCard({
           )}
           <ConfidenceBadge confidence={lead.confidence} />
         </div>
-        <span className="text-[11px] text-muted-foreground/40">{STATUS_LABEL[entry.status]}</span>
+        <span className="text-[11px] text-zinc-400">{STATUS_LABEL[entry.status]}</span>
       </div>
 
       {/* Why it's warm */}
       {lead.warmReason && (
         <div className="px-4 py-3 border-b border-border">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 mb-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1.5">
             Why it&apos;s warm
           </p>
           <div className="rounded-md bg-foreground/[0.03] border border-foreground/[0.06] px-3 py-2">
@@ -243,7 +243,7 @@ function OpportunityCard({
 
       {/* Why this surfaced */}
       <div className="px-4 py-3 border-b border-border bg-foreground/[0.015]">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 mb-2">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-2">
           Why this surfaced
         </p>
         <ul className="flex flex-col gap-1.5">
@@ -263,7 +263,7 @@ function OpportunityCard({
 
         <div className="px-4 py-3">
           <div className="flex items-center justify-between mb-1.5">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
               Outreach
             </p>
             <CopyButton text={lead.outreach} />
@@ -321,7 +321,7 @@ function CompletedRow({
       </p>
       <button
         onClick={onReopen}
-        className="shrink-0 text-[11px] text-muted-foreground/50 transition-colors hover:text-foreground"
+        className="shrink-0 text-[11px] text-zinc-500 transition-colors hover:text-foreground"
       >
         Reopen
       </button>
@@ -365,7 +365,7 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="text-[11px] font-medium text-muted-foreground/50 transition-colors hover:text-foreground"
+      className="text-[11px] font-medium text-zinc-500 transition-colors hover:text-foreground"
     >
       {copied ? "Copied" : "Copy"}
     </button>
@@ -387,7 +387,7 @@ function ConfidenceBadge({ confidence }: { confidence: Confidence }) {
 function PlaySection({ label, body }: { label: string; body: string }) {
   return (
     <div className="px-4 py-3">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 mb-1">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1">
         {label}
       </p>
       <p className="text-[12px] leading-relaxed text-foreground/75">{body}</p>

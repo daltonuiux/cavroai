@@ -120,7 +120,7 @@ function InlineInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className={`h-8 rounded-md border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-muted-foreground/40 outline-none transition-colors focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10 ${className}`}
+      className={`h-8 rounded-md border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-zinc-400 outline-none transition-colors focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10 ${className}`}
     />
   )
 }
@@ -489,12 +489,12 @@ export function AddClientModal({ variant = "primary" }: { variant?: "primary" | 
                       : "border-border hover:border-foreground/20 hover:bg-muted/20"
                   }`}
                 >
-                  <Upload className="size-5 text-muted-foreground/35" strokeWidth={1.5} />
+                  <Upload className="size-5 text-zinc-400" strokeWidth={1.5} />
                   <div className="text-center">
                     <p className="text-[13px] font-medium text-foreground/70">
                       Drop a CSV file here
                     </p>
-                    <p className="mt-0.5 text-[12px] text-muted-foreground/50">
+                    <p className="mt-0.5 text-[12px] text-zinc-500">
                       or click to browse
                     </p>
                   </div>
@@ -512,11 +512,11 @@ export function AddClientModal({ variant = "primary" }: { variant?: "primary" | 
                 {csvError && <p className="mt-2 text-[12px] text-red-500">{csvError}</p>}
 
                 <div className="mt-4">
-                  <p className="mb-1.5 text-[11px] font-medium text-muted-foreground/45">
+                  <p className="mb-1.5 text-[11px] font-medium text-zinc-500">
                     Expected format
                   </p>
                   <div className="space-y-0.5 rounded-md border border-border bg-muted/30 px-3 py-2.5 font-mono text-[11px]">
-                    <p className="text-muted-foreground/40">Name, Website, Relationship (optional)</p>
+                    <p className="text-zinc-400">Name, Website, Relationship (optional)</p>
                     <p className="text-muted-foreground/65">Acme Corp, acme.com, current_client</p>
                     <p className="text-muted-foreground/65">Linear, linear.app, warm</p>
                     <p className="text-muted-foreground/65">Notion, notion.so</p>
@@ -548,14 +548,14 @@ export function AddClientModal({ variant = "primary" }: { variant?: "primary" | 
                           >
                             {client.name}
                           </p>
-                          <p className="text-[12px] text-muted-foreground/55">
+                          <p className="text-[12px] text-zinc-500">
                             {client.websiteUrl}
                           </p>
                         </div>
                         <button
                           type="button"
                           onClick={() => toggleRemove(i)}
-                          className="shrink-0 text-muted-foreground/35 transition-colors hover:text-foreground"
+                          className="shrink-0 text-zinc-400 transition-colors hover:text-foreground"
                         >
                           {isRemoved ? (
                             <span className="text-[11px]">Restore</span>
@@ -568,7 +568,7 @@ export function AddClientModal({ variant = "primary" }: { variant?: "primary" | 
                   })}
                 </div>
                 <div className="flex items-center justify-between border-t border-border px-5 py-3.5">
-                  <p className="text-[12px] text-muted-foreground/55">
+                  <p className="text-[12px] text-zinc-500">
                     {csvVisible.length} of {csvClients.length} selected
                   </p>
                   <PrimaryButton
@@ -597,14 +597,14 @@ export function AddClientModal({ variant = "primary" }: { variant?: "primary" | 
                       if (e.key === "Enter") runDetect()
                     }}
                     placeholder="youragency.com"
-                    className="flex-1 h-8 rounded-md border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-muted-foreground/40 outline-none transition-colors focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10"
+                    className="flex-1 h-8 rounded-md border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-zinc-400 outline-none transition-colors focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10"
                   />
                   <PrimaryButton onClick={runDetect} disabled={!detectUrl.trim() || isPending}>
                     Detect
                   </PrimaryButton>
                 </div>
                 {detectError && <p className="mt-2 text-[12px] text-red-500">{detectError}</p>}
-                <p className="mt-3 text-[11px] text-muted-foreground/45">
+                <p className="mt-3 text-[11px] text-zinc-500">
                   Looks for clients in case studies, testimonials, and logo sections.
                 </p>
               </div>
@@ -613,12 +613,12 @@ export function AddClientModal({ variant = "primary" }: { variant?: "primary" | 
             {/* ── Detect: loading ── */}
             {screen === "detect-loading" && (
               <div className="flex flex-col items-center justify-center gap-3 py-16">
-                <Loader2 className="size-5 animate-spin text-muted-foreground/35" />
+                <Loader2 className="size-5 animate-spin text-zinc-400" />
                 <div className="text-center">
                   <p className="text-[13px] font-medium text-foreground/70">
                     Checking your website
                   </p>
-                  <p className="text-[12px] text-muted-foreground/50">
+                  <p className="text-[12px] text-zinc-500">
                     Looking for client mentions...
                   </p>
                 </div>
@@ -631,12 +631,12 @@ export function AddClientModal({ variant = "primary" }: { variant?: "primary" | 
                 {detected.length === 0 ? (
                   <div className="px-5 py-10 text-center">
                     <p className="text-[13px] font-medium text-foreground/70">No clients detected automatically.</p>
-                    <p className="mt-1 text-[12px] text-muted-foreground/55">
+                    <p className="mt-1 text-[12px] text-zinc-500">
                       Try CSV upload or add your top 10 clients manually.
                     </p>
                     {detectDebug && (
                       <details className="mt-6 text-left">
-                        <summary className="inline-flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                        <summary className="inline-flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-zinc-500 hover:text-muted-foreground transition-colors">
                           Debug details
                         </summary>
                         <div className="mt-3 space-y-4 rounded-md border border-border bg-muted/20 p-3 text-[11px] text-muted-foreground/70">
@@ -652,7 +652,7 @@ export function AddClientModal({ variant = "primary" }: { variant?: "primary" | 
                             <div className="overflow-x-auto">
                               <table className="w-full text-left text-[10px]">
                                 <thead>
-                                  <tr className="text-muted-foreground/40">
+                                  <tr className="text-zinc-400">
                                     <th className="pr-3 pb-1 font-medium">URL</th>
                                     <th className="pr-3 pb-1 font-medium">Status</th>
                                     <th className="pr-3 pb-1 font-medium">HTML</th>
@@ -669,7 +669,7 @@ export function AddClientModal({ variant = "primary" }: { variant?: "primary" | 
                                       <td className="pr-3 py-0.5">{s.htmlLength > 0 ? `${(s.htmlLength / 1000).toFixed(0)}k` : "—"}</td>
                                       <td className="pr-3 py-0.5">{s.rawCandidates}</td>
                                       <td className="pr-3 py-0.5">{s.filteredAdded}</td>
-                                      <td className="py-0.5 text-muted-foreground/40">{s.usedFallback ? "txt" : s.htmlLength > 0 ? "struct" : "—"}</td>
+                                      <td className="py-0.5 text-zinc-400">{s.usedFallback ? "txt" : s.htmlLength > 0 ? "struct" : "—"}</td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -695,7 +695,7 @@ export function AddClientModal({ variant = "primary" }: { variant?: "primary" | 
                                       Rejected ({detectDebug.aiExtraction.rejectedClients.length}):
                                     </p>
                                     {detectDebug.aiExtraction.rejectedClients.map((r, i) => (
-                                      <p key={i} className="font-mono text-[10px] text-muted-foreground/40">
+                                      <p key={i} className="font-mono text-[10px] text-zinc-400">
                                         &quot;{r.name}&quot; — {r.reason}
                                       </p>
                                     ))}
@@ -703,7 +703,7 @@ export function AddClientModal({ variant = "primary" }: { variant?: "primary" | 
                                 )}
                               </>
                             ) : (
-                              <p className="text-muted-foreground/40">
+                              <p className="text-zinc-400">
                                 {detectDebug.aiExtraction.error
                                   ? `✗ Failed: ${detectDebug.aiExtraction.error}`
                                   : "Not used (no API key) — heuristic results shown"}
@@ -738,7 +738,7 @@ export function AddClientModal({ variant = "primary" }: { variant?: "primary" | 
                               <div className="overflow-x-auto">
                                 <table className="w-full text-left text-[10px]">
                                   <thead>
-                                    <tr className="text-muted-foreground/40">
+                                    <tr className="text-zinc-400">
                                       <th className="pr-2 pb-1 font-medium">Candidate</th>
                                       <th className="pr-2 pb-1 font-medium">Source</th>
                                       <th className="pr-2 pb-1 font-medium">Score</th>
@@ -752,22 +752,22 @@ export function AddClientModal({ variant = "primary" }: { variant?: "primary" | 
                                     {detectDebug.candidateLog.map((c, i) => (
                                       <tr key={i} className="border-t border-border/40">
                                         <td className="pr-2 py-0.5 max-w-[120px] truncate text-foreground/50">{c.cleaned || c.raw}</td>
-                                        <td className="pr-2 py-0.5 text-muted-foreground/40">{c.source}</td>
+                                        <td className="pr-2 py-0.5 text-zinc-400">{c.source}</td>
                                         <td className="pr-2 py-0.5">{c.score}</td>
                                         <td className={`pr-2 py-0.5 ${
                                           c.classification === "company" ? "text-emerald-600/60" :
-                                          c.classification === "—"      ? "text-muted-foreground/30" :
+                                          c.classification === "—"      ? "text-zinc-400" :
                                           "text-amber-500/70"
                                         }`}>{c.classification}</td>
                                         <td className={`pr-2 py-0.5 ${
-                                          c.contextRule === "—" ? "text-muted-foreground/30" :
+                                          c.contextRule === "—" ? "text-zinc-400" :
                                           c.accepted            ? "text-emerald-600/60" :
                                           "text-red-400/60"
                                         }`}>{c.contextRule}</td>
                                         <td className={`pr-2 py-0.5 font-medium ${c.accepted ? "text-emerald-600/70" : "text-red-500/60"}`}>
                                           {c.accepted ? "✓" : "✗"}
                                         </td>
-                                        <td className="py-0.5 text-muted-foreground/40 max-w-[140px] truncate">{c.reason}</td>
+                                        <td className="py-0.5 text-zinc-400 max-w-[140px] truncate">{c.reason}</td>
                                       </tr>
                                     ))}
                                   </tbody>
@@ -782,7 +782,7 @@ export function AddClientModal({ variant = "primary" }: { variant?: "primary" | 
                 ) : (
                   <>
                     <div className="flex items-center justify-between border-b border-border bg-muted/20 px-5 py-2">
-                      <p className="text-[11px] text-muted-foreground/50">
+                      <p className="text-[11px] text-zinc-500">
                         Add a website for each client to import
                       </p>
                       <button
@@ -791,7 +791,7 @@ export function AddClientModal({ variant = "primary" }: { variant?: "primary" | 
                           if (selected.size === detected.length) setSelected(new Set())
                           else setSelected(new Set(detected.map((_, i) => i)))
                         }}
-                        className="text-[11px] text-muted-foreground/50 transition-colors hover:text-foreground"
+                        className="text-[11px] text-zinc-500 transition-colors hover:text-foreground"
                       >
                         {selected.size === detected.length ? "Deselect all" : "Select all"}
                       </button>
@@ -832,7 +832,7 @@ export function AddClientModal({ variant = "primary" }: { variant?: "primary" | 
                                     if (!isSelected) toggleSelect(i)
                                   }}
                                   placeholder="website.com"
-                                  className="mt-3 h-10 w-full rounded border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-muted-foreground/35 outline-none transition-colors focus:border-foreground/30"
+                                  className="mt-3 h-10 w-full rounded border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-zinc-400 outline-none transition-colors focus:border-foreground/30"
                                 />
                               </div>
                             </div>
@@ -841,7 +841,7 @@ export function AddClientModal({ variant = "primary" }: { variant?: "primary" | 
                       })}
                     </div>
                     <div className="flex items-center justify-between border-t border-border px-5 py-3.5">
-                      <p className="text-[12px] text-muted-foreground/55">
+                      <p className="text-[12px] text-zinc-500">
                         {selectedClients.length} ready to import
                       </p>
                       <PrimaryButton
@@ -961,7 +961,7 @@ export function AddClientModal({ variant = "primary" }: { variant?: "primary" | 
                     value={focus}
                     onChange={(e) => setFocus(e.target.value)}
                     placeholder="moving upmarket, launching new product..."
-                    className="h-8 rounded-md border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-muted-foreground/40 outline-none transition-colors focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10"
+                    className="h-8 rounded-md border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-zinc-400 outline-none transition-colors focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10"
                   />
                 </div>
 
@@ -976,20 +976,20 @@ export function AddClientModal({ variant = "primary" }: { variant?: "primary" | 
                       value={contactName}
                       onChange={(e) => setContactName(e.target.value)}
                       placeholder="Name"
-                      className="h-8 rounded-md border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-muted-foreground/40 outline-none transition-colors focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10"
+                      className="h-8 rounded-md border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-zinc-400 outline-none transition-colors focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10"
                     />
                     <input
                       value={contactRole}
                       onChange={(e) => setContactRole(e.target.value)}
                       placeholder="Role"
-                      className="h-8 rounded-md border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-muted-foreground/40 outline-none transition-colors focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10"
+                      className="h-8 rounded-md border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-zinc-400 outline-none transition-colors focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10"
                     />
                   </div>
                   <input
                     value={contactLinkedin}
                     onChange={(e) => setContactLinkedin(e.target.value)}
                     placeholder="LinkedIn URL"
-                    className="h-8 rounded-md border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-muted-foreground/40 outline-none transition-colors focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10"
+                    className="h-8 rounded-md border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-zinc-400 outline-none transition-colors focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10"
                   />
                 </div>
 
@@ -1003,9 +1003,9 @@ export function AddClientModal({ variant = "primary" }: { variant?: "primary" | 
                     value={connections}
                     onChange={(e) => setConnections(e.target.value)}
                     placeholder="Stripe, Notion, Vercel"
-                    className="h-8 rounded-md border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-muted-foreground/40 outline-none transition-colors focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10"
+                    className="h-8 rounded-md border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-zinc-400 outline-none transition-colors focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10"
                   />
-                  <p className="text-[11px] text-muted-foreground/50">Comma-separated</p>
+                  <p className="text-[11px] text-zinc-500">Comma-separated</p>
                 </div>
 
                 {/* Footer actions */}
@@ -1077,14 +1077,14 @@ function MethodRow({
         last ? "rounded-b-xl" : ""
       }`}
     >
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground/55 transition-colors group-hover:border-foreground/20 group-hover:text-foreground/80">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-zinc-500 transition-colors group-hover:border-foreground/20 group-hover:text-foreground/80">
         {icon}
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-medium text-foreground">{label}</p>
-        <p className="text-[12px] text-muted-foreground/55">{description}</p>
+        <p className="text-[12px] text-zinc-500">{description}</p>
       </div>
-      <ArrowRight className="size-4 shrink-0 text-muted-foreground/25 transition-transform group-hover:translate-x-0.5 group-hover:text-muted-foreground/50" />
+      <ArrowRight className="size-4 shrink-0 text-zinc-300 transition-transform group-hover:translate-x-0.5 group-hover:text-zinc-500" />
     </button>
   )
 }

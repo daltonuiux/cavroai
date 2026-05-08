@@ -39,7 +39,7 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="text-[11px] font-medium text-muted-foreground/50 transition-colors hover:text-foreground"
+      className="text-[11px] font-medium text-zinc-500 transition-colors hover:text-foreground"
     >
       {copied ? "Copied" : "Copy"}
     </button>
@@ -126,7 +126,7 @@ export function OpportunitySplitView({
           {/* Why this is a warm opportunity */}
           {opp.warmReason && (
             <div className="border-t border-border pt-4 pb-4">
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/45">
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
                 Why it&apos;s warm
               </p>
               <div className="rounded-md bg-foreground/[0.03] border border-foreground/[0.06] px-3 py-2.5">
@@ -140,7 +140,7 @@ export function OpportunitySplitView({
           {/* Why this was surfaced */}
           {(opp.signals ?? []).length > 0 && (
             <div className={cn("pb-4", opp.warmReason ? "border-t border-border pt-4" : "pt-1")}>
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/45">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
                 Why this surfaced
               </p>
               <ul className="flex flex-col gap-1.5">
@@ -156,7 +156,7 @@ export function OpportunitySplitView({
 
           {/* What's happening */}
           <div className="border-t border-border pt-4 pb-4">
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/45">
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
               What&apos;s happening
             </p>
             <p className="text-[12px] leading-relaxed text-foreground/75">
@@ -166,7 +166,7 @@ export function OpportunitySplitView({
 
           {/* What to do */}
           <div className="border-t border-border pt-4 pb-4">
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/45">
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
               What to do
             </p>
             <p className="text-[12px] leading-relaxed text-foreground/80">
@@ -177,7 +177,7 @@ export function OpportunitySplitView({
           {/* Outreach */}
           <div className="border-t border-border pt-4 pb-4">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/45">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
                 Outreach
               </p>
               <CopyButton text={opp.outreach} />
@@ -192,7 +192,7 @@ export function OpportunitySplitView({
           {/* Suggested pitch fallback */}
           {suggestedPitch && (
             <div className="border-t border-border pt-4">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/45">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
                 How to open
               </p>
               <blockquote className="rounded-md border-l-2 border-foreground/15 bg-muted/40 py-2.5 pl-3.5 pr-3">

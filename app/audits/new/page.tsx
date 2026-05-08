@@ -87,7 +87,7 @@ function Input({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="input-cavro placeholder:text-muted-foreground/35 text-foreground"
+      className="input-cavro placeholder:text-zinc-400 text-foreground"
     />
   )
 }
@@ -109,7 +109,7 @@ function Textarea({
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       rows={rows}
-      className="input-cavro resize-none placeholder:text-muted-foreground/35 text-foreground"
+      className="input-cavro resize-none placeholder:text-zinc-400 text-foreground"
     />
   )
 }
@@ -165,7 +165,7 @@ function StepIndicator({ current }: { current: 1 | 2 | 3 | 4 }) {
                   "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-colors",
                   done   ? "bg-foreground text-background"
                   : active ? "bg-foreground text-background"
-                  : "bg-foreground/10 text-foreground/30",
+                  : "bg-foreground/10 text-zinc-400",
                 ].join(" ")}
               >
                 {done ? <Check size={10} strokeWidth={3} /> : idx}
@@ -173,7 +173,7 @@ function StepIndicator({ current }: { current: 1 | 2 | 3 | 4 }) {
               <span
                 className={[
                   "text-[12px] font-medium transition-colors",
-                  active ? "text-foreground" : "text-foreground/35",
+                  active ? "text-foreground" : "text-zinc-500",
                 ].join(" ")}
               >
                 {label}
@@ -252,7 +252,7 @@ function Step1({
             placeholder="Describe what your product does, who it's for, and what makes it different. The more specific, the better the audit."
             rows={4}
           />
-          <p className="mt-1.5 text-[11px] text-muted-foreground/40">
+          <p className="mt-1.5 text-[11px] text-zinc-400">
             This becomes the baseline Cavro AI audits against. Be specific.
           </p>
         </div>
@@ -318,7 +318,7 @@ function Step2({
         {form.competitors.map((url, i) => (
           <div key={i} className="flex items-center gap-2">
             <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-foreground/[0.05]">
-              <span className="text-[10px] font-semibold text-foreground/40">{i + 1}</span>
+              <span className="text-[10px] font-semibold text-zinc-500">{i + 1}</span>
             </div>
             <div className="flex-1">
               <Input
@@ -330,7 +330,7 @@ function Step2({
             {form.competitors.length > 1 && (
               <button
                 onClick={() => removeCompetitor(i)}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground/40 hover:text-foreground hover:bg-muted/60 transition-colors"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-zinc-400 hover:text-foreground hover:bg-muted/60 transition-colors"
               >
                 <X size={13} />
               </button>
@@ -342,7 +342,7 @@ function Step2({
       {form.competitors.length < 5 && (
         <button
           onClick={addCompetitor}
-          className="mt-3 flex items-center gap-1.5 text-[12px] text-muted-foreground/50 hover:text-foreground transition-colors"
+          className="mt-3 flex items-center gap-1.5 text-[12px] text-zinc-500 hover:text-foreground transition-colors"
         >
           <Plus size={13} />
           Add another competitor
@@ -425,7 +425,7 @@ function Step3({
         {form.prompts.map((prompt, i) => (
           <div key={i} className="flex items-center gap-2">
             <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-foreground/[0.05]">
-              <span className="text-[10px] font-semibold text-foreground/40">{i + 1}</span>
+              <span className="text-[10px] font-semibold text-zinc-500">{i + 1}</span>
             </div>
             <div className="flex-1">
               <Input
@@ -437,7 +437,7 @@ function Step3({
             {form.prompts.length > 1 && (
               <button
                 onClick={() => removePrompt(i)}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground/40 hover:text-foreground hover:bg-muted/60 transition-colors"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-zinc-400 hover:text-foreground hover:bg-muted/60 transition-colors"
               >
                 <X size={13} />
               </button>
@@ -449,7 +449,7 @@ function Step3({
       {form.prompts.length < 10 && (
         <button
           onClick={addPrompt}
-          className="mt-3 flex items-center gap-1.5 text-[12px] text-muted-foreground/50 hover:text-foreground transition-colors"
+          className="mt-3 flex items-center gap-1.5 text-[12px] text-zinc-500 hover:text-foreground transition-colors"
         >
           <Plus size={13} />
           Add another prompt
@@ -458,7 +458,7 @@ function Step3({
 
       {/* Example prompts */}
       <div className="mt-5 rounded-md border border-dashed border-border px-4 py-3.5">
-        <p className="text-[11px] font-semibold text-muted-foreground/40 uppercase tracking-widest mb-2.5">
+        <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest mb-2.5">
           Example prompts — click to use
         </p>
         <div className="flex flex-wrap gap-1.5">
@@ -466,7 +466,7 @@ function Step3({
             <button
               key={ex}
               onClick={() => useExample(ex)}
-              className="rounded bg-foreground/[0.04] px-2 py-1 text-[11px] text-foreground/50 hover:bg-foreground/[0.08] hover:text-foreground transition-colors text-left"
+              className="rounded bg-foreground/[0.04] px-2 py-1 text-[11px] text-zinc-500 hover:bg-foreground/[0.08] hover:text-foreground transition-colors text-left"
             >
               {ex}
             </button>
@@ -523,18 +523,18 @@ function Step4({
 
         {/* Company */}
         <div className="px-4 py-3.5">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 mb-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1.5">
             Company
           </p>
           <p className="text-[13px] font-semibold text-foreground">{form.company}</p>
-          <p className="text-[12px] text-muted-foreground/55">{form.url}</p>
+          <p className="text-[12px] text-zinc-500">{form.url}</p>
           {form.category && (
-            <span className="mt-1.5 inline-block rounded bg-foreground/[0.04] px-1.5 py-px text-[10px] font-medium text-foreground/50">
+            <span className="mt-1.5 inline-block rounded bg-foreground/[0.04] px-1.5 py-px text-[10px] font-medium text-zinc-500">
               {form.category}
             </span>
           )}
           {form.description && (
-            <p className="mt-2 text-[12px] leading-relaxed text-foreground/50 line-clamp-2">
+            <p className="mt-2 text-[12px] leading-relaxed text-zinc-500 line-clamp-2">
               {form.description}
             </p>
           )}
@@ -542,11 +542,11 @@ function Step4({
 
         {/* Competitors */}
         <div className="px-4 py-3.5">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 mb-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1.5">
             Competitors ({cleanCompetitors.length})
           </p>
           {cleanCompetitors.length === 0 ? (
-            <p className="text-[12px] text-muted-foreground/40">None added</p>
+            <p className="text-[12px] text-zinc-400">None added</p>
           ) : (
             <div className="flex flex-wrap gap-1.5">
               {cleanCompetitors.map((c) => (
@@ -563,11 +563,11 @@ function Step4({
 
         {/* Prompts */}
         <div className="px-4 py-3.5">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 mb-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1.5">
             Target prompts ({cleanPrompts.length})
           </p>
           {cleanPrompts.length === 0 ? (
-            <p className="text-[12px] text-muted-foreground/40">None added</p>
+            <p className="text-[12px] text-zinc-400">None added</p>
           ) : (
             <div className="flex flex-col gap-1">
               {cleanPrompts.map((p, i) => (
@@ -734,7 +734,7 @@ export default function NewAuditPage() {
         {/* Page header (hidden during loading) */}
         {step !== "loading" && (
           <div className="mb-6">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/40 mb-1">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400 mb-1">
               New audit
             </p>
             <h1 className="text-[18px] font-semibold tracking-[-0.02em] text-foreground">

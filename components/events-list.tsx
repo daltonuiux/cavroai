@@ -109,7 +109,7 @@ function AttendeeRow({ person }: { person: EventAttendee }) {
         </span>
 
         {person.companyName && (
-          <span className="text-[11px] text-muted-foreground/40">{person.companyName}</span>
+          <span className="text-[11px] text-zinc-400">{person.companyName}</span>
         )}
 
         <span className={`rounded px-1 py-px text-[9px] font-semibold ${wLabel.className}`}>
@@ -126,7 +126,7 @@ function AttendeeRow({ person }: { person: EventAttendee }) {
           href={`https://x.com/${person.twitterHandle}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground/35 hover:text-foreground/60 transition-colors"
+          className="inline-flex items-center gap-0.5 text-[10px] text-zinc-400 hover:text-foreground/60 transition-colors"
         >
           <XIcon />
           @{person.twitterHandle}
@@ -149,7 +149,7 @@ function AttendeeRow({ person }: { person: EventAttendee }) {
 
       {/* The specific tweet that triggered the detection */}
       {person.mentionContext && (
-        <p className="text-[11px] text-muted-foreground/35 leading-snug pl-3.5 line-clamp-2 italic">
+        <p className="text-[11px] text-zinc-400 leading-snug pl-3.5 line-clamp-2 italic">
           &ldquo;{person.mentionContext}&rdquo;
         </p>
       )}
@@ -240,7 +240,7 @@ function SourceEvidenceSection({
 
   return (
     <div className="border-t border-border px-4 py-3 flex flex-col gap-2">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/30">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
         {evidence.length === 1 ? "Example tweet" : "Example tweets"}
       </p>
       <div className="flex flex-col gap-2">
@@ -252,7 +252,7 @@ function SourceEvidenceSection({
               className="rounded-md bg-foreground/[0.025] border-l-2 border-foreground/[0.12] pl-3 pr-3 py-2.5"
             >
               {author && (
-                <p className="text-[10px] font-semibold text-muted-foreground/50 mb-1">
+                <p className="text-[10px] font-semibold text-zinc-500 mb-1">
                   {author}
                 </p>
               )}
@@ -297,7 +297,7 @@ function EventCard({ event }: { event: RadarEvent }) {
 
           {/* Description — what is this event */}
           {event.description && (
-            <p className="text-[12px] leading-snug text-muted-foreground/55 mb-2">
+            <p className="text-[12px] leading-snug text-zinc-500 mb-2">
               {event.description}
             </p>
           )}
@@ -305,11 +305,11 @@ function EventCard({ event }: { event: RadarEvent }) {
           {/* When + where */}
           {(event.estimatedDate || event.location) && (
             <div className="flex items-center gap-1.5 mb-1.5">
-              <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-muted-foreground/30 shrink-0" aria-hidden="true">
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-zinc-400 shrink-0" aria-hidden="true">
                 <rect x="1" y="3" width="14" height="12" rx="1.5" />
                 <path d="M1 7h14M5 1v4M11 1v4" strokeLinecap="round" />
               </svg>
-              <span className="text-[11px] text-muted-foreground/50">
+              <span className="text-[11px] text-zinc-500">
                 {[event.estimatedDate, event.location].filter(Boolean).join(" · ")}
               </span>
             </div>
@@ -317,7 +317,7 @@ function EventCard({ event }: { event: RadarEvent }) {
 
           {/* Attendee count + warmth pills */}
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-[11px] text-muted-foreground/50">
+            <p className="text-[11px] text-zinc-500">
               {event.attendeeCount === 1 ? "1 person" : `${event.attendeeCount} people`} from your network
             </p>
             <RelSummaryPills people={event.people} />
@@ -339,10 +339,10 @@ function EventCard({ event }: { event: RadarEvent }) {
 
       {/* ── Suggested action — top CTA ────────────────────────────────────── */}
       <div className="border-t border-border px-4 py-3">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/30 mb-1">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1">
           Suggested action
           {event.reachableCount > 0 && (
-            <span className="ml-1.5 font-normal normal-case tracking-normal text-muted-foreground/40">
+            <span className="ml-1.5 font-normal normal-case tracking-normal text-zinc-400">
               · {event.reachableCount} reachable {event.reachableCount === 1 ? "contact" : "contacts"}
             </span>
           )}
@@ -357,7 +357,7 @@ function EventCard({ event }: { event: RadarEvent }) {
 
       {/* ── Why attend ─────────────────────────────────────────────────────── */}
       <div className="border-t border-border px-4 py-3">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/30 mb-1.5">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1.5">
           Why attend
         </p>
         <p className="text-[13px] leading-relaxed font-medium text-foreground/80">
@@ -372,7 +372,7 @@ function EventCard({ event }: { event: RadarEvent }) {
             <SignalPill key={s.type} signal={s} />
           ))}
           {event.mentionCount > event.attendeeCount && (
-            <span className="text-[10px] text-muted-foreground/30">
+            <span className="text-[10px] text-zinc-400">
               {event.mentionCount} mentions
             </span>
           )}
@@ -386,7 +386,7 @@ function EventCard({ event }: { event: RadarEvent }) {
       <div className="border-t border-border px-4 pt-2.5 pb-3">
         <button
           onClick={() => setShowPeople((v) => !v)}
-          className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors"
+          className="text-[11px] text-zinc-400 hover:text-foreground transition-colors"
         >
           {showPeople
             ? "Hide people"
@@ -428,7 +428,7 @@ function RelatedCommunityRow({ surface }: { surface: SurfaceRef }) {
       <span className="flex-1 text-[12px] font-medium text-foreground/80 truncate min-w-0">
         {surface.title}
       </span>
-      <span className="shrink-0 text-[10px] text-muted-foreground/35">
+      <span className="shrink-0 text-[10px] text-zinc-400">
         {surface.sharedPeopleCount} {surface.sharedPeopleCount === 1 ? "person" : "people"}
       </span>
     </div>
@@ -445,7 +445,7 @@ function RelatedCommunitiesSection({ surfaces }: { surfaces: SurfaceRef[] }) {
   return (
     <div className="border-t border-border px-4 py-3 flex flex-col gap-1.5">
       <div className="flex items-center justify-between mb-0.5">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/30">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
           Related Communities
           {surfaces.length > 0 && (
             <span className="ml-1.5 font-bold text-foreground/40">{surfaces.length}</span>
@@ -453,7 +453,7 @@ function RelatedCommunitiesSection({ surfaces }: { surfaces: SurfaceRef[] }) {
         </p>
         <Link
           href="/surfaces"
-          className="text-[10px] text-muted-foreground/40 hover:text-foreground transition-colors"
+          className="text-[10px] text-zinc-400 hover:text-foreground transition-colors"
         >
           View all →
         </Link>
@@ -468,7 +468,7 @@ function RelatedCommunitiesSection({ surfaces }: { surfaces: SurfaceRef[] }) {
       {surfaces.length > 2 && (
         <button
           onClick={() => setExpanded((v) => !v)}
-          className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors self-start mt-0.5"
+          className="text-[11px] text-zinc-400 hover:text-foreground transition-colors self-start mt-0.5"
         >
           {expanded ? "Show fewer" : `Show ${hidden} more`}
         </button>
@@ -524,7 +524,7 @@ export function EventsRadarList({
           {verifiedCount > 0 && ` · ${verifiedCount} verified`}
           {speakerTotal > 0 && ` · ${speakerTotal} speaking`}
         </p>
-        <p className="text-[11px] text-muted-foreground/35">Sorted by network signal strength</p>
+        <p className="text-[11px] text-zinc-400">Sorted by network signal strength</p>
       </div>
 
       {/* Cards */}

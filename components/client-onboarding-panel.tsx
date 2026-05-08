@@ -75,7 +75,7 @@ function GhostBtn({
     <button
       type="button"
       onClick={onClick}
-      className="text-[12px] text-muted-foreground/50 transition-colors hover:text-foreground"
+      className="text-[12px] text-zinc-500 transition-colors hover:text-foreground"
     >
       {children}
     </button>
@@ -267,8 +267,8 @@ export function ClientOnboardingPanel() {
             className="group flex flex-col gap-2 rounded-lg border border-border bg-background px-4 py-3.5 text-left transition-colors hover:border-foreground/20 hover:bg-muted/30"
           >
             <div className="flex items-center justify-between">
-              <Upload className="size-3.5 text-muted-foreground/50" strokeWidth={2} />
-              <ChevronRight className="size-3 text-muted-foreground/25 transition-transform group-hover:translate-x-0.5" />
+              <Upload className="size-3.5 text-zinc-500" strokeWidth={2} />
+              <ChevronRight className="size-3 text-zinc-300 transition-transform group-hover:translate-x-0.5" />
             </div>
             <div>
               <p className="text-[12px] font-semibold text-foreground">Upload CSV</p>
@@ -283,8 +283,8 @@ export function ClientOnboardingPanel() {
             className="group flex flex-col gap-2 rounded-lg border border-border bg-background px-4 py-3.5 text-left transition-colors hover:border-foreground/20 hover:bg-muted/30"
           >
             <div className="flex items-center justify-between">
-              <Globe className="size-3.5 text-muted-foreground/50" strokeWidth={2} />
-              <ChevronRight className="size-3 text-muted-foreground/25 transition-transform group-hover:translate-x-0.5" />
+              <Globe className="size-3.5 text-zinc-500" strokeWidth={2} />
+              <ChevronRight className="size-3 text-zinc-300 transition-transform group-hover:translate-x-0.5" />
             </div>
             <div>
               <p className="text-[12px] font-semibold text-foreground">Detect from your site</p>
@@ -295,10 +295,10 @@ export function ClientOnboardingPanel() {
           </button>
 
           <div className="flex flex-col gap-2 rounded-lg border border-dashed border-border bg-background/50 px-4 py-3.5 opacity-60">
-            <Plus className="size-3.5 text-muted-foreground/40" strokeWidth={2} />
+            <Plus className="size-3.5 text-zinc-400" strokeWidth={2} />
             <div>
               <p className="text-[12px] font-semibold text-foreground/70">Add manually</p>
-              <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground/50">
+              <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">
                 Use "Add Client" above to continue one at a time
               </p>
             </div>
@@ -331,12 +331,12 @@ export function ClientOnboardingPanel() {
                     : "border-border hover:border-foreground/20 hover:bg-muted/20"
                 }`}
               >
-                <Upload className="size-5 text-muted-foreground/35" strokeWidth={1.5} />
+                <Upload className="size-5 text-zinc-400" strokeWidth={1.5} />
                 <div className="text-center">
                   <p className="text-[13px] font-medium text-foreground/70">
                     Drop a CSV file here
                   </p>
-                  <p className="mt-0.5 text-[12px] text-muted-foreground/50">or click to browse</p>
+                  <p className="mt-0.5 text-[12px] text-zinc-500">or click to browse</p>
                 </div>
               </div>
               <input
@@ -354,11 +354,11 @@ export function ClientOnboardingPanel() {
 
               {/* Format example */}
               <div className="mt-4">
-                <p className="mb-1.5 text-[11px] font-medium text-muted-foreground/45">
+                <p className="mb-1.5 text-[11px] font-medium text-zinc-500">
                   Expected format
                 </p>
                 <div className="space-y-0.5 rounded-md border border-border bg-muted/30 px-3 py-2.5 font-mono text-[11px]">
-                  <p className="text-muted-foreground/40">Name, Website, Relationship (optional)</p>
+                  <p className="text-zinc-400">Name, Website, Relationship (optional)</p>
                   <p className="text-muted-foreground/70">Acme Corp, acme.com, current_client</p>
                   <p className="text-muted-foreground/70">Linear, linear.app, warm</p>
                   <p className="text-muted-foreground/70">Notion, notion.so</p>
@@ -409,12 +409,12 @@ export function ClientOnboardingPanel() {
                         >
                           {client.name}
                         </p>
-                        <p className="text-[11px] text-muted-foreground/55">{client.websiteUrl}</p>
+                        <p className="text-[11px] text-zinc-500">{client.websiteUrl}</p>
                       </div>
                       <button
                         type="button"
                         onClick={() => toggleRemove(i)}
-                        className="shrink-0 text-muted-foreground/35 transition-colors hover:text-foreground"
+                        className="shrink-0 text-zinc-400 transition-colors hover:text-foreground"
                         title={isRemoved ? "Restore" : "Remove"}
                       >
                         {isRemoved ? (
@@ -449,14 +449,14 @@ export function ClientOnboardingPanel() {
                     if (e.key === "Enter") runDetect()
                   }}
                   placeholder="youragency.com"
-                  className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-[13px] text-foreground placeholder:text-muted-foreground/40 outline-none transition-colors focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10"
+                  className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-[13px] text-foreground placeholder:text-zinc-400 outline-none transition-colors focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10"
                 />
                 <PrimaryBtn onClick={runDetect} disabled={!detectUrl.trim() || isPending}>
                   Detect
                 </PrimaryBtn>
               </div>
               {detectError && <p className="mt-2 text-[12px] text-red-500">{detectError}</p>}
-              <p className="mt-2.5 text-[11px] text-muted-foreground/45">
+              <p className="mt-2.5 text-[11px] text-zinc-500">
                 Looks for clients in case studies, testimonials, and logo sections.
               </p>
             </div>
@@ -464,12 +464,12 @@ export function ClientOnboardingPanel() {
 
           {detectStep === "loading" && (
             <div className="flex flex-col items-center justify-center gap-3 py-14">
-              <Loader2 className="size-5 animate-spin text-muted-foreground/35" />
+              <Loader2 className="size-5 animate-spin text-zinc-400" />
               <div className="text-center">
                 <p className="text-[13px] font-medium text-foreground/70">
                   Checking your website
                 </p>
-                <p className="text-[12px] text-muted-foreground/50">
+                <p className="text-[12px] text-zinc-500">
                   Looking for client mentions...
                 </p>
               </div>
@@ -522,7 +522,7 @@ export function ClientOnboardingPanel() {
                 <div>
                   {/* Select all */}
                   <div className="flex items-center justify-between border-b border-border bg-muted/20 px-4 py-2">
-                    <p className="text-[11px] text-muted-foreground/50">
+                    <p className="text-[11px] text-zinc-500">
                       Add websites for the clients you want to import
                     </p>
                     <button
@@ -534,7 +534,7 @@ export function ClientOnboardingPanel() {
                           setSelected(new Set(detected.map((_, i) => i)))
                         }
                       }}
-                      className="text-[11px] text-muted-foreground/50 transition-colors hover:text-foreground"
+                      className="text-[11px] text-zinc-500 transition-colors hover:text-foreground"
                     >
                       {selected.size === detected.length ? "Deselect all" : "Select all"}
                     </button>
@@ -565,7 +565,7 @@ export function ClientOnboardingPanel() {
                               onClick={() => {
                                 if (!isSelected) toggleSelect(i)
                               }}
-                              className="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 text-[11px] text-foreground placeholder:text-muted-foreground/35 outline-none transition-colors focus:border-foreground/30"
+                              className="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 text-[11px] text-foreground placeholder:text-zinc-400 outline-none transition-colors focus:border-foreground/30"
                             />
                           </div>
                         </div>

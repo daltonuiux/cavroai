@@ -52,9 +52,9 @@ const RELATIONSHIP_CONFIG: Record<string, { label: string; className: string }> 
 }
 
 function RelationshipBadge({ type }: { type?: string }) {
-  if (!type) return <span className="text-muted-foreground/30">—</span>
+  if (!type) return <span className="text-zinc-400">—</span>
   const cfg = RELATIONSHIP_CONFIG[type]
-  if (!cfg) return <span className="text-[12px] text-muted-foreground/50">{type}</span>
+  if (!cfg) return <span className="text-[12px] text-zinc-500">{type}</span>
   return (
     <span className={`inline-flex rounded px-1.5 py-px text-[11px] font-medium ${cfg.className}`}>
       {cfg.label}
@@ -104,7 +104,7 @@ function SignalStatusBadge({ status, scanning }: { status?: string; scanning: bo
       )
     default:
       return (
-        <span className="text-[11px] text-muted-foreground/30">No signals yet</span>
+        <span className="text-[11px] text-zinc-400">No signals yet</span>
       )
   }
 }
@@ -363,7 +363,7 @@ export function ClientsTable({ rows: initialRows }: { rows: ClientTableRow[] }) 
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          className="flex items-center gap-1 text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors group/url w-fit"
+                          className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-muted-foreground transition-colors group/url w-fit"
                         >
                           <span className="truncate max-w-[180px]">{cleanUrl(row.websiteUrl)}</span>
                           <ExternalLink className="size-2.5 shrink-0 opacity-0 group-hover/url:opacity-70 transition-opacity" />
@@ -394,7 +394,7 @@ export function ClientsTable({ rows: initialRows }: { rows: ClientTableRow[] }) 
                         {dateLabel}
                         {dateSuffix && (
                           <span
-                            className="text-muted-foreground/30"
+                            className="text-zinc-400"
                             title="Added date — not yet scanned"
                           >
                             {dateSuffix}
@@ -411,7 +411,7 @@ export function ClientsTable({ rows: initialRows }: { rows: ClientTableRow[] }) 
                           onClick={(e) => handleRowScan(row.id, e)}
                           disabled={isScanning}
                           title="Re-scan"
-                          className="opacity-0 group-hover:opacity-100 rounded p-1 text-muted-foreground/50 hover:text-foreground transition-all disabled:opacity-30"
+                          className="opacity-0 group-hover:opacity-100 rounded p-1 text-zinc-500 hover:text-foreground transition-all disabled:opacity-30"
                         >
                           <RefreshCw className="size-3.5" strokeWidth={2} />
                         </button>
@@ -428,7 +428,7 @@ export function ClientsTable({ rows: initialRows }: { rows: ClientTableRow[] }) 
                         <button
                           onClick={() => setPendingDelete(row)}
                           title="Remove"
-                          className="opacity-0 group-hover:opacity-100 rounded p-1 text-muted-foreground/40 hover:text-destructive transition-all"
+                          className="opacity-0 group-hover:opacity-100 rounded p-1 text-zinc-400 hover:text-destructive transition-all"
                         >
                           <Trash2 className="size-3.5" strokeWidth={1.75} />
                         </button>
@@ -443,7 +443,7 @@ export function ClientsTable({ rows: initialRows }: { rows: ClientTableRow[] }) 
 
         {/* Legend */}
         {rows.some((r) => !r.lastAnalyzedAt) && (
-          <p className="text-[11px] text-muted-foreground/30 px-0.5">
+          <p className="text-[11px] text-zinc-400 px-0.5">
             * Date shown is added date — not yet scanned.
           </p>
         )}
@@ -469,7 +469,7 @@ function Th({ children, sr }: { children?: React.ReactNode; sr?: boolean }) {
   return (
     <th
       scope="col"
-      className={`px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50 ${sr ? "sr-only" : ""}`}
+      className={`px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 ${sr ? "sr-only" : ""}`}
     >
       {children}
     </th>

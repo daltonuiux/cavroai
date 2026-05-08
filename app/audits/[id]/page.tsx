@@ -36,34 +36,34 @@ import type {
 const SEVERITY_STYLES: Record<Severity, string> = {
   high:   "bg-rose-500/10 text-rose-600 dark:text-rose-400",
   medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  low:    "bg-foreground/[0.04] text-foreground/40",
+  low:    "bg-foreground/[0.04] text-zinc-500",
 }
 
 const PRIORITY_STYLES: Record<Priority, string> = {
   high:   "bg-rose-500/10 text-rose-600 dark:text-rose-400",
   medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  low:    "bg-foreground/[0.04] text-foreground/40",
+  low:    "bg-foreground/[0.04] text-zinc-500",
 }
 
 const CATEGORY_STYLES: Record<AuditCategory, string> = {
   positioning: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
   trust:       "bg-sky-500/10 text-sky-600 dark:text-sky-400",
   content:     "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  technical:   "bg-foreground/[0.04] text-foreground/50",
+  technical:   "bg-foreground/[0.04] text-zinc-500",
   pricing:     "bg-amber-500/10 text-amber-600 dark:text-amber-400",
 }
 
 const EFFORT_STYLES: Record<Effort, string> = {
   quick:  "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  large:  "bg-foreground/[0.06] text-foreground/50",
+  large:  "bg-foreground/[0.06] text-zinc-500",
 }
 
 const VISIBILITY_STYLES: Record<Visibility, string> = {
   high:   "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   low:    "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-  none:   "bg-foreground/[0.04] text-foreground/40",
+  none:   "bg-foreground/[0.04] text-zinc-500",
 }
 
 const VISIBILITY_LABELS: Record<Visibility, string> = {
@@ -132,11 +132,11 @@ function formatDate(iso: string) {
 function SectionLabel({ label, sublabel }: { label: string; sublabel?: string }) {
   return (
     <div className="mb-4">
-      <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/40">
+      <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
         {label}
       </p>
       {sublabel && (
-        <p className="text-[11px] text-muted-foreground/35 mt-1">{sublabel}</p>
+        <p className="text-[11px] text-zinc-400 mt-1">{sublabel}</p>
       )}
     </div>
   )
@@ -175,7 +175,7 @@ function HeroSection({ audit }: { audit: AuditResult }) {
           {/* Company */}
           <div className="flex items-center gap-2.5 mb-2">
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-foreground/[0.07]">
-              <span className="text-[12px] font-bold text-foreground/50">
+              <span className="text-[12px] font-bold text-zinc-500">
                 {audit.input.company[0]?.toUpperCase() ?? "?"}
               </span>
             </div>
@@ -183,24 +183,24 @@ function HeroSection({ audit }: { audit: AuditResult }) {
               <h1 className="text-[17px] font-bold text-foreground tracking-[-0.02em] leading-none">
                 {audit.input.company}
               </h1>
-              <p className="text-[11px] text-muted-foreground/35 mt-0.5">{audit.input.url}</p>
+              <p className="text-[11px] text-zinc-400 mt-0.5">{audit.input.url}</p>
             </div>
           </div>
 
           {/* Meta chips */}
           <div className="flex flex-wrap items-center gap-1.5 mb-3">
             {audit.input.category && (
-              <span className="rounded bg-foreground/[0.05] px-2 py-px text-[10px] font-medium text-foreground/45">
+              <span className="rounded bg-foreground/[0.05] px-2 py-px text-[10px] font-medium text-zinc-500">
                 {audit.input.category}
               </span>
             )}
-            <span className="rounded bg-foreground/[0.04] px-2 py-px text-[10px] font-medium text-foreground/35">
+            <span className="rounded bg-foreground/[0.04] px-2 py-px text-[10px] font-medium text-zinc-500">
               {audit.input.prompts.length} prompts
             </span>
-            <span className="rounded bg-foreground/[0.04] px-2 py-px text-[10px] font-medium text-foreground/35">
+            <span className="rounded bg-foreground/[0.04] px-2 py-px text-[10px] font-medium text-zinc-500">
               {audit.input.competitors.length} competitors
             </span>
-            <span className="text-[10px] text-muted-foreground/25">
+            <span className="text-[10px] text-zinc-300">
               {formatDate(audit.createdAt)}
             </span>
           </div>
@@ -234,7 +234,7 @@ function AIPerceptionSection({ audit }: { audit: AuditResult }) {
         <div className="grid grid-cols-2 gap-4 border-t border-border pt-4">
           {/* Associated terms */}
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 mb-2">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-2">
               How AI describes you
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -250,14 +250,14 @@ function AIPerceptionSection({ audit }: { audit: AuditResult }) {
           </div>
           {/* Missing context */}
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 mb-2">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-2">
               What AI cannot find
             </p>
             <div className="flex flex-wrap gap-1.5">
               {missingContext.map((item) => (
                 <span
                   key={item}
-                  className="rounded bg-foreground/[0.04] px-2 py-0.5 text-[11px] font-medium text-foreground/40"
+                  className="rounded bg-foreground/[0.04] px-2 py-0.5 text-[11px] font-medium text-zinc-500"
                 >
                   {item}
                 </span>
@@ -298,7 +298,7 @@ function BarriersSection({ barriers }: { barriers: RecommendationBarrier[] }) {
                   </p>
                   <Pill label={barrier.severity} className={SEVERITY_STYLES[barrier.severity]} />
                 </div>
-                <p className="text-[12px] leading-relaxed text-foreground/55">
+                <p className="text-[12px] leading-relaxed text-zinc-500">
                   {barrier.description}
                 </p>
               </div>
@@ -350,22 +350,22 @@ function CompetitorSection({ rows, myScore }: { rows: CompetitorRow[]; myScore: 
       <table className="w-full">
         <thead>
           <tr className="border-b border-border">
-            <th className="text-left pb-2.5 pr-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30">
+            <th className="text-left pb-2.5 pr-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">
               Competitor
             </th>
-            <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30">
+            <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">
               Score
             </th>
-            <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 hidden sm:table-cell">
+            <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400 hidden sm:table-cell">
               Category
             </th>
-            <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 hidden md:table-cell">
+            <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400 hidden md:table-cell">
               Trust
             </th>
-            <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 hidden lg:table-cell">
+            <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400 hidden lg:table-cell">
               Differentiation
             </th>
-            <th className="text-right pb-2.5 pl-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30">
+            <th className="text-right pb-2.5 pl-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">
               Rec. rate
             </th>
           </tr>
@@ -375,7 +375,7 @@ function CompetitorSection({ rows, myScore }: { rows: CompetitorRow[]; myScore: 
           <tr className="border-b border-border bg-foreground/[0.015]">
             <td className="py-3 pr-4">
               <p className="text-[12px] font-bold text-foreground">You</p>
-              <p className="text-[10px] text-muted-foreground/30">{myScore} / 100</p>
+              <p className="text-[10px] text-zinc-400">{myScore} / 100</p>
             </td>
             <td className="py-3 px-4 text-right">
               <p className={`text-[15px] font-bold tabular-nums ${myScore >= 75 ? "text-emerald-600 dark:text-emerald-400" : myScore >= 50 ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400"}`}>
@@ -405,11 +405,11 @@ function CompetitorSection({ rows, myScore }: { rows: CompetitorRow[]; myScore: 
                   <td className="py-3 pr-4">
                     <div className="flex items-center gap-2.5">
                       <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-foreground/[0.06]">
-                        <span className="text-[10px] font-bold text-foreground/40">{row.name[0]}</span>
+                        <span className="text-[10px] font-bold text-zinc-500">{row.name[0]}</span>
                       </div>
                       <div>
                         <p className="text-[12px] font-semibold text-foreground">{row.name}</p>
-                        <p className="text-[10px] text-muted-foreground/30">{row.url}</p>
+                        <p className="text-[10px] text-zinc-400">{row.url}</p>
                       </div>
                     </div>
                   </td>
@@ -434,7 +434,7 @@ function CompetitorSection({ rows, myScore }: { rows: CompetitorRow[]; myScore: 
                 </tr>
                 <tr className="border-b border-border">
                   <td colSpan={6} className="pb-3 pt-0 pl-[34px] pr-4">
-                    <p className="text-[11px] text-foreground/35 leading-snug">{row.advantage}</p>
+                    <p className="text-[11px] text-zinc-500 leading-snug">{row.advantage}</p>
                   </td>
                 </tr>
               </Fragment>
@@ -462,16 +462,16 @@ function PromptReadinessSection({ results }: { results: PromptResult[] }) {
       <table className="w-full">
         <thead>
           <tr className="border-b border-border">
-            <th className="text-left pb-2.5 pr-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30">
+            <th className="text-left pb-2.5 pr-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">
               Prompt
             </th>
-            <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 hidden sm:table-cell">
+            <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400 hidden sm:table-cell">
               Position
             </th>
-            <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30">
+            <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">
               Visibility
             </th>
-            <th className="text-right pb-2.5 pl-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30">
+            <th className="text-right pb-2.5 pl-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">
               Readiness
             </th>
           </tr>
@@ -486,7 +486,7 @@ function PromptReadinessSection({ results }: { results: PromptResult[] }) {
                   </p>
                 </td>
                 <td className="py-3 px-4 text-right hidden sm:table-cell">
-                  <span className="text-[12px] font-bold tabular-nums text-foreground/40">
+                  <span className="text-[12px] font-bold tabular-nums text-zinc-500">
                     {r.position !== null ? `#${r.position}` : "—"}
                   </span>
                 </td>
@@ -501,7 +501,7 @@ function PromptReadinessSection({ results }: { results: PromptResult[] }) {
                         style={{ width: `${r.readinessScore}%` }}
                       />
                     </div>
-                    <span className="text-[11px] font-bold tabular-nums text-foreground/45 w-6 text-right">
+                    <span className="text-[11px] font-bold tabular-nums text-zinc-500 w-6 text-right">
                       {r.readinessScore}
                     </span>
                   </div>
@@ -514,13 +514,13 @@ function PromptReadinessSection({ results }: { results: PromptResult[] }) {
                       <p className="text-[9px] font-bold uppercase tracking-widest text-rose-500/55 mb-1">
                         Weakness
                       </p>
-                      <p className="text-[11px] leading-snug text-foreground/45">{r.weakness}</p>
+                      <p className="text-[11px] leading-snug text-zinc-500">{r.weakness}</p>
                     </div>
                     <div>
                       <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-600/65 dark:text-emerald-400/65 mb-1">
                         Improvement
                       </p>
-                      <p className="text-[11px] leading-snug text-foreground/55">{r.suggestedImprovement}</p>
+                      <p className="text-[11px] leading-snug text-zinc-500">{r.suggestedImprovement}</p>
                     </div>
                   </div>
                 </td>
@@ -549,7 +549,7 @@ function FixCard({ fix, index }: { fix: Fix; index: number }) {
 
       {/* Problem */}
       <div>
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/35 mb-1">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1">
           Problem
         </p>
         <p className="text-[13px] font-semibold text-foreground tracking-[-0.01em] leading-snug">
@@ -559,17 +559,17 @@ function FixCard({ fix, index }: { fix: Fix; index: number }) {
 
       {/* Why it matters */}
       <div>
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/35 mb-1">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1">
           Why it matters
         </p>
-        <p className="text-[12px] leading-relaxed text-foreground/55">
+        <p className="text-[12px] leading-relaxed text-zinc-500">
           {fix.whyItMatters}
         </p>
       </div>
 
       {/* Suggested action */}
       <div>
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/35 mb-1">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1">
           Suggested action
         </p>
         <p className="text-[12px] leading-relaxed text-foreground/65">
@@ -584,7 +584,7 @@ function FixCard({ fix, index }: { fix: Fix; index: number }) {
             <p className="text-[10px] font-semibold uppercase tracking-widest text-rose-500/60 mb-1.5">
               Current
             </p>
-            <p className="text-[12px] leading-relaxed text-foreground/45 italic">
+            <p className="text-[12px] leading-relaxed text-zinc-500 italic">
               &ldquo;{fix.exampleCopy.before}&rdquo;
             </p>
           </div>
@@ -595,7 +595,7 @@ function FixCard({ fix, index }: { fix: Fix; index: number }) {
             <p className="text-[12px] leading-relaxed text-foreground/75 font-medium">
               &ldquo;{fix.exampleCopy.after}&rdquo;
             </p>
-            <p className="text-[10px] text-muted-foreground/30 mt-1.5">
+            <p className="text-[10px] text-zinc-400 mt-1.5">
               Replace bracketed placeholders before publishing.
             </p>
           </div>
@@ -637,7 +637,7 @@ function CopyRewriteCard({ rewrite }: { rewrite: CopyRewrite }) {
     <div className="card-cavro rounded-md overflow-hidden">
       {/* Section label */}
       <div className="px-5 py-2.5 border-b border-border">
-        <p className="text-[11px] font-semibold text-foreground/50">
+        <p className="text-[11px] font-semibold text-zinc-500">
           {COPY_SECTION_LABELS[rewrite.section]}
         </p>
       </div>
@@ -646,7 +646,7 @@ function CopyRewriteCard({ rewrite }: { rewrite: CopyRewrite }) {
         <p className="text-[10px] font-semibold uppercase tracking-widest text-rose-500/60 mb-1.5">
           Current
         </p>
-        <p className="text-[13px] leading-relaxed text-foreground/40 italic">
+        <p className="text-[13px] leading-relaxed text-zinc-500 italic">
           &ldquo;{rewrite.before}&rdquo;
         </p>
       </div>
@@ -661,8 +661,8 @@ function CopyRewriteCard({ rewrite }: { rewrite: CopyRewrite }) {
       </div>
       {/* Why */}
       <div className="px-5 py-3 bg-foreground/[0.01]">
-        <p className="text-[11px] leading-relaxed text-muted-foreground/50">
-          <span className="font-semibold text-foreground/40">Why: </span>
+        <p className="text-[11px] leading-relaxed text-zinc-500">
+          <span className="font-semibold text-zinc-500">Why: </span>
           {rewrite.why}
         </p>
       </div>
@@ -700,14 +700,14 @@ function NextActionsSection({ actions }: { actions: NextAction[] }) {
       <div className="divide-y divide-border">
         {actions.map((a, i) => (
           <div key={i} className="flex items-start gap-4 py-4">
-            <span className="text-[11px] font-bold text-foreground/20 tabular-nums w-4 shrink-0 mt-0.5">
+            <span className="text-[11px] font-bold text-zinc-300 tabular-nums w-4 shrink-0 mt-0.5">
               {i + 1}
             </span>
             <div className="flex-1 min-w-0">
               <p className="text-[13px] font-semibold text-foreground/80 leading-snug">
                 {a.action}
               </p>
-              <p className="text-[11px] text-muted-foreground/40 mt-0.5 leading-snug">
+              <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug">
                 {a.impact}
               </p>
             </div>
@@ -728,7 +728,7 @@ function NotFound() {
     <div className="flex flex-col gap-4 items-start max-w-md">
       <Link
         href="/audits"
-        className="flex items-center gap-1.5 text-[12px] text-muted-foreground/50 hover:text-foreground transition-colors"
+        className="flex items-center gap-1.5 text-[12px] text-zinc-500 hover:text-foreground transition-colors"
       >
         <ArrowLeft size={13} />
         Back to audits
@@ -770,7 +770,7 @@ export default function AuditResultPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-[13px] text-muted-foreground/40 py-8">
+      <div className="flex items-center gap-2 text-[13px] text-zinc-400 py-8">
         <div className="h-4 w-4 animate-spin rounded-full border-2 border-border border-t-foreground/40" />
         Loading audit…
       </div>
@@ -786,7 +786,7 @@ export default function AuditResultPage() {
       <div className="flex items-center justify-between gap-4 -mt-1">
         <Link
           href="/audits"
-          className="flex items-center gap-1.5 text-[11px] text-muted-foreground/35 hover:text-foreground transition-colors"
+          className="flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-foreground transition-colors"
         >
           <ArrowLeft size={12} />
           All audits
@@ -835,7 +835,7 @@ export default function AuditResultPage() {
         </Link>
         <Link
           href="/audits"
-          className="text-[12px] text-muted-foreground/35 hover:text-foreground transition-colors"
+          className="text-[12px] text-zinc-400 hover:text-foreground transition-colors"
         >
           All audits →
         </Link>

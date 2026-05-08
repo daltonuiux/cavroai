@@ -97,7 +97,7 @@ function StrengthBar({ strength }: { strength: number }) {
           style={{ width: `${strength}%` }}
         />
       </div>
-      <span className="text-[10px] text-muted-foreground/40">{strength}</span>
+      <span className="text-[10px] text-zinc-400">{strength}</span>
     </div>
   )
 }
@@ -145,7 +145,7 @@ function PersonRow({ person }: { person: ContactInSurface }) {
         </span>
 
         {person.companyName && (
-          <span className="text-[11px] text-muted-foreground/40">{person.companyName}</span>
+          <span className="text-[11px] text-zinc-400">{person.companyName}</span>
         )}
 
         {/* Warmth label */}
@@ -157,7 +157,7 @@ function PersonRow({ person }: { person: ContactInSurface }) {
           href={`https://x.com/${person.twitterHandle}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground/35 hover:text-foreground/60 transition-colors"
+          className="inline-flex items-center gap-0.5 text-[10px] text-zinc-400 hover:text-foreground/60 transition-colors"
         >
           <XIcon />
           @{person.twitterHandle}
@@ -178,7 +178,7 @@ function PersonRow({ person }: { person: ContactInSurface }) {
       )}
 
       {person.bio && (
-        <p className="text-[11px] text-muted-foreground/35 leading-snug line-clamp-1 pl-3.5">
+        <p className="text-[11px] text-zinc-400 leading-snug line-clamp-1 pl-3.5">
           {person.bio}
         </p>
       )}
@@ -210,10 +210,10 @@ function RelatedEventRow({ event }: { event: EventRef }) {
       <div className="flex-1 min-w-0">
         <span className="text-[12px] font-medium text-foreground/80 truncate block">{event.name}</span>
         {meta && (
-          <span className="text-[10px] text-muted-foreground/40">{meta}</span>
+          <span className="text-[10px] text-zinc-400">{meta}</span>
         )}
       </div>
-      <span className="shrink-0 text-[10px] text-muted-foreground/35">
+      <span className="shrink-0 text-[10px] text-zinc-400">
         {event.sharedPeopleCount} {event.sharedPeopleCount === 1 ? "person" : "people"}
       </span>
     </div>
@@ -230,7 +230,7 @@ function RelatedEventsSection({ events }: { events: EventRef[] }) {
   return (
     <div className="border-t border-border px-4 py-3 flex flex-col gap-1.5">
       <div className="flex items-center justify-between mb-0.5">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/30">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
           Related Events
           {events.length > 0 && (
             <span className="ml-1.5 font-bold text-foreground/40">{events.length}</span>
@@ -238,7 +238,7 @@ function RelatedEventsSection({ events }: { events: EventRef[] }) {
         </p>
         <Link
           href="/events"
-          className="text-[10px] text-muted-foreground/40 hover:text-foreground transition-colors"
+          className="text-[10px] text-zinc-400 hover:text-foreground transition-colors"
         >
           View all →
         </Link>
@@ -253,7 +253,7 @@ function RelatedEventsSection({ events }: { events: EventRef[] }) {
       {events.length > 2 && (
         <button
           onClick={() => setExpanded((v) => !v)}
-          className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors self-start mt-0.5"
+          className="text-[11px] text-zinc-400 hover:text-foreground transition-colors self-start mt-0.5"
         >
           {expanded ? "Show fewer" : `Show ${hidden} more`}
         </button>
@@ -309,7 +309,7 @@ function SurfaceOpportunityRow({ opp }: { opp: SurfaceOpportunity }) {
       </div>
 
       {/* Why now — truncated */}
-      <p className="text-[11px] text-muted-foreground/55 leading-snug line-clamp-2">
+      <p className="text-[11px] text-zinc-500 leading-snug line-clamp-2">
         {opp.whyNow}
       </p>
     </div>
@@ -333,7 +333,7 @@ function SurfaceOpportunitiesSection({ opps }: { opps: SurfaceOpportunity[] }) {
     <div className="border-t border-border px-4 py-3 flex flex-col gap-2.5">
       {/* Section header */}
       <div className="flex items-center justify-between">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/30">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
           Opportunities from this surface
           {opps.length > 0 && (
             <span className="ml-1.5 font-bold text-foreground/40">{opps.length}</span>
@@ -341,7 +341,7 @@ function SurfaceOpportunitiesSection({ opps }: { opps: SurfaceOpportunity[] }) {
         </p>
         <Link
           href="/opportunities"
-          className="text-[10px] text-muted-foreground/40 hover:text-foreground transition-colors"
+          className="text-[10px] text-zinc-400 hover:text-foreground transition-colors"
         >
           View all →
         </Link>
@@ -358,7 +358,7 @@ function SurfaceOpportunitiesSection({ opps }: { opps: SurfaceOpportunity[] }) {
       {opps.length > 2 && (
         <button
           onClick={() => setExpanded((v) => !v)}
-          className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors self-start"
+          className="text-[11px] text-zinc-400 hover:text-foreground transition-colors self-start"
         >
           {expanded
             ? "Show fewer"
@@ -394,7 +394,7 @@ function SurfaceCard({ surface }: { surface: Surface }) {
 
           {/* People count + relationship summary */}
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-[11px] text-muted-foreground/50">{personLabel} in your network</p>
+            <p className="text-[11px] text-zinc-500">{personLabel} in your network</p>
             <RelationshipSummaryPills summary={surface.relationshipSummary} />
           </div>
         </div>
@@ -447,7 +447,7 @@ function SurfaceCard({ surface }: { surface: Surface }) {
 
       {/* ── Why it matters ─────────────────────────────────────────────────── */}
       <div className="border-t border-border px-4 py-3 flex flex-col gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/30">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
           Why this matters
         </p>
 
@@ -486,7 +486,7 @@ function SurfaceCard({ surface }: { surface: Surface }) {
       <div className="border-t border-border px-4 pt-2.5 pb-3">
         <button
           onClick={() => setShowPeople((v) => !v)}
-          className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors"
+          className="text-[11px] text-zinc-400 hover:text-foreground transition-colors"
         >
           {showPeople ? "Hide people" : `View ${personLabel} →`}
         </button>
@@ -543,7 +543,7 @@ export function SurfacesList({
           {surfaces.length} surface{surfaces.length === 1 ? "" : "s"} detected
           {" "}across {enrichedCount} enriched contact{enrichedCount === 1 ? "" : "s"}
         </p>
-        <p className="text-[11px] text-muted-foreground/35">
+        <p className="text-[11px] text-zinc-400">
           Sorted by activity strength
         </p>
       </div>
