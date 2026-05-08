@@ -79,7 +79,7 @@ function deltaColour(delta: number) {
 
 export default function CompetitorsPage() {
   return (
-    <div className="flex flex-col gap-6 max-w-2xl">
+    <div className="flex flex-col gap-6">
 
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
@@ -109,7 +109,7 @@ export default function CompetitorsPage() {
       </div>
 
       {/* Competitor list */}
-      <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {MOCK_COMPETITORS.map((c) => {
           const delta = c.yourScore - c.score
           return (

@@ -231,7 +231,7 @@ function HeroSection({ audit }: { audit: AuditResult }) {
 
       {/* Executive summary */}
       <div className="border-t border-border pt-4">
-        <p className="text-[13px] font-medium leading-relaxed text-foreground/70">
+        <p className="text-[13px] font-medium leading-relaxed text-foreground/70 max-w-[70ch]">
           {audit.executiveSummary}
         </p>
       </div>
@@ -252,7 +252,7 @@ function AIPerceptionSection({ audit }: { audit: AuditResult }) {
         sublabel="How AI assistants currently describe and position your company"
       />
       <div className="card-cavro rounded-md px-5 py-4 flex flex-col gap-4">
-        <p className="text-[13px] leading-relaxed text-foreground/70">
+        <p className="text-[13px] leading-relaxed text-foreground/70 max-w-[70ch]">
           {description}
         </p>
         <div className="grid grid-cols-2 gap-4 border-t border-border pt-4">
@@ -305,7 +305,7 @@ function BarriersSection({ barriers }: { barriers: RecommendationBarrier[] }) {
         label="Why AI may not recommend you yet"
         sublabel="Structural barriers reducing your recommendation rate"
       />
-      <div className="flex flex-col gap-2.5">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
         {barriers.map((barrier, i) => {
           const Icon = BARRIER_ICONS[barrier.type]
           return (
@@ -396,7 +396,7 @@ function CompetitorSection({ rows, myScore }: { rows: CompetitorRow[]; myScore: 
         label="Competitor comparison"
         sublabel="How AI assistants position you against each tracked competitor"
       />
-      <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {rows.map((row, i) => {
           const delta = myScore - row.theirScore
           return (
@@ -493,7 +493,7 @@ function PromptReadinessSection({ results }: { results: PromptResult[] }) {
         label="Prompt readiness"
         sublabel="How you appear in AI responses to each tracked buyer prompt"
       />
-      <div className="flex flex-col gap-2.5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
         {results.map((r, i) => (
           <div key={i} className="card-cavro rounded-md px-5 py-4 flex flex-col gap-3">
             {/* Prompt + visibility */}
@@ -620,7 +620,7 @@ function RecommendedFixesSection({ fixes }: { fixes: Fix[] }) {
         label="Recommended fixes"
         sublabel="Highest-impact changes to improve your AI recommendation score"
       />
-      <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {fixes.map((fix, i) => (
           <FixCard key={i} fix={fix} index={i} />
         ))}
@@ -685,7 +685,7 @@ function CopyRewritesSection({ rewrites }: { rewrites: CopyRewrite[] }) {
         label="Website copy rewrites"
         sublabel="How to reframe your messaging so AI models can describe and recommend you accurately"
       />
-      <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {rewrites.map((r, i) => (
           <CopyRewriteCard key={i} rewrite={r} />
         ))}
@@ -791,7 +791,7 @@ export default function AuditResultPage() {
   if (!audit) return <NotFound />
 
   return (
-    <div className="flex flex-col gap-8 max-w-2xl">
+    <div className="flex flex-col gap-8 w-full">
 
       {/* Nav row */}
       <div className="flex items-center justify-between gap-4">

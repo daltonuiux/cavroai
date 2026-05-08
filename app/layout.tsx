@@ -34,7 +34,7 @@ export default function RootLayout({
         <div className="flex flex-1 flex-col overflow-hidden">
           <Topbar />
           <main className="flex-1 overflow-auto">
-            <div className="px-6 py-5">{children}</div>
+            <div className="px-6 py-6 sm:px-8 xl:px-10">{children}</div>
           </main>
         </div>
       </body>

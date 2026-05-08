@@ -114,7 +114,7 @@ export default function PromptsPage() {
   const winning = MOCK_PROMPTS.filter((p) => p.yourPosition === 1).length
 
   return (
-    <div className="flex flex-col gap-6 max-w-2xl">
+    <div className="flex flex-col gap-6">
 
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
@@ -149,7 +149,7 @@ export default function PromptsPage() {
       </div>
 
       {/* Prompt list */}
-      <div className="flex flex-col gap-2.5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
         {MOCK_PROMPTS.map((p) => {
           const pos     = positionLabel(p.yourPosition)
           const catStyle = CATEGORY_STYLES[p.category] ?? "bg-foreground/[0.04] text-foreground/40"

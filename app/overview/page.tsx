@@ -197,7 +197,7 @@ export default function OverviewPage() {
   const c = scoreColour(MOCK_SCORE)
 
   return (
-    <div className="flex flex-col gap-5 w-full max-w-4xl">
+    <div className="flex flex-col gap-5 w-full">
 
       {/* ── 1. Hero ─────────────────────────────────────────────────────────── */}
       <div className="card-cavro rounded-md p-5">
@@ -217,7 +217,7 @@ export default function OverviewPage() {
             </div>
 
             {/* Summary */}
-            <p className="text-[13px] leading-relaxed text-foreground/70 max-w-prose">
+            <p className="text-[13px] leading-relaxed text-foreground/70 max-w-[60ch]">
               {MOCK_AUDIT.summary}
             </p>
 

@@ -65,7 +65,7 @@ function scoreLabel(score: number) {
 
 export default function AuditsPage() {
   return (
-    <div className="flex flex-col gap-6 max-w-2xl">
+    <div className="flex flex-col gap-6">
 
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
@@ -84,7 +84,7 @@ export default function AuditsPage() {
       </div>
 
       {/* Audit list */}
-      <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
         {MOCK_AUDITS.map((audit) => {
           const colour = scoreColour(audit.score)
           return (

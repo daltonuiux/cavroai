@@ -48,7 +48,7 @@ function SettingRow({
 
 export default function SettingsPage() {
   return (
-    <div className="flex flex-col gap-8 max-w-xl">
+    <div className="flex flex-col gap-8 max-w-2xl">
 
       {/* Header */}
       <div>

@@ -129,7 +129,7 @@ export default function RecommendationsPage() {
   const inProg  = MOCK_RECS.filter((r) => r.status === "in-progress").length
 
   return (
-    <div className="flex flex-col gap-6 max-w-2xl">
+    <div className="flex flex-col gap-6">
 
       {/* Header */}
       <div>
@@ -171,7 +171,7 @@ export default function RecommendationsPage() {
       </div>
 
       {/* Rec list */}
-      <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {MOCK_RECS.map((rec) => (
           <div
             key={rec.id}
