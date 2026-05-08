@@ -64,14 +64,17 @@ function scoreLabel(score: number) {
 // ---------------------------------------------------------------------------
 
 export default function AuditsPage() {
+  const [latest, ...older] = MOCK_AUDITS
+  const latestColour = scoreColour(latest.score)
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col w-full">
 
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-4 pb-7 border-b border-border">
         <div>
-          <h1 className="text-[18px] font-semibold tracking-[-0.02em] text-foreground">Audits</h1>
-          <p className="mt-0.5 text-[12px] text-muted-foreground">
+          <h1 className="text-[18px] font-bold tracking-[-0.02em] text-foreground">Audits</h1>
+          <p className="mt-0.5 text-[12px] text-zinc-500">
             Full AI recommendation audits across all tracked prompts and competitors
           </p>
         </div>
@@ -83,76 +86,113 @@ export default function AuditsPage() {
         </Link>
       </div>
 
-      {/* Audit list */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-        {MOCK_AUDITS.map((audit) => {
-          const colour = scoreColour(audit.score)
-          return (
-            <div
-              key={audit.id}
-              className="card-cavro rounded-md px-5 py-4 flex flex-col gap-3"
-            >
-              {/* Top row */}
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                    <span className="text-[13px] font-semibold text-foreground tracking-[-0.01em]">
-                      {audit.label}
-                    </span>
-                    <span className="rounded bg-foreground/[0.05] px-1.5 py-px text-[10px] font-semibold text-zinc-500">
-                      {audit.status}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-zinc-400">{audit.date}</p>
-                </div>
+      {/* ── Featured: most recent audit ────────────────────────────────── */}
+      <div className="py-7 border-b border-border">
+        <div className="flex items-start gap-6">
 
-                {/* Score */}
-                <div className="shrink-0 text-right">
-                  <p className={`text-[20px] font-bold leading-none tabular-nums ${colour}`}>
-                    {audit.score}
-                  </p>
-                  <p className={`text-[10px] font-semibold mt-0.5 ${colour}`}>
-                    {scoreLabel(audit.score)}
-                  </p>
-                </div>
-              </div>
+          {/* Score */}
+          <div className="shrink-0">
+            <p className={`text-[48px] font-bold leading-none tabular-nums tracking-tight ${latestColour}`}>
+              {latest.score}
+            </p>
+            <p className={`text-[9px] font-bold uppercase tracking-widest mt-1.5 opacity-60 ${latestColour}`}>
+              {scoreLabel(latest.score)}
+            </p>
+          </div>
 
-              {/* Summary */}
-              <p className="text-[12px] leading-relaxed text-zinc-500">
-                {audit.summary}
+          {/* Detail */}
+          <div className="flex-1 min-w-0 pt-1">
+            <div className="flex items-center gap-2 mb-1">
+              <p className="text-[15px] font-semibold text-foreground tracking-[-0.01em]">
+                {latest.label}
               </p>
-
-              {/* Stats */}
-              <div className="flex items-center gap-5">
-                <span className="flex items-center gap-1.5 text-[11px]">
-                  <span className="font-semibold text-foreground/70">{audit.prompts}</span>
-                  <span className="text-zinc-400">prompts tested</span>
-                </span>
-                <span className="flex items-center gap-1.5 text-[11px]">
-                  <span className="font-semibold text-rose-600 dark:text-rose-400">{audit.gaps}</span>
-                  <span className="text-zinc-400">gaps found</span>
-                </span>
+              <span className="rounded bg-emerald-500/10 px-1.5 py-px text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                Latest
+              </span>
+            </div>
+            <p className="text-[11px] text-zinc-400 mb-3">{latest.date}</p>
+            <p className="text-[13px] leading-relaxed text-zinc-500 max-w-[65ch]">
+              {latest.summary}
+            </p>
+            <div className="flex items-center gap-5 mt-4">
+              <span className="flex items-center gap-1.5 text-[11px]">
+                <span className="font-semibold text-foreground/70">{latest.prompts}</span>
+                <span className="text-zinc-400">prompts tested</span>
+              </span>
+              <span className="flex items-center gap-1.5 text-[11px]">
+                <span className="font-semibold text-rose-600 dark:text-rose-400">{latest.gaps}</span>
+                <span className="text-zinc-400">gaps found</span>
+              </span>
+              <div className="ml-auto flex items-center gap-3">
+                <Link
+                  href={`/audits/${latest.id}`}
+                  className="btn-cavro-primary rounded-md px-3.5 text-[12px] font-semibold text-primary-foreground"
+                >
+                  View results
+                </Link>
                 <Link
                   href="/recommendations"
-                  className="ml-auto text-[11px] text-zinc-400 hover:text-foreground transition-colors"
+                  className="text-[12px] text-zinc-400 hover:text-foreground transition-colors"
                 >
-                  View recommendations →
+                  Recommendations →
                 </Link>
               </div>
             </div>
-          )
-        })}
+          </div>
+
+        </div>
       </div>
 
-      {/* Empty CTA */}
-      <div className="rounded-md border border-dashed border-border px-6 py-8 flex flex-col items-center gap-3 text-center">
-        <p className="text-[13px] font-medium text-foreground/60">Run your next audit</p>
-        <p className="text-[12px] text-muted-foreground max-w-xs leading-relaxed">
-          Audits test how AI assistants respond to your tracked buyer prompts and compare you against competitors.
-        </p>
+      {/* ── Audit history ──────────────────────────────────────────────── */}
+      {older.length > 0 && (
+        <div className="pt-5">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3">
+            Previous audits
+          </p>
+          <div className="divide-y divide-border">
+            {older.map((audit) => {
+              const colour = scoreColour(audit.score)
+              return (
+                <Link
+                  key={audit.id}
+                  href={`/audits/${audit.id}`}
+                  className="flex items-center justify-between gap-6 py-3.5 hover:bg-muted/20 -mx-2 px-2 rounded-sm transition-colors group"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-medium text-foreground/65 group-hover:text-foreground/80 transition-colors">
+                      {audit.label}
+                    </p>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      {audit.date}
+                      <span className="mx-1.5 text-foreground/15">·</span>
+                      {audit.prompts} prompts
+                      <span className="mx-1.5 text-foreground/15">·</span>
+                      <span className="text-rose-500/70">{audit.gaps} gaps</span>
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <span className={`text-[20px] font-bold tabular-nums ${colour}`}>
+                      {audit.score}
+                    </span>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* New audit CTA */}
+      <div className="mt-8 rounded-md border border-dashed border-border px-6 py-7 flex items-center justify-between gap-6">
+        <div>
+          <p className="text-[13px] font-medium text-foreground/60">Run your next audit</p>
+          <p className="text-[12px] text-zinc-400 mt-0.5 max-w-xs leading-relaxed">
+            Test how AI assistants respond to your tracked buyer prompts and compare you against competitors.
+          </p>
+        </div>
         <Link
           href="/audits/new"
-          className="mt-1 btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-foreground/60"
+          className="shrink-0 btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-foreground/60"
         >
           Run new audit
         </Link>

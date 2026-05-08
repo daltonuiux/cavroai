@@ -21,14 +21,14 @@ const MOCK_RISKS = [
   {
     id:       "r-1",
     title:    "Differentiation is vague",
-    detail:   "AI models describe you in generic terms rather than your specific advantages.",
+    detail:   "AI models describe you in generic terms rather than your specific advantages. Competitors win recommendation slots because they have clearer positioning signals.",
     severity: "high" as const,
     action:   "Rewrite homepage headline",
   },
   {
     id:       "r-2",
     title:    "No social proof AI can cite",
-    detail:   "Case studies are not indexed. Competitors are cited 3x more in trust-driven prompts.",
+    detail:   "Case studies are not indexed. Competitors are cited 3× more in trust-driven prompts.",
     severity: "high" as const,
     action:   "Publish /customers page",
   },
@@ -42,63 +42,23 @@ const MOCK_RISKS = [
 ]
 
 const MOCK_QUICK_WINS = [
-  {
-    id:     "qw-1",
-    action: "Rewrite homepage headline with a concrete differentiator",
-    effort: "quick" as const,
-  },
-  {
-    id:     "qw-2",
-    action: "Publish 3 named case studies on /customers",
-    effort: "medium" as const,
-  },
-  {
-    id:     "qw-3",
-    action: "Add transparent pricing FAQ to /pricing",
-    effort: "quick" as const,
-  },
-  {
-    id:     "qw-4",
-    action: "Create a /vs-notion comparison page",
-    effort: "medium" as const,
-  },
+  { id: "qw-1", action: "Rewrite homepage headline with a concrete differentiator" },
+  { id: "qw-2", action: "Publish 3 named case studies on /customers" },
+  { id: "qw-3", action: "Add transparent pricing FAQ to /pricing" },
+  { id: "qw-4", action: "Create a /vs-notion comparison page" },
 ]
 
 const MOCK_PROMPTS = [
-  {
-    id:         "p-1",
-    text:       "Best knowledge base tool for remote teams",
-    position:   3,
-    visibility: "medium" as const,
-    score:      58,
-  },
-  {
-    id:         "p-2",
-    text:       "Notion alternatives that are more affordable",
-    position:   1,
-    visibility: "high" as const,
-    score:      83,
-  },
-  {
-    id:         "p-3",
-    text:       "No-code database tool with views and automations",
-    position:   5,
-    visibility: "low" as const,
-    score:      32,
-  },
-  {
-    id:         "p-4",
-    text:       "Best tool for internal team wikis",
-    position:   3,
-    visibility: "medium" as const,
-    score:      55,
-  },
+  { id: "p-1", text: "Best knowledge base tool for remote teams",      position: 3, visibility: "medium" as const, score: 58 },
+  { id: "p-2", text: "Notion alternatives that are more affordable",   position: 1, visibility: "high"   as const, score: 83 },
+  { id: "p-3", text: "No-code database tool with views and automations", position: 5, visibility: "low"  as const, score: 32 },
+  { id: "p-4", text: "Best tool for internal team wikis",              position: 3, visibility: "medium" as const, score: 55 },
 ]
 
 const MOCK_RECENT_AUDITS = [
-  { id: "audit-003", date: "May 6, 2026",  score: 61, label: "Full audit"         },
-  { id: "audit-002", date: "Apr 22, 2026", score: 54, label: "Prompt coverage run" },
-  { id: "audit-001", date: "Apr 8, 2026",  score: 49, label: "Baseline audit"      },
+  { id: "audit-003", date: "May 6, 2026",  score: 61, label: "Full audit"          },
+  { id: "audit-002", date: "Apr 22, 2026", score: 54, label: "Prompt coverage run"  },
+  { id: "audit-001", date: "Apr 8, 2026",  score: 49, label: "Baseline audit"       },
 ]
 
 // ---------------------------------------------------------------------------
@@ -107,7 +67,6 @@ const MOCK_RECENT_AUDITS = [
 
 type Severity   = "high" | "medium" | "low"
 type Visibility = "high" | "medium" | "low" | "none"
-type Effort     = "quick" | "medium" | "large"
 
 function scoreColour(score: number) {
   if (score >= 75) return { text: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10" }
@@ -121,10 +80,11 @@ function scoreLabel(score: number) {
   return "Weak"
 }
 
-const SEVERITY_DOT: Record<Severity, string> = {
-  high:   "bg-rose-500",
-  medium: "bg-amber-400",
-  low:    "bg-foreground/20",
+// Left border accent per severity
+const SEVERITY_BAR: Record<Severity, string> = {
+  high:   "border-l-2 border-rose-500",
+  medium: "border-l-2 border-amber-400",
+  low:    "border-l-2 border-foreground/10",
 }
 
 const SEVERITY_BADGE: Record<Severity, string> = {
@@ -147,24 +107,20 @@ const VISIBILITY_LABEL: Record<Visibility, string> = {
   none:   "Not found",
 }
 
-const EFFORT_BADGE: Record<Effort, string> = {
-  quick:  "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  large:  "bg-foreground/[0.04] text-zinc-500",
-}
-
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
 export default function OverviewPage() {
-  const c        = scoreColour(MOCK_SCORE)
+  const c         = scoreColour(MOCK_SCORE)
   const highRisks = MOCK_RISKS.filter((r) => r.severity === "high").length
+  const midRisks  = MOCK_RISKS.filter((r) => r.severity === "medium").length
+  const winning   = MOCK_PROMPTS.filter((p) => p.position === 1).length
 
   return (
     <div className="flex flex-col w-full">
 
-      {/* ── Hero zone (bare — no card) ──────────────────────────────────── */}
+      {/* ── Hero zone ───────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-8 pb-7 border-b border-border">
 
         <div className="flex items-start gap-5 min-w-0">
@@ -185,13 +141,9 @@ export default function OverviewPage() {
                 {scoreLabel(MOCK_SCORE)}
               </span>
               <span className="text-foreground/15">·</span>
-              <span className="text-[11px] text-zinc-400">
-                AI Recommendation Score
-              </span>
+              <span className="text-[11px] text-zinc-400">AI Recommendation Score</span>
               <span className="text-foreground/15">·</span>
-              <span className="text-[11px] text-zinc-400">
-                {MOCK_AUDIT.date}
-              </span>
+              <span className="text-[11px] text-zinc-400">{MOCK_AUDIT.date}</span>
             </div>
             <p className="text-[13px] leading-relaxed text-foreground/60 max-w-[58ch]">
               {MOCK_AUDIT.summary}
@@ -207,10 +159,7 @@ export default function OverviewPage() {
           >
             Run new audit
           </Link>
-          <Link
-            href="/audits"
-            className="text-[12px] text-zinc-400 hover:text-foreground transition-colors"
-          >
+          <Link href="/audits" className="text-[12px] text-zinc-400 hover:text-foreground transition-colors">
             History →
           </Link>
         </div>
@@ -244,35 +193,57 @@ export default function OverviewPage() {
         {/* Primary column */}
         <div className="py-8 lg:pr-10 flex flex-col gap-10">
 
-          {/* Recommendation risks */}
+          {/* ── Recommendation risks ── */}
           <section>
-            <div className="flex items-center justify-between mb-3.5">
+            <div className="flex items-baseline justify-between mb-4">
               <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
                 Recommendation risks
               </p>
-              <Link
-                href="/recommendations"
-                className="text-[11px] text-zinc-400 hover:text-foreground transition-colors"
-              >
-                All →
-              </Link>
+              <div className="flex items-center gap-2">
+                {highRisks > 0 && (
+                  <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+                    {highRisks} critical
+                  </span>
+                )}
+                {midRisks > 0 && (
+                  <>
+                    <span className="text-foreground/15">·</span>
+                    <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                      {midRisks} moderate
+                    </span>
+                  </>
+                )}
+                <span className="text-foreground/15 ml-1">·</span>
+                <Link href="/recommendations" className="text-[11px] text-zinc-400 hover:text-foreground transition-colors">
+                  All →
+                </Link>
+              </div>
             </div>
-            <div className="divide-y divide-border">
-              {MOCK_RISKS.map((risk) => (
-                <div key={risk.id} className="flex items-start gap-3 py-3.5">
-                  <div className={`mt-[6px] h-1.5 w-1.5 rounded-full shrink-0 ${SEVERITY_DOT[risk.severity]}`} />
+
+            <div className="flex flex-col gap-0">
+              {MOCK_RISKS.map((risk, i) => (
+                <div
+                  key={risk.id}
+                  className={`flex items-start gap-3.5 pl-3.5 py-4 ${SEVERITY_BAR[risk.severity]} ${i > 0 ? "mt-1.5" : ""}`}
+                >
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-3 mb-0.5">
-                      <p className="text-[12px] font-semibold text-foreground leading-snug">
+                    <div className="flex items-start justify-between gap-3 mb-1">
+                      <p className={`text-[13px] font-semibold leading-snug ${
+                        risk.severity === "high" ? "text-foreground" : "text-foreground/75"
+                      }`}>
                         {risk.title}
                       </p>
                       <span className={`shrink-0 rounded px-1.5 py-px text-[9px] font-bold uppercase tracking-wide ${SEVERITY_BADGE[risk.severity]}`}>
                         {risk.severity}
                       </span>
                     </div>
-                    <p className="text-[11px] text-zinc-500 leading-snug">{risk.detail}</p>
-                    <p className="text-[11px] font-medium text-zinc-500 mt-1.5">
-                      Fix: {risk.action}
+                    <p className={`text-[11px] leading-snug mb-1.5 ${
+                      risk.severity === "high" ? "text-zinc-500" : "text-zinc-400"
+                    }`}>
+                      {risk.detail}
+                    </p>
+                    <p className="text-[11px] font-medium text-zinc-400">
+                      Fix: <span className="text-foreground/60">{risk.action}</span>
                     </p>
                   </div>
                 </div>
@@ -280,64 +251,54 @@ export default function OverviewPage() {
             </div>
           </section>
 
-          {/* Quick wins */}
+          {/* ── Quick wins ── */}
           <section>
-            <div className="flex items-center justify-between mb-3.5">
+            <div className="flex items-center justify-between mb-3">
               <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
                 Quick wins
               </p>
-              <Link
-                href="/recommendations"
-                className="text-[11px] text-zinc-400 hover:text-foreground transition-colors"
-              >
+              <Link href="/recommendations" className="text-[11px] text-zinc-400 hover:text-foreground transition-colors">
                 All →
               </Link>
             </div>
             <div className="divide-y divide-border">
               {MOCK_QUICK_WINS.map((win, i) => (
-                <div key={win.id} className="flex items-center gap-4 py-3">
-                  <span className="text-[11px] font-bold text-zinc-300 tabular-nums w-3.5 shrink-0">
+                <div key={win.id} className="flex items-start gap-3 py-2.5">
+                  <span className="text-[11px] font-bold text-zinc-300 tabular-nums w-3.5 shrink-0 mt-px">
                     {i + 1}
                   </span>
                   <p className="flex-1 text-[12px] text-foreground/65 leading-snug">
                     {win.action}
                   </p>
-                  <span className={`shrink-0 rounded px-1.5 py-px text-[9px] font-bold uppercase tracking-wide ${EFFORT_BADGE[win.effort]}`}>
-                    {win.effort}
-                  </span>
                 </div>
               ))}
             </div>
           </section>
 
-          {/* Prompt readiness — table */}
+          {/* ── Prompt readiness ── */}
           <section>
-            <div className="flex items-center justify-between mb-3.5">
+            <div className="flex items-baseline justify-between mb-3.5">
               <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
                 Prompt readiness
               </p>
-              <Link
-                href="/prompts"
-                className="text-[11px] text-zinc-400 hover:text-foreground transition-colors"
-              >
-                All prompts →
-              </Link>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-zinc-400">
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">{winning}</span>
+                  /{MOCK_PROMPTS.length} winning
+                </span>
+                <span className="text-foreground/15">·</span>
+                <Link href="/prompts" className="text-[11px] text-zinc-400 hover:text-foreground transition-colors">
+                  All prompts →
+                </Link>
+              </div>
             </div>
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="text-left pb-2.5 pr-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">
-                    Prompt
-                  </th>
-                  <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">
-                    Position
-                  </th>
-                  <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400 hidden sm:table-cell">
-                    Visibility
-                  </th>
-                  <th className="text-right pb-2.5 pl-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">
-                    Score
-                  </th>
+                  <th className="text-left pb-2.5 pr-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">Prompt</th>
+                  <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">Position</th>
+                  <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400 hidden sm:table-cell">Visibility</th>
+                  <th className="text-right pb-2.5 pl-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">Score</th>
                 </tr>
               </thead>
               <tbody>
@@ -367,10 +328,7 @@ export default function OverviewPage() {
                       <td className="py-2.5 pl-4">
                         <div className="flex items-center gap-2 justify-end">
                           <div className="w-12 h-1 rounded-full bg-foreground/[0.07] overflow-hidden">
-                            <div
-                              className={`h-full rounded-full ${barColor}`}
-                              style={{ width: `${p.score}%` }}
-                            />
+                            <div className={`h-full rounded-full ${barColor}`} style={{ width: `${p.score}%` }} />
                           </div>
                           <span className={`text-[11px] font-bold tabular-nums w-6 text-right ${vc.text}`}>
                             {p.score}
@@ -386,30 +344,30 @@ export default function OverviewPage() {
 
         </div>
 
-        {/* Right rail */}
-        <div className="border-t border-border lg:border-t-0 lg:border-l border-border pt-8 lg:pt-0 lg:pl-10 py-8 flex flex-col gap-8">
+        {/* ── Right rail ──────────────────────────────────────────────────── */}
+        <div className="border-t border-border lg:border-t-0 lg:border-l pt-8 lg:pt-0 lg:pl-8 py-8 flex flex-col gap-7">
 
           {/* Audit history */}
           <section>
-            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3.5">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3">
               Audit history
             </p>
             <div className="divide-y divide-border">
-              {MOCK_RECENT_AUDITS.map((audit) => {
+              {MOCK_RECENT_AUDITS.map((audit, i) => {
                 const ac = scoreColour(audit.score)
                 return (
                   <Link
                     key={audit.id}
                     href="/audits"
-                    className="flex items-center justify-between py-3.5 hover:bg-muted/20 -mx-2 px-2 rounded-sm transition-colors"
+                    className="flex items-center justify-between py-3 hover:bg-muted/20 -mx-2 px-2 rounded-sm transition-colors"
                   >
                     <div className="min-w-0">
-                      <p className="text-[12px] font-medium text-foreground/70 truncate">
+                      <p className={`text-[12px] font-medium truncate ${i === 0 ? "text-foreground/80" : "text-foreground/55"}`}>
                         {audit.label}
                       </p>
                       <p className="text-[10px] text-zinc-400 mt-0.5">{audit.date}</p>
                     </div>
-                    <span className={`shrink-0 text-[22px] font-bold tabular-nums ml-4 ${ac.text}`}>
+                    <span className={`shrink-0 text-[18px] font-bold tabular-nums ml-4 ${i === 0 ? ac.text : "text-zinc-400"}`}>
                       {audit.score}
                     </span>
                   </Link>
@@ -420,9 +378,14 @@ export default function OverviewPage() {
 
           {/* Score trend */}
           <section>
-            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3">
-              Score trend
-            </p>
+            <div className="flex items-baseline justify-between mb-3">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
+                Score trend
+              </p>
+              <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                +12 pts
+              </span>
+            </div>
             <div className="flex items-end gap-1.5 h-8">
               {MOCK_RECENT_AUDITS.slice().reverse().map((a) => {
                 const h   = Math.max((a.score / 100) * 32, 4)
@@ -435,7 +398,7 @@ export default function OverviewPage() {
                   <div
                     key={a.id}
                     title={`${a.score} — ${a.date}`}
-                    className={`flex-1 rounded-sm opacity-50 ${col}`}
+                    className={`flex-1 rounded-sm opacity-60 ${col}`}
                     style={{ height: `${h}px` }}
                   />
                 )
@@ -443,11 +406,18 @@ export default function OverviewPage() {
             </div>
             <div className="flex justify-between mt-1.5">
               {MOCK_RECENT_AUDITS.slice().reverse().map((a) => (
-                <p key={a.id} className="text-[9px] text-zinc-300 tabular-nums">
-                  {a.score}
-                </p>
+                <p key={a.id} className="text-[9px] text-zinc-300 tabular-nums">{a.score}</p>
               ))}
             </div>
+          </section>
+
+          {/* Next audit */}
+          <section>
+            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3">
+              Next scheduled audit
+            </p>
+            <p className="text-[12px] text-foreground/60 font-medium">May 20, 2026</p>
+            <p className="text-[11px] text-zinc-400 mt-0.5">Bi-weekly · Full audit</p>
           </section>
 
         </div>

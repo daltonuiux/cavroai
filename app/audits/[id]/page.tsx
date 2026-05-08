@@ -39,6 +39,12 @@ const SEVERITY_STYLES: Record<Severity, string> = {
   low:    "bg-foreground/[0.04] text-zinc-500",
 }
 
+const SEVERITY_BAR: Record<Severity, string> = {
+  high:   "border-l-2 border-rose-500",
+  medium: "border-l-2 border-amber-400",
+  low:    "border-l-2 border-foreground/[0.12]",
+}
+
 const PRIORITY_STYLES: Record<Priority, string> = {
   high:   "bg-rose-500/10 text-rose-600 dark:text-rose-400",
   medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
@@ -86,19 +92,19 @@ const LIKELIHOOD_STYLES: Record<Likelihood, string> = {
 }
 
 const BARRIER_ICONS: Record<BarrierType, React.ComponentType<{ size?: number; className?: string }>> = {
-  positioning:   Target,
+  positioning:     Target,
   differentiation: Zap,
-  trust:         ShieldCheck,
-  audience:      Users,
-  comparison:    ArrowRightLeft,
+  trust:           ShieldCheck,
+  audience:        Users,
+  comparison:      ArrowRightLeft,
 }
 
 const BARRIER_ICON_STYLES: Record<BarrierType, string> = {
-  positioning:    "text-violet-500",
+  positioning:     "text-violet-500",
   differentiation: "text-amber-500",
-  trust:          "text-sky-500",
-  audience:       "text-emerald-500",
-  comparison:     "text-rose-500",
+  trust:           "text-sky-500",
+  audience:        "text-emerald-500",
+  comparison:      "text-rose-500",
 }
 
 // ---------------------------------------------------------------------------
@@ -147,6 +153,18 @@ function Pill({ label, className }: { label: string; className: string }) {
     <span className={`shrink-0 rounded px-1.5 py-px text-[10px] font-semibold ${className}`}>
       {label}
     </span>
+  )
+}
+
+// Chapter label — subtle visual separator between narrative sections
+function ChapterLabel({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3 mb-0">
+      <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-300 whitespace-nowrap">
+        {label}
+      </p>
+      <div className="flex-1 h-px bg-border" />
+    </div>
   )
 }
 
@@ -216,7 +234,7 @@ function HeroSection({ audit }: { audit: AuditResult }) {
 }
 
 // ---------------------------------------------------------------------------
-// Section 2: AI Perception
+// Section 2: AI Perception — bare, prominent
 // ---------------------------------------------------------------------------
 
 function AIPerceptionSection({ audit }: { audit: AuditResult }) {
@@ -224,45 +242,44 @@ function AIPerceptionSection({ audit }: { audit: AuditResult }) {
   return (
     <section>
       <SectionLabel
-        label="AI perception"
-        sublabel="How AI assistants currently describe and position your company"
+        label="How AI currently describes you"
+        sublabel="The language and framing AI assistants use when your company comes up"
       />
-      <div className="card-cavro rounded-md px-5 py-4 flex flex-col gap-4">
-        <p className="text-[13px] leading-relaxed text-foreground/70 max-w-[70ch]">
-          {description}
-        </p>
-        <div className="grid grid-cols-2 gap-4 border-t border-border pt-4">
-          {/* Associated terms */}
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-2">
-              How AI describes you
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {associatedTerms.map((term) => (
-                <span
-                  key={term}
-                  className="rounded bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400"
-                >
-                  {term}
-                </span>
-              ))}
-            </div>
+      {/* Description — prominent, no card wrapper */}
+      <p className="text-[14px] leading-relaxed text-foreground/70 max-w-[70ch] mb-6">
+        {description}
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-5 border-t border-border">
+        {/* Associated terms */}
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-widest text-amber-600/70 dark:text-amber-400/70 mb-2.5">
+            How AI describes you
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {associatedTerms.map((term) => (
+              <span
+                key={term}
+                className="rounded bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400"
+              >
+                {term}
+              </span>
+            ))}
           </div>
-          {/* Missing context */}
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-2">
-              What AI cannot find
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {missingContext.map((item) => (
-                <span
-                  key={item}
-                  className="rounded bg-foreground/[0.04] px-2 py-0.5 text-[11px] font-medium text-zinc-500"
-                >
-                  {item}
-                </span>
-              ))}
-            </div>
+        </div>
+        {/* Missing context */}
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-2.5">
+            What AI cannot find
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {missingContext.map((item) => (
+              <span
+                key={item}
+                className="rounded bg-foreground/[0.04] px-2 py-0.5 text-[11px] font-medium text-zinc-500"
+              >
+                {item}
+              </span>
+            ))}
           </div>
         </div>
       </div>
@@ -271,7 +288,7 @@ function AIPerceptionSection({ audit }: { audit: AuditResult }) {
 }
 
 // ---------------------------------------------------------------------------
-// Section 3: Recommendation Barriers
+// Section 3: Recommendation Barriers — flat list with severity accents
 // ---------------------------------------------------------------------------
 
 function BarriersSection({ barriers }: { barriers: RecommendationBarrier[] }) {
@@ -281,18 +298,21 @@ function BarriersSection({ barriers }: { barriers: RecommendationBarrier[] }) {
         label="Why AI may not recommend you yet"
         sublabel="Structural barriers reducing your recommendation rate"
       />
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
+      <div className="flex flex-col gap-2">
         {barriers.map((barrier, i) => {
           const Icon = BARRIER_ICONS[barrier.type]
           return (
-            <div key={i} className="card-cavro rounded-md px-4 py-3 flex gap-3">
+            <div
+              key={i}
+              className={`flex items-start gap-4 pl-3.5 py-4 ${SEVERITY_BAR[barrier.severity]}`}
+            >
               {/* Icon */}
               <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-foreground/[0.05] mt-0.5">
-                <Icon size={13} className={BARRIER_ICON_STYLES[barrier.type]} />
+                <Icon size={12} className={BARRIER_ICON_STYLES[barrier.type]} />
               </div>
               {/* Content */}
               <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-3 mb-1.5">
+                <div className="flex items-center justify-between gap-3 mb-1">
                   <p className="text-[13px] font-semibold text-foreground tracking-[-0.01em]">
                     {barrier.title}
                   </p>
@@ -335,7 +355,6 @@ function yourStrengths(score: number): {
   if (score >= 65) return { categoryClarity: "moderate", trustSignals: "moderate", differentiation: "moderate", recommendationLikelihood: "medium" }
   return { categoryClarity: "weak", trustSignals: "weak", differentiation: "weak", recommendationLikelihood: "low" }
 }
-
 
 function CompetitorSection({ rows, myScore }: { rows: CompetitorRow[]; myScore: number }) {
   if (rows.length === 0) return null
@@ -450,7 +469,6 @@ function CompetitorSection({ rows, myScore }: { rows: CompetitorRow[]; myScore: 
 // Section 5: Prompt Readiness
 // ---------------------------------------------------------------------------
 
-
 function PromptReadinessSection({ results }: { results: PromptResult[] }) {
   if (results.length === 0) return null
   return (
@@ -534,87 +552,68 @@ function PromptReadinessSection({ results }: { results: PromptResult[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Section 6: Recommended Fixes
+// Section 6: Recommended Fixes — flat prioritised list
 // ---------------------------------------------------------------------------
 
-function FixCard({ fix, index }: { fix: Fix; index: number }) {
-  return (
-    <div className="card-cavro rounded-md px-5 py-4 flex flex-col gap-3">
-      {/* Badges */}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <Pill label={fix.priority + " priority"} className={PRIORITY_STYLES[fix.priority]} />
-        <Pill label={fix.category} className={CATEGORY_STYLES[fix.category]} />
-        <Pill label={fix.effort} className={EFFORT_STYLES[fix.effort]} />
-      </div>
-
-      {/* Problem */}
-      <div>
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1">
-          Problem
-        </p>
-        <p className="text-[13px] font-semibold text-foreground tracking-[-0.01em] leading-snug">
-          {fix.problem}
-        </p>
-      </div>
-
-      {/* Why it matters */}
-      <div>
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1">
-          Why it matters
-        </p>
-        <p className="text-[12px] leading-relaxed text-zinc-500">
-          {fix.whyItMatters}
-        </p>
-      </div>
-
-      {/* Suggested action */}
-      <div>
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1">
-          Suggested action
-        </p>
-        <p className="text-[12px] leading-relaxed text-foreground/65">
-          {fix.suggestedAction}
-        </p>
-      </div>
-
-      {/* Example copy (before/after) */}
-      {fix.exampleCopy && (
-        <div className="rounded-md overflow-hidden border border-border">
-          <div className="px-4 py-2.5 border-b border-border bg-foreground/[0.02]">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-rose-500/60 mb-1.5">
-              Current
-            </p>
-            <p className="text-[12px] leading-relaxed text-zinc-500 italic">
-              &ldquo;{fix.exampleCopy.before}&rdquo;
-            </p>
-          </div>
-          <div className="px-4 py-2.5 bg-foreground/[0.01]">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-600/70 dark:text-emerald-400/70 mb-1.5">
-              Suggested
-            </p>
-            <p className="text-[12px] leading-relaxed text-foreground/75 font-medium">
-              &ldquo;{fix.exampleCopy.after}&rdquo;
-            </p>
-            <p className="text-[10px] text-zinc-400 mt-1.5">
-              Replace bracketed placeholders before publishing.
-            </p>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 function RecommendedFixesSection({ fixes }: { fixes: Fix[] }) {
+  // Sort: high → medium → low
+  const sorted = [...fixes].sort((a, b) => {
+    const order: Record<Priority, number> = { high: 0, medium: 1, low: 2 }
+    return order[a.priority] - order[b.priority]
+  })
+
   return (
     <section>
       <SectionLabel
         label="Recommended fixes"
         sublabel="Highest-impact changes to improve your AI recommendation score"
       />
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        {fixes.map((fix, i) => (
-          <FixCard key={i} fix={fix} index={i} />
+      <div className="divide-y divide-border">
+        {sorted.map((fix, i) => (
+          <div key={i} className="py-5 flex flex-col gap-2.5">
+            {/* Badges */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Pill label={fix.priority + " priority"} className={PRIORITY_STYLES[fix.priority]} />
+              <Pill label={fix.category} className={CATEGORY_STYLES[fix.category]} />
+              <Pill label={fix.effort} className={EFFORT_STYLES[fix.effort]} />
+            </div>
+
+            {/* Problem — larger, prominent */}
+            <p className="text-[14px] font-semibold text-foreground tracking-[-0.01em] leading-snug">
+              {fix.problem}
+            </p>
+
+            {/* Why it matters */}
+            <p className="text-[12px] leading-relaxed text-zinc-500">{fix.whyItMatters}</p>
+
+            {/* Suggested action */}
+            <p className="text-[12px] leading-relaxed text-foreground/60">
+              <span className="font-medium text-zinc-400">Action: </span>
+              {fix.suggestedAction}
+            </p>
+
+            {/* Before / after */}
+            {fix.exampleCopy && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-1">
+                <div className="rounded bg-foreground/[0.025] px-3.5 py-3">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-rose-500/60 mb-1.5">
+                    Current
+                  </p>
+                  <p className="text-[12px] leading-relaxed text-zinc-500 italic">
+                    &ldquo;{fix.exampleCopy.before}&rdquo;
+                  </p>
+                </div>
+                <div className="rounded bg-emerald-500/[0.04] px-3.5 py-3">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-600/60 dark:text-emerald-400/60 mb-1.5">
+                    Suggested
+                  </p>
+                  <p className="text-[12px] leading-relaxed text-foreground/75 font-medium">
+                    &ldquo;{fix.exampleCopy.after}&rdquo;
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
         ))}
       </div>
     </section>
@@ -626,40 +625,36 @@ function RecommendedFixesSection({ fixes }: { fixes: Fix[] }) {
 // ---------------------------------------------------------------------------
 
 const COPY_SECTION_LABELS: Record<CopyRewrite["section"], string> = {
-  headline:    "Homepage headline",
-  subheadline: "Hero subheadline",
-  category:    "Category description",
+  headline:     "Homepage headline",
+  subheadline:  "Hero subheadline",
+  category:     "Category description",
   social_proof: "Social proof block",
 }
 
 function CopyRewriteCard({ rewrite }: { rewrite: CopyRewrite }) {
   return (
     <div className="card-cavro rounded-md overflow-hidden">
-      {/* Section label */}
       <div className="px-5 py-2.5 border-b border-border">
         <p className="text-[11px] font-semibold text-zinc-500">
           {COPY_SECTION_LABELS[rewrite.section]}
         </p>
       </div>
-      {/* Before */}
       <div className="px-5 py-3.5 border-b border-border bg-foreground/[0.02]">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-rose-500/60 mb-1.5">
+        <p className="text-[9px] font-bold uppercase tracking-widest text-rose-500/60 mb-1.5">
           Current
         </p>
         <p className="text-[13px] leading-relaxed text-zinc-500 italic">
           &ldquo;{rewrite.before}&rdquo;
         </p>
       </div>
-      {/* After */}
       <div className="px-5 py-3.5 border-b border-border">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-600/70 dark:text-emerald-400/70 mb-1.5">
+        <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-600/70 dark:text-emerald-400/70 mb-1.5">
           Suggested
         </p>
         <p className="text-[13px] leading-relaxed text-foreground/80 font-medium">
           &ldquo;{rewrite.after}&rdquo;
         </p>
       </div>
-      {/* Why */}
       <div className="px-5 py-3 bg-foreground/[0.01]">
         <p className="text-[11px] leading-relaxed text-zinc-500">
           <span className="font-semibold text-zinc-500">Why: </span>
@@ -735,7 +730,7 @@ function NotFound() {
       </Link>
       <div className="rounded-md border border-dashed border-border px-6 py-10 w-full text-center">
         <p className="text-[13px] font-medium text-foreground/60">Audit not found</p>
-        <p className="text-[12px] text-muted-foreground mt-1 max-w-xs mx-auto">
+        <p className="text-[12px] text-zinc-500 mt-1 max-w-xs mx-auto">
           This audit may have been created in a different browser session.
         </p>
         <Link
@@ -780,10 +775,10 @@ export default function AuditResultPage() {
   if (!audit) return <NotFound />
 
   return (
-    <div className="flex flex-col gap-8 w-full">
+    <div className="flex flex-col w-full">
 
       {/* Nav row */}
-      <div className="flex items-center justify-between gap-4 -mt-1">
+      <div className="flex items-center justify-between gap-4 pb-6">
         <Link
           href="/audits"
           className="flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-foreground transition-colors"
@@ -791,42 +786,41 @@ export default function AuditResultPage() {
           <ArrowLeft size={12} />
           All audits
         </Link>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/audits/new"
-            className="btn-cavro-primary rounded-md px-3 text-[11px] font-semibold text-primary-foreground"
-          >
-            Run again
-          </Link>
-        </div>
+        <Link
+          href="/audits/new"
+          className="btn-cavro-primary rounded-md px-3 text-[11px] font-semibold text-primary-foreground"
+        >
+          Run again
+        </Link>
       </div>
 
-      {/* 1 — Hero */}
+      {/* ── 1: Hero ──────────────────────────────────────────────────────── */}
       <HeroSection audit={audit} />
 
-      {/* 2 — AI Perception */}
-      <AIPerceptionSection audit={audit} />
+      {/* ══ Chapter: Perception ════════════════════════════════════════════ */}
+      <div className="pt-10 flex flex-col gap-8 pb-10 border-b border-border">
+        <ChapterLabel label="AI perception" />
+        <AIPerceptionSection audit={audit} />
+        <BarriersSection barriers={audit.recommendationBarriers} />
+      </div>
 
-      {/* 3 — Recommendation Barriers */}
-      <BarriersSection barriers={audit.recommendationBarriers} />
+      {/* ══ Chapter: Competitive analysis ═════════════════════════════════ */}
+      <div className="pt-10 flex flex-col gap-8 pb-10 border-b border-border">
+        <ChapterLabel label="Competitive analysis" />
+        <CompetitorSection rows={audit.competitorComparison} myScore={audit.score} />
+        <PromptReadinessSection results={audit.promptReadiness} />
+      </div>
 
-      {/* 4 — Competitor Comparison */}
-      <CompetitorSection rows={audit.competitorComparison} myScore={audit.score} />
-
-      {/* 5 — Prompt Readiness */}
-      <PromptReadinessSection results={audit.promptReadiness} />
-
-      {/* 6 — Recommended Fixes */}
-      <RecommendedFixesSection fixes={audit.recommendedFixes} />
-
-      {/* 7 — Copy Rewrites */}
-      <CopyRewritesSection rewrites={audit.copyRewrites} />
-
-      {/* 8 — Next Actions */}
-      <NextActionsSection actions={audit.nextActions} />
+      {/* ══ Chapter: What to fix ══════════════════════════════════════════ */}
+      <div className="pt-10 flex flex-col gap-10">
+        <ChapterLabel label="What to fix" />
+        <RecommendedFixesSection fixes={audit.recommendedFixes} />
+        <CopyRewritesSection rewrites={audit.copyRewrites} />
+        <NextActionsSection actions={audit.nextActions} />
+      </div>
 
       {/* Footer CTAs */}
-      <div className="flex items-center gap-2.5 pb-4 pt-2 border-t border-border">
+      <div className="flex items-center gap-2.5 pb-4 pt-10 border-t border-border">
         <Link
           href="/recommendations"
           className="btn-cavro-primary rounded-md px-4 text-[12px] font-semibold text-primary-foreground"
