@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Lightbulb,
   Settings2,
+  Eye,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -26,6 +27,7 @@ const navSections = [
       { label: "Audits",      href: "/audits",      icon: ClipboardList },
       { label: "Competitors", href: "/competitors",  icon: Users2        },
       { label: "Prompts",     href: "/prompts",      icon: MessageSquare },
+      { label: "Perception",  href: "/perception",   icon: Eye           },
     ],
   },
   {
