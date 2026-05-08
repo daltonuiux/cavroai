@@ -140,7 +140,7 @@ export default function RecommendationsPage() {
       </div>
 
       {/* Progress strip */}
-      <div className="flex items-center gap-6 rounded-md bg-foreground/[0.025] border border-border/60 px-4 py-3">
+      <div className="flex items-center gap-6 card-cavro rounded-md px-4 py-3">
         <span className="flex items-center gap-1.5 text-[12px]">
           <span className="font-semibold text-foreground/70">{MOCK_RECS.length}</span>
           <span className="text-muted-foreground/40">total</span>
@@ -194,7 +194,7 @@ export default function RecommendationsPage() {
 
             {/* Before / after snippet */}
             {rec.snippet && rec.status !== "done" && (
-              <div className="flex flex-col gap-1.5 rounded-md bg-foreground/[0.025] border border-border/60 px-4 py-3">
+              <div className="flex flex-col gap-1.5 card-cavro rounded-md px-4 py-3">
                 <div className="flex items-start gap-2">
                   <span className="shrink-0 text-[10px] font-semibold text-rose-500/60 mt-px w-10">Before</span>
                   <p className="text-[11px] text-foreground/45 leading-snug">{rec.snippet.before}</p>

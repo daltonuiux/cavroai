@@ -98,7 +98,7 @@ export default function CompetitorsPage() {
       </div>
 
       {/* Your score chip */}
-      <div className="flex items-center gap-3 rounded-md bg-foreground/[0.025] border border-border/60 px-4 py-3">
+      <div className="flex items-center gap-3 card-cavro rounded-md px-4 py-3">
         <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/40">
           Your AI score
         </span>

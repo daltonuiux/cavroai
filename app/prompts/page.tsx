@@ -133,7 +133,7 @@ export default function PromptsPage() {
       </div>
 
       {/* Stat strip */}
-      <div className="flex items-center gap-6 rounded-md bg-foreground/[0.025] border border-border/60 px-4 py-3">
+      <div className="flex items-center gap-6 card-cavro rounded-md px-4 py-3">
         <span className="flex items-center gap-1.5 text-[12px]">
           <span className="font-semibold text-foreground/70">{MOCK_PROMPTS.length}</span>
           <span className="text-muted-foreground/40">prompts tracked</span>

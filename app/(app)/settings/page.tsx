@@ -34,7 +34,6 @@ function SettingRow({
         <button
           disabled
           className="btn-cavro-secondary rounded-md border px-2.5 text-[11px] font-medium text-foreground/50 disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ height: "1.75rem" }}
         >
           Edit
         </button>

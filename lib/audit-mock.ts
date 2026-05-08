@@ -144,9 +144,9 @@ export function generateMockAudit(input: AuditInput): AuditResult {
 
   // ── Executive summary (one sentence for hero) ─────────────────────────────
   const summaryTemplates = [
-    `${company} is recognised by AI assistants but positioned too broadly to win competitive recommendation prompts — scoring ${score}/100.`,
+    `${company} is recognised by AI assistants but positioned too broadly to win competitive recommendation prompts, scoring ${score}/100.`,
     `AI assistants know ${company} exists, but rarely surface it as a primary choice when buyers ask for a ${category} recommendation.`,
-    `${company} has moderate AI awareness but limited AI-driven recommendation wins — its positioning doesn't give AI models a clear reason to prefer it.`,
+    `${company} has moderate AI awareness but limited AI-driven recommendation wins. Its positioning doesn't give AI models a clear reason to prefer it.`,
   ]
   const executiveSummary = pick(summaryTemplates, seed)
 
@@ -154,7 +154,7 @@ export function generateMockAudit(input: AuditInput): AuditResult {
   const perceptionIntros = [
     `When AI assistants are asked about ${category} tools, they recognise "${company}" but rarely surface it as a top recommendation.`,
     `AI assistants are broadly aware of "${company}" as a product in the ${category} space, but treat it as an alternative rather than a primary recommendation.`,
-    `"${company}" appears in AI training data but is described in generic terms — AI models lack the differentiated signal needed to prefer it over established alternatives.`,
+    `"${company}" appears in AI training data but is described in generic terms. AI models lack the differentiated signal needed to prefer it over established alternatives.`,
   ]
   const aiPerceptionDescription =
     `${pick(perceptionIntros, seed)} The product is typically described in vague, feature-neutral language without a clear buyer persona or job-to-be-done. ` +
@@ -198,7 +198,7 @@ export function generateMockAudit(input: AuditInput): AuditResult {
     {
       type:        "positioning",
       title:       "Value proposition is too generic",
-      description: `AI assistants describe ${company} using broad category language — terms like "easy to use" or "built for teams" — rather than a sharp, quotable claim that sets it apart. Without a concrete differentiator on the homepage, AI defaults to recommending incumbents like ${topCompetitor} that own a specific position.`,
+      description: `AI assistants describe ${company} using broad category language, terms like "easy to use" or "built for teams", rather than a sharp, quotable claim that sets it apart. Without a concrete differentiator on the homepage, AI defaults to recommending incumbents like ${topCompetitor} that own a specific position.`,
       severity:    "high",
     },
     {
@@ -210,19 +210,19 @@ export function generateMockAudit(input: AuditInput): AuditResult {
     {
       type:        "trust",
       title:       "Social proof AI cannot cite",
-      description: `Customer testimonials are vague ("Great product, 5 stars"), locked behind lead forms, or missing entirely. AI models citation-match named customers, specific outcomes, and third-party review scores. Without structured, public case studies, ${company} scores low on trust signal retrieval — especially for prompts that include phrases like "trusted by" or "used by teams at".`,
+      description: `Customer testimonials are vague ("Great product, 5 stars"), locked behind lead forms, or missing entirely. AI models citation-match named customers, specific outcomes, and third-party review scores. Without structured, public case studies, ${company} scores low on trust signal retrieval, particularly for prompts that include phrases like "trusted by" or "used by teams at".`,
       severity:    "high",
     },
     {
       type:        "audience",
       title:       "Buyer segment is undefined",
-      description: `The homepage addresses "teams" and "businesses" broadly without specifying the primary buyer. When AI assistants match a buyer's specific context — company size, industry, role — to a product recommendation, vague audience language causes ${company} to be filtered out in favour of products with clear ICP language.`,
+      description: `The homepage addresses "teams" and "businesses" broadly without specifying the primary buyer. When AI assistants match a buyer's specific context (company size, industry, role) to a product recommendation, vague audience language causes ${company} to be filtered out in favour of products with clear ICP language.`,
       severity:    "medium",
     },
     {
       type:        "comparison",
       title:       "No head-to-head comparison content",
-      description: `There are no dedicated comparison pages (e.g. /vs-${topCompetitor.toLowerCase()}) indexed by AI models. When buyers search for "${company} vs ${topCompetitor}" or "${topCompetitor} alternatives", AI assistants surface ${topCompetitor}'s own comparison pages rather than ${company}'s perspective — a consistent recommendation disadvantage.`,
+      description: `There are no dedicated comparison pages (e.g. /vs-${topCompetitor.toLowerCase()}) indexed by AI models. When buyers search for "${company} vs ${topCompetitor}" or "${topCompetitor} alternatives", AI assistants surface ${topCompetitor}'s own comparison pages rather than ${company}'s perspective. This is a consistent recommendation disadvantage.`,
       severity:    "medium",
     },
   ]
@@ -239,7 +239,7 @@ export function generateMockAudit(input: AuditInput): AuditResult {
     (name: string) =>
       `${name} is explicitly named in comparison prompts more often due to higher brand recognition in AI training data and a larger backlink footprint.`,
     (name: string) =>
-      `${name} has clearer sub-category ownership — AI models associate it with a specific job-to-be-done rather than a generic tool category.`,
+      `${name} has clearer sub-category ownership. AI models associate it with a specific job-to-be-done rather than a generic tool category.`,
     (name: string) =>
       `${name} has more visible trust signals: named case studies on its website, 200+ G2 reviews, and a transparent pricing page.`,
   ]
@@ -305,11 +305,11 @@ export function generateMockAudit(input: AuditInput): AuditResult {
   const recommendedFixes: Fix[] = [
     {
       problem:         "Your homepage headline doesn't give AI a quotable differentiator",
-      whyItMatters:    "AI assistants quote homepage headlines directly when recommending products. Generic copy like 'Work smarter together' gives AI nothing specific to cite — so it falls back to recommending tools with more concrete claims.",
-      suggestedAction: `Rewrite your headline to lead with a single, concrete, falsifiable claim. Focus on the specific job-to-be-done ${company} solves better than anyone else. Avoid adjectives like 'powerful' or 'easy' — use specific outcomes instead.`,
+      whyItMatters:    "AI assistants quote homepage headlines directly when recommending products. Generic copy like 'Work smarter together' gives AI nothing specific to cite, so it falls back to recommending tools with more concrete claims.",
+      suggestedAction: `Rewrite your headline to lead with a single, concrete, falsifiable claim. Focus on the specific job-to-be-done ${company} solves better than anyone else. Avoid adjectives like 'powerful' or 'easy'. Use specific outcomes instead.`,
       exampleCopy:     {
-        before: input.description.trim() || `${company} — the ${category} platform for modern teams.`,
-        after:  `${company} is the ${category} tool built for [specific team type] — the only one that [primary differentiator] without [main trade-off alternatives force].`,
+        before: input.description.trim() || `${company} - the ${category} platform for modern teams.`,
+        after:  `${company} is the ${category} tool built for [specific team type] - the only one that [primary differentiator] without [main trade-off alternatives force].`,
       },
       priority:        "high",
       category:        "positioning",
@@ -317,11 +317,11 @@ export function generateMockAudit(input: AuditInput): AuditResult {
     },
     {
       problem:         "No AI-citable customer proof on your website",
-      whyItMatters:    "When AI assistants are asked 'is [product] trusted?', they look for named customers, specific outcomes, and third-party review scores. Without structured, public case studies, AI either omits proof or cites competitors that have it — reducing your recommendation rate by up to 40%.",
+      whyItMatters:    "When AI assistants are asked 'is [product] trusted?', they look for named customers, specific outcomes, and third-party review scores. Without structured, public case studies, AI either omits proof or cites competitors that have it. This reduces your recommendation rate by up to 40%.",
       suggestedAction: `Publish a /customers page with at least 3 named customer stories. Each story should include: job title, company name, specific before/after metric (e.g. 'reduced reporting time from 4 hours to 20 minutes'), and a direct quote. Add FAQ schema to each so AI can extract answers.`,
       exampleCopy:     {
-        before: '"We love this product!" — Marketing team',
-        after:  '"${company} cut our [specific workflow] from [X hours] to [Y minutes]. We moved our entire [team type] onto it within a week." — [Name], [Title] at [Company]',
+        before: '"We love this product!" - Marketing team',
+        after:  '"${company} cut our [specific workflow] from [X hours] to [Y minutes]. We moved our entire [team type] onto it within a week." - [Name], [Title] at [Company]',
       },
       priority:        "high",
       category:        "trust",
@@ -329,11 +329,11 @@ export function generateMockAudit(input: AuditInput): AuditResult {
     },
     {
       problem:         "Pricing is invisible to AI assistants",
-      whyItMatters:    `When buyers ask AI assistants "how much does ${company} cost?", the typical response is "pricing is not publicly available" — which often leads to a recommendation for a competitor that does publish pricing. This affects every budget-conscious buyer prompt you're trying to win.`,
-      suggestedAction: `Add a plain-text pricing FAQ to /pricing that directly answers: 'How much does it cost?', 'Is there a free plan?', 'What's included in each tier?', and 'Are there annual discounts?'. Use real numbers even if pricing is custom — AI can cite ranges.`,
+      whyItMatters:    `When buyers ask AI assistants "how much does ${company} cost?", the typical response is "pricing is not publicly available". This often leads to a recommendation for a competitor that does publish pricing. It affects every budget-conscious buyer prompt you're trying to win.`,
+      suggestedAction: `Add a plain-text pricing FAQ to /pricing that directly answers: 'How much does it cost?', 'Is there a free plan?', 'What's included in each tier?', and 'Are there annual discounts?'. Use real numbers even if pricing is custom. AI can cite ranges.`,
       exampleCopy:     {
-        before: "Pricing — Contact us for a custom quote.",
-        after:  `${company} starts at $[X]/month for teams of up to [N] users. A 14-day free trial is available with no credit card required. Enterprise pricing is available for teams over [N] — contact sales for a custom quote.`,
+        before: "Pricing - Contact us for a custom quote.",
+        after:  `${company} starts at $[X]/month for teams of up to [N] users. A 14-day free trial is available with no credit card required. Enterprise pricing is available for teams over [N]. Contact sales for a custom quote.`,
       },
       priority:        "high",
       category:        "pricing",
@@ -341,7 +341,7 @@ export function generateMockAudit(input: AuditInput): AuditResult {
     },
     {
       problem:         `No comparison page targeting "${compSlug}" alternative searches`,
-      whyItMatters:    `Buyers searching for "${topCompetitor} alternatives" or "vs ${topCompetitor}" are high-intent and ready to switch. Without a dedicated comparison page, AI assistants surface ${topCompetitor}'s own marketing when buyers ask this question — giving ${topCompetitor} a home-field advantage in every comparison prompt.`,
+      whyItMatters:    `Buyers searching for "${topCompetitor} alternatives" or "vs ${topCompetitor}" are high-intent and ready to switch. Without a dedicated comparison page, AI assistants surface ${topCompetitor}'s own marketing when buyers ask this question, giving ${topCompetitor} an advantage in every comparison prompt.`,
       suggestedAction: `Create a /vs-${compSlug} page that directly compares ${company} to ${topCompetitor} across the dimensions buyers care about: pricing, specific features, onboarding time, and customer fit. Include a conversion-focused CTA and a case study from a customer who switched.`,
       exampleCopy:     null,
       priority:        "medium",
@@ -350,8 +350,8 @@ export function generateMockAudit(input: AuditInput): AuditResult {
     },
     {
       problem:         "No recency signal for AI to surface",
-      whyItMatters:    "AI models use dateable content to assess whether a product is actively developed. Without a public changelog or release notes page, AI assistants can't confirm ${company} is shipping — and may describe it as 'not actively maintained' or simply skip it in favour of products with visible momentum.",
-      suggestedAction: "Launch a /changelog page and commit to publishing release notes at least twice a month. Each entry should describe what changed, why it matters to the buyer, and link to any related documentation. Even small updates count — they create consistent recency signals.",
+      whyItMatters:    "AI models use dateable content to assess whether a product is actively developed. Without a public changelog or release notes page, AI assistants can't confirm the product is shipping. They may describe it as 'not actively maintained' or simply skip it in favour of products with visible momentum.",
+      suggestedAction: "Launch a /changelog page and commit to publishing release notes at least twice a month. Each entry should describe what changed, why it matters to the buyer, and link to any related documentation. Even small updates count. They create consistent recency signals.",
       exampleCopy:     null,
       priority:        "medium",
       category:        "content",
@@ -359,7 +359,7 @@ export function generateMockAudit(input: AuditInput): AuditResult {
     },
     {
       problem:         "Key pages lack structured data for AI extraction",
-      whyItMatters:    "AI models extract answers from structured markup (FAQ schema, HowTo schema, Product schema) far more reliably than from prose text. Without schema on /pricing, /features, and the homepage, AI must paraphrase loosely — leading to inaccurate or incomplete descriptions.",
+      whyItMatters:    "AI models extract answers from structured markup (FAQ schema, HowTo schema, Product schema) far more reliably than from prose text. Without schema on /pricing, /features, and the homepage, AI must paraphrase loosely, leading to inaccurate or incomplete descriptions.",
       suggestedAction: "Add FAQ JSON-LD schema to /pricing, /features, and the homepage. Each FAQ should answer a real buyer question in plain English. Aim for 5–8 questions per page. This is a one-time technical change that creates lasting improvements to AI retrieval accuracy.",
       exampleCopy:     null,
       priority:        "medium",
@@ -376,9 +376,9 @@ export function generateMockAudit(input: AuditInput): AuditResult {
       section: "headline",
       label:   "Homepage headline",
       before:  rawDescription
-        ? rawDescription.split(".")[0] ?? `${company} — ${category} for modern teams`
-        : `${company} — ${category} for modern teams`,
-      after:   `${company} is the ${category} tool for [specific team type] that [primary differentiator] — without the complexity of [main alternative].`,
+        ? rawDescription.split(".")[0] ?? `${company} - ${category} for modern teams`
+        : `${company} - ${category} for modern teams`,
+      after:   `${company} is the ${category} tool for [specific team type] that [primary differentiator], without the complexity of [main alternative].`,
       why:     "AI assistants quote homepage headlines directly in recommendation outputs. A specific, falsifiable claim gives AI a concrete reason to prefer you over generic alternatives.",
     },
     {
@@ -392,14 +392,14 @@ export function generateMockAudit(input: AuditInput): AuditResult {
       section: "category",
       label:   "Category description",
       before:  `${company} is a ${category} platform for teams of all sizes.`,
-      after:   `${company} is the [adjective] ${category} tool for [specific buyer segment] — not a generic platform, but an opinionated system designed to [primary differentiator].`,
+      after:   `${company} is the [adjective] ${category} tool for [specific buyer segment], not a generic platform, but an opinionated system designed to [primary differentiator].`,
       why:     "Owning a specific sub-category gives AI a clear retrieval hook. Products described as 'all-in-one' or 'for all teams' are harder for AI to recommend for specific buyer prompts.",
     },
     {
       section: "social_proof",
       label:   "Social proof block",
       before:  `Trusted by hundreds of teams worldwide. ★★★★★`,
-      after:   `"[Specific outcome — e.g. reduced our weekly reporting from 4 hours to 20 minutes]" — [Name], [Title] at [Company Name, recognisable brand preferred]. Rated [X.X]/5 by [N]+ reviews on G2.`,
+      after:   `"[Specific outcome, e.g. reduced our weekly reporting from 4 hours to 20 minutes]" - [Name], [Title] at [Company Name, recognisable brand preferred]. Rated [X.X]/5 by [N]+ reviews on G2.`,
       why:     "AI assistants extract and cite specific, named proof points. Vague trust signals ('loved by teams worldwide') are ignored. Named customers with measurable outcomes are cited up to 4× more often.",
     },
   ]

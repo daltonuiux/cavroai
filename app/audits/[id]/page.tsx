@@ -422,7 +422,7 @@ function CompetitorSection({ rows, myScore }: { rows: CompetitorRow[]; myScore: 
               </div>
 
               {/* Attribute grid */}
-              <div className="flex flex-col gap-1.5 rounded-md bg-foreground/[0.02] border border-border px-4 py-3">
+              <div className="card-cavro rounded-md flex flex-col gap-1.5 px-4 py-3">
                 <AttributeRow
                   label="Category clarity"
                   yourValue={STRENGTH_LABELS[yours.categoryClarity]}
@@ -705,7 +705,7 @@ function NextActionsSection({ actions }: { actions: NextAction[] }) {
         label="Next actions"
         sublabel="Three prioritised steps — focus here first"
       />
-      <div className="flex flex-col gap-0 divide-y divide-border rounded-md border border-border overflow-hidden">
+      <div className="card-cavro rounded-md divide-y divide-border overflow-hidden">
         {actions.map((a, i) => (
           <div key={i} className="flex items-start gap-4 px-5 py-4">
             {/* Number */}

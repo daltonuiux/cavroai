@@ -87,7 +87,7 @@ function Input({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full rounded-md border border-border bg-background px-3 py-2 text-[13px] text-foreground placeholder:text-muted-foreground/35 focus:outline-none focus:ring-1 focus:ring-foreground/20 transition-shadow"
+      className="input-cavro placeholder:text-muted-foreground/35 text-foreground"
     />
   )
 }
@@ -109,7 +109,7 @@ function Textarea({
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       rows={rows}
-      className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-[13px] text-foreground placeholder:text-muted-foreground/35 focus:outline-none focus:ring-1 focus:ring-foreground/20 transition-shadow"
+      className="input-cavro resize-none placeholder:text-muted-foreground/35 text-foreground"
     />
   )
 }
@@ -129,7 +129,7 @@ function Select({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-md border border-border bg-background px-3 py-2 text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-foreground/20 transition-shadow"
+      className="input-cavro text-foreground"
     >
       {placeholder && (
         <option value="" disabled>
@@ -519,7 +519,7 @@ function Step4({
         Confirm the details below then generate your AI Recommendation Audit.
       </p>
 
-      <div className="flex flex-col gap-0 divide-y divide-border rounded-md border border-border overflow-hidden">
+      <div className="card-cavro rounded-md divide-y divide-border overflow-hidden">
 
         {/* Company */}
         <div className="px-4 py-3.5">

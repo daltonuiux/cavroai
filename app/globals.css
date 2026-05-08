@@ -138,14 +138,13 @@
     justify-content: center;
     background: linear-gradient(180deg, #52525C 0%, #3F3F46 50%, #27272A 100%);
     border-color: #18181B;
-    box-shadow: 0 1px 1px 0 rgba(2, 39, 61, 0.08), 0 1.5px 1px 0 rgba(255, 255, 255, 0.64) inset;
+    box-shadow: 0 1px 1px 0 rgba(2, 39, 61, 0.08), 0 1px 0.5px 0 rgba(255, 255, 255, 0.24) inset;
   }
   .btn-cavro-primary:hover:not(:disabled) {
     background: linear-gradient(180deg, #5B5B66 0%, #484852 50%, #303036 100%);
   }
   .btn-cavro-primary:active:not(:disabled) {
     background: linear-gradient(180deg, #3F3F46 0%, #2F2F35 100%);
-    box-shadow: 0 1px 1px 0 rgba(2, 39, 61, 0.08) inset;
   }
 
   /* ── Cavro secondary button ── */
@@ -156,7 +155,7 @@
     justify-content: center;
     background: #FFFFFF;
     border-color: rgba(24, 24, 27, 0.12);
-    box-shadow: 0 -1px 1px 0 rgba(24, 24, 27, 0.12) inset, 0 1px 1px 0 rgba(0, 0, 0, 0.04);
+    box-shadow: 0 1px 1px 0 rgba(0, 0, 0, 0.04);
   }
   .btn-cavro-secondary:hover:not(:disabled) {
     background: #FAFAFA;
@@ -164,21 +163,40 @@
   }
   .btn-cavro-secondary:active:not(:disabled) {
     background: #F4F4F5;
-    box-shadow: 0 1px 1px 0 rgba(0, 0, 0, 0.04) inset;
   }
 
   /* ── Cavro card ── */
   .card-cavro {
     border: 1px solid rgba(24, 24, 27, 0.12);
-    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.06), 0 -1px 1px 0 rgba(24, 24, 27, 0.12) inset;
+    box-shadow: 0 1px 1px 0 rgba(0, 0, 0, 0.04);
     background: #FFFFFF;
   }
 
+  /* ── Cavro input ── */
+  .input-cavro {
+    border-radius: 8px;
+    border: 1px solid rgba(24, 24, 27, 0.12);
+    background: #FFFFFF;
+    box-shadow: 0 1px 1px 0 rgba(0, 0, 0, 0.04);
+    padding: 7px 10px;
+    font-size: 13px;
+    outline: none;
+    width: 100%;
+    transition: border-color 0.1s;
+  }
+  .input-cavro:focus {
+    border-color: rgba(24, 24, 27, 0.3);
+  }
+
   /* Dark mode overrides */
+  .dark .input-cavro {
+    background: oklch(0.269 0 0);
+    border-color: oklch(1 0 0 / 12%);
+  }
   .dark .btn-cavro-secondary {
     background: oklch(0.269 0 0);
     border-color: oklch(1 0 0 / 12%);
-    box-shadow: 0 -1px 1px 0 oklch(1 0 0 / 10%) inset, 0 1px 1px 0 rgba(0, 0, 0, 0.12);
+    box-shadow: 0 1px 1px 0 rgba(0, 0, 0, 0.12);
   }
   .dark .btn-cavro-secondary:hover:not(:disabled) {
     background: oklch(0.3 0 0);
@@ -190,6 +208,6 @@
   .dark .card-cavro {
     border-color: oklch(1 0 0 / 10%);
     background: oklch(0.205 0 0);
-    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.18), 0 -1px 1px 0 oklch(1 0 0 / 8%) inset;
+    box-shadow: 0 1px 1px 0 rgba(0, 0, 0, 0.12);
   }
 }

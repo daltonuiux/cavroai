@@ -347,7 +347,7 @@ export default function OverviewPage() {
           </Link>
         </div>
 
-        <div className="rounded-md border border-border overflow-hidden divide-y divide-border/60">
+        <div className="card-cavro rounded-md overflow-hidden divide-y divide-border/60">
           {MOCK_PROMPTS.map((p) => {
             const vc = scoreColour(p.score)
             const barColor =
@@ -396,7 +396,7 @@ export default function OverviewPage() {
           </Link>
         </div>
 
-        <div className="rounded-md border border-border overflow-hidden divide-y divide-border/60">
+        <div className="card-cavro rounded-md overflow-hidden divide-y divide-border/60">
           {MOCK_RECENT_AUDITS.map((audit) => {
             const ac = scoreColour(audit.score)
             return (
