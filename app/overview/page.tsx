@@ -274,25 +274,25 @@ export default function OverviewPage() {
         <div className="flex flex-wrap gap-2">
           <Link
             href="/audits/new"
-            className="rounded-md border border-border px-3.5 py-2 text-[12px] font-medium text-foreground/70 hover:text-foreground hover:border-foreground/30 transition-colors"
+            className="btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-foreground/70"
           >
             Run new audit
           </Link>
           <Link
             href="/prompts"
-            className="rounded-md border border-border px-3.5 py-2 text-[12px] font-medium text-foreground/70 hover:text-foreground hover:border-foreground/30 transition-colors"
+            className="btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-foreground/70"
           >
             Add buyer prompt
           </Link>
           <Link
             href="/competitors"
-            className="rounded-md border border-border px-3.5 py-2 text-[12px] font-medium text-foreground/70 hover:text-foreground hover:border-foreground/30 transition-colors"
+            className="btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-foreground/70"
           >
             Add competitor
           </Link>
           <Link
             href="/recommendations"
-            className="rounded-md border border-border px-3.5 py-2 text-[12px] font-medium text-foreground/70 hover:text-foreground hover:border-foreground/30 transition-colors"
+            className="btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-foreground/70"
           >
             View recommendations
           </Link>

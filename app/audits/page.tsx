@@ -152,7 +152,7 @@ export default function AuditsPage() {
         </p>
         <Link
           href="/audits/new"
-          className="mt-1 rounded-md border border-border px-3.5 py-1.5 text-[12px] font-medium text-foreground/60 hover:text-foreground hover:border-foreground/30 transition-colors"
+          className="mt-1 btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-foreground/60"
         >
           Run new audit
         </Link>

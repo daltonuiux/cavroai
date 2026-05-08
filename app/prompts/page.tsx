@@ -125,8 +125,8 @@ export default function PromptsPage() {
           </p>
         </div>
         <button
-          className="shrink-0 rounded-md border border-border px-3.5 py-2 text-[12px] font-medium text-foreground/60 hover:text-foreground hover:border-foreground/30 transition-colors"
           disabled
+          className="shrink-0 btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-foreground/60 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Add prompt
         </button>
@@ -216,10 +216,10 @@ export default function PromptsPage() {
           Prompts represent the search intents your ideal buyers use when asking AI assistants for a tool recommendation.
         </p>
         <button
-          className="mt-1 rounded-md border border-border px-3.5 py-1.5 text-[12px] font-medium text-foreground/60 hover:text-foreground hover:border-foreground/30 transition-colors"
           disabled
+          className="mt-1 btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-foreground/50 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          Add prompt — coming soon
+          Add prompt
         </button>
       </div>
 

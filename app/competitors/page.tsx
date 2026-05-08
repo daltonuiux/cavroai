@@ -90,8 +90,8 @@ export default function CompetitorsPage() {
           </p>
         </div>
         <button
-          className="shrink-0 rounded-md border border-border px-3.5 py-2 text-[12px] font-medium text-foreground/60 hover:text-foreground hover:border-foreground/30 transition-colors"
           disabled
+          className="shrink-0 btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-foreground/60 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Add competitor
         </button>
@@ -185,10 +185,10 @@ export default function CompetitorsPage() {
           Add up to 10 competitors. Cavro AI will include them in every audit run.
         </p>
         <button
-          className="mt-1 rounded-md border border-border px-3.5 py-1.5 text-[12px] font-medium text-foreground/60 hover:text-foreground hover:border-foreground/30 transition-colors"
           disabled
+          className="mt-1 btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-foreground/50 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          Add competitor — coming soon
+          Add competitor
         </button>
       </div>
 
