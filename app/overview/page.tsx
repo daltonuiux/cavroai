@@ -88,16 +88,16 @@ const SEVERITY_BAR: Record<Severity, string> = {
 }
 
 const SEVERITY_BADGE: Record<Severity, string> = {
-  high:   "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-  medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  low:    "bg-foreground/[0.04] text-zinc-500",
+  high:   "bg-rose-500/[0.09] text-rose-700 dark:text-rose-300 ring-1 ring-inset ring-rose-500/20",
+  medium: "bg-amber-500/[0.09] text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-500/20",
+  low:    "bg-zinc-100 dark:bg-zinc-800/70 text-zinc-500 dark:text-zinc-400",
 }
 
 const VISIBILITY_BADGE: Record<Visibility, string> = {
-  high:   "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  low:    "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-  none:   "bg-foreground/[0.04] text-zinc-500",
+  high:   "bg-emerald-500/[0.09] text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-500/20",
+  medium: "bg-amber-500/[0.09] text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-500/20",
+  low:    "bg-rose-500/[0.09] text-rose-700 dark:text-rose-300 ring-1 ring-inset ring-rose-500/20",
+  none:   "bg-zinc-100 dark:bg-zinc-800/70 text-zinc-500 dark:text-zinc-400",
 }
 
 const VISIBILITY_LABEL: Record<Visibility, string> = {
@@ -180,7 +180,7 @@ export default function OverviewPage() {
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 whitespace-nowrap">
               {stat.label}
             </p>
-            <p className={`text-[22px] font-bold leading-none tabular-nums ${stat.colour || "text-foreground"}`}>
+            <p className={`text-[24px] font-bold leading-none tabular-nums tracking-tight ${stat.colour || "text-foreground"}`}>
               {stat.value}
             </p>
           </div>
@@ -243,7 +243,7 @@ export default function OverviewPage() {
                       {risk.detail}
                     </p>
                     <p className="text-[11px] font-medium text-zinc-400">
-                      Fix: <span className="text-foreground/60">{risk.action}</span>
+                      Fix: <span className="font-semibold text-zinc-600 dark:text-zinc-300">{risk.action}</span>
                     </p>
                   </div>
                 </div>
@@ -264,7 +264,7 @@ export default function OverviewPage() {
             <div className="divide-y divide-border">
               {MOCK_QUICK_WINS.map((win, i) => (
                 <div key={win.id} className="flex items-start gap-3 py-2">
-                  <span className="text-[11px] font-bold text-zinc-300 tabular-nums w-3.5 shrink-0 mt-px">
+                  <span className="text-[11px] font-bold text-zinc-400 tabular-nums w-3.5 shrink-0 mt-px">
                     {i + 1}
                   </span>
                   <p className="flex-1 text-[12px] text-zinc-500 leading-snug">
@@ -309,7 +309,7 @@ export default function OverviewPage() {
                     p.score >= 45 ? "bg-amber-400" :
                     "bg-rose-500"
                   return (
-                    <tr key={p.id} className="border-b border-border hover:bg-muted/20 transition-colors">
+                    <tr key={p.id} className="border-b border-border hover:bg-zinc-100/60 dark:hover:bg-zinc-900/40 transition-colors duration-150">
                       <td className="py-2 pr-4">
                         <p className="text-[12px] text-zinc-500 truncate max-w-[240px] xl:max-w-none">
                           &ldquo;{p.text}&rdquo;
@@ -327,7 +327,7 @@ export default function OverviewPage() {
                       </td>
                       <td className="py-2 pl-4">
                         <div className="flex items-center gap-2 justify-end">
-                          <div className="w-12 h-1 rounded-full bg-foreground/[0.07] overflow-hidden">
+                          <div className="w-12 h-1.5 rounded-full bg-foreground/[0.07] overflow-hidden">
                             <div className={`h-full rounded-full ${barColor}`} style={{ width: `${p.score}%` }} />
                           </div>
                           <span className={`text-[11px] font-bold tabular-nums w-6 text-right ${vc.text}`}>
@@ -359,7 +359,7 @@ export default function OverviewPage() {
                   <Link
                     key={audit.id}
                     href="/audits"
-                    className="flex items-center justify-between py-2.5 hover:bg-muted/20 -mx-2 px-2 rounded-sm transition-colors"
+                    className="flex items-center justify-between py-2.5 hover:bg-zinc-100/60 dark:hover:bg-zinc-900/40 -mx-2 px-2 rounded-sm transition-colors duration-150"
                   >
                     <div className="min-w-0">
                       <p className={`text-[12px] font-medium truncate ${i === 0 ? "text-foreground" : "text-zinc-500"}`}>
@@ -386,7 +386,7 @@ export default function OverviewPage() {
                 +12 pts
               </span>
             </div>
-            <div className="flex items-end gap-1.5 h-8">
+            <div className="flex items-end gap-1.5 h-9">
               {MOCK_RECENT_AUDITS.slice().reverse().map((a) => {
                 const h   = Math.max((a.score / 100) * 32, 4)
                 const col = a.score >= 75

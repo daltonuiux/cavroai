@@ -95,7 +95,7 @@ export default function AuditsPage() {
             <p className={`text-[48px] font-bold leading-none tabular-nums tracking-tight ${latestColour}`}>
               {latest.score}
             </p>
-            <p className={`text-[9px] font-bold uppercase tracking-widest mt-1.5 opacity-60 ${latestColour}`}>
+            <p className={`text-[9px] font-bold uppercase tracking-widest mt-1.5 opacity-70 ${latestColour}`}>
               {scoreLabel(latest.score)}
             </p>
           </div>
@@ -106,12 +106,12 @@ export default function AuditsPage() {
               <p className="text-[15px] font-semibold text-foreground tracking-[-0.01em]">
                 {latest.label}
               </p>
-              <span className="rounded bg-emerald-500/10 px-1.5 py-px text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+              <span className="rounded bg-emerald-500/[0.09] px-1.5 py-px text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-500/20">
                 Latest
               </span>
             </div>
             <p className="text-[11px] text-zinc-400 mb-3">{latest.date}</p>
-            <p className="text-[13px] leading-relaxed text-zinc-500 max-w-[65ch]">
+            <p className="text-[13px] leading-relaxed text-zinc-600 dark:text-zinc-400 max-w-[65ch]">
               {latest.summary}
             </p>
             <div className="flex items-center gap-5 mt-4">
@@ -156,7 +156,7 @@ export default function AuditsPage() {
                 <Link
                   key={audit.id}
                   href={`/audits/${audit.id}`}
-                  className="flex items-center justify-between gap-6 py-3 hover:bg-muted/20 -mx-2 px-2 rounded-sm transition-colors group"
+                  className="flex items-center justify-between gap-6 py-3 hover:bg-zinc-100/60 dark:hover:bg-zinc-900/40 -mx-2 px-2 rounded-sm transition-colors duration-150 group"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="text-[13px] font-medium text-foreground/65 group-hover:text-foreground/80 transition-colors">
@@ -171,7 +171,7 @@ export default function AuditsPage() {
                     </p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <span className={`text-[20px] font-bold tabular-nums ${colour}`}>
+                    <span className={`text-[22px] font-bold tabular-nums tracking-tight ${colour}`}>
                       {audit.score}
                     </span>
                   </div>
@@ -183,10 +183,10 @@ export default function AuditsPage() {
       )}
 
       {/* New audit CTA */}
-      <div className="mt-6 rounded-md border border-dashed border-border px-5 py-5 flex items-center justify-between gap-6">
+      <div className="mt-6 rounded-md border border-border bg-zinc-50/60 dark:bg-zinc-900/20 px-5 py-5 flex items-center justify-between gap-6">
         <div>
-          <p className="text-[13px] font-medium text-foreground/60">Run your next audit</p>
-          <p className="text-[12px] text-zinc-400 mt-0.5 max-w-xs leading-relaxed">
+          <p className="text-[13px] font-semibold text-foreground/80">Run your next audit</p>
+          <p className="text-[12px] text-zinc-500 mt-0.5 max-w-xs leading-relaxed">
             Test how AI assistants respond to your tracked buyer prompts and compare you against competitors.
           </p>
         </div>

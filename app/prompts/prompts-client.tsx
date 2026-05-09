@@ -343,9 +343,9 @@ const TREND_COLOUR: Record<Trend, string> = {
 }
 
 const STRENGTH_STYLES: Record<Strength, string> = {
-  strong:     "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  developing: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  weak:       "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+  strong:     "bg-emerald-500/[0.09] text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-500/20",
+  developing: "bg-amber-500/[0.09] text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-500/20",
+  weak:       "bg-rose-500/[0.09] text-rose-700 dark:text-rose-300 ring-1 ring-inset ring-rose-500/20",
 }
 
 const STRENGTH_LABELS: Record<Strength, string> = {
@@ -355,9 +355,9 @@ const STRENGTH_LABELS: Record<Strength, string> = {
 }
 
 const CONFIDENCE_STYLES: Record<Confidence, string> = {
-  high:   "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  low:    "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+  high:   "bg-emerald-500/[0.09] text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-500/20",
+  medium: "bg-amber-500/[0.09] text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-500/20",
+  low:    "bg-rose-500/[0.09] text-rose-700 dark:text-rose-300 ring-1 ring-inset ring-rose-500/20",
 }
 
 const CATEGORY_STYLES: Record<Category, string> = {
@@ -396,7 +396,7 @@ function Pill({ label, className }: { label: string; className: string }) {
 function ExpandedDetail({ prompt }: { prompt: Prompt }) {
   const d = prompt.detail
   return (
-    <div className="border-t border-border bg-foreground/[0.015]">
+    <div className="border-t border-border bg-zinc-50 dark:bg-zinc-950/50">
       {/* Three-column diagnostic panel */}
       <div className="grid grid-cols-1 md:grid-cols-3 md:divide-x divide-border">
 
@@ -542,7 +542,7 @@ export function PromptsClient() {
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 whitespace-nowrap">
               {stat.label}
             </p>
-            <p className={`text-[20px] font-bold leading-none tabular-nums ${stat.colour || "text-foreground"}`}>
+            <p className={`text-[22px] font-bold leading-none tabular-nums tracking-tight ${stat.colour || "text-foreground"}`}>
               {stat.value}
             </p>
           </div>
@@ -590,7 +590,7 @@ export function PromptsClient() {
                 >
                   {comp.name}
                 </span>
-                <div className="flex-1 h-1 rounded-full bg-foreground/[0.06] overflow-hidden">
+                <div className="flex-1 h-1.5 rounded-full bg-foreground/[0.06] overflow-hidden">
                   <div
                     className={`h-full rounded-full ${comp.you ? "bg-emerald-500" : "bg-foreground/20"}`}
                     style={{ width: `${(comp.wins / PROMPTS.length) * 100}%` }}
@@ -689,8 +689,8 @@ export function PromptsClient() {
             <div key={p.id} className="border-b border-border">
               <button
                 onClick={() => toggle(p.id)}
-                className={`w-full text-left transition-colors hover:bg-muted/20 ${
-                  isExpanded ? "bg-muted/20" : ""
+                className={`w-full text-left transition-colors duration-150 hover:bg-zinc-100/60 dark:hover:bg-zinc-900/40 ${
+                  isExpanded ? "bg-zinc-100/70 dark:bg-zinc-900/50" : ""
                 }`}
               >
                 <div className="grid grid-cols-1 lg:grid-cols-[1fr_44px_108px_88px_80px_148px_40px] gap-3 py-2.5 px-0 items-center">
@@ -724,11 +724,11 @@ export function PromptsClient() {
                   {/* Winner */}
                   <div className="hidden lg:flex justify-end">
                     {p.topResult === "You" ? (
-                      <span className="rounded bg-emerald-500/10 px-1.5 py-px text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                      <span className="rounded bg-emerald-500/[0.09] px-1.5 py-px text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-500/20">
                         You
                       </span>
                     ) : (
-                      <span className="text-[11px] text-zinc-500">{p.topResult}</span>
+                      <span className="text-[11px] font-medium text-zinc-500">{p.topResult}</span>
                     )}
                   </div>
 
@@ -752,11 +752,11 @@ export function PromptsClient() {
 
                   {/* Trend + expand toggle */}
                   <div className="hidden lg:flex items-center justify-end gap-1.5">
-                    <span className={`text-[12px] font-bold ${TREND_COLOUR[p.trend]}`}>
+                    <span className={`text-[13px] font-bold ${TREND_COLOUR[p.trend]}`}>
                       {TREND_ICON[p.trend]}
                     </span>
-                    <span className="text-[10px] text-zinc-300 dark:text-zinc-600">
-                      {isExpanded ? "▲" : "▼"}
+                    <span className="text-[10px] text-zinc-400 dark:text-zinc-500 transition-transform duration-150" style={{ display: "inline-block", transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)" }}>
+                      ▼
                     </span>
                   </div>
 
@@ -773,7 +773,7 @@ export function PromptsClient() {
       {/* ── Add CTA ──────────────────────────────────────────────────────── */}
       <div className="mt-6 flex items-center justify-between gap-4 py-3 border-t border-border">
         <div>
-          <p className="text-[12px] font-medium text-zinc-500">Track another buyer prompt</p>
+          <p className="text-[12px] font-semibold text-zinc-600 dark:text-zinc-400">Track another buyer prompt</p>
           <p className="text-[11px] text-zinc-400 mt-0.5">
             Add the search intents your ideal buyers use when asking AI for a recommendation.
           </p>

@@ -297,21 +297,21 @@ const AUDIT = {
 // ---------------------------------------------------------------------------
 
 const IMPACT_STYLES: Record<Impact, string> = {
-  high:   "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-  medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  low:    "bg-foreground/[0.04] text-zinc-500",
+  high:   "bg-rose-500/[0.09] text-rose-700 dark:text-rose-300 ring-1 ring-inset ring-rose-500/20",
+  medium: "bg-amber-500/[0.09] text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-500/20",
+  low:    "bg-zinc-100 dark:bg-zinc-800/70 text-zinc-500 dark:text-zinc-400",
 }
 
 const EFFORT_STYLES: Record<Effort, string> = {
-  quick:  "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  large:  "bg-foreground/[0.04] text-zinc-500",
+  quick:  "bg-emerald-500/[0.09] text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-500/20",
+  medium: "bg-amber-500/[0.09] text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-500/20",
+  large:  "bg-zinc-100 dark:bg-zinc-800/70 text-zinc-500 dark:text-zinc-400",
 }
 
 const STATUS_STYLES = {
-  pending:       "bg-foreground/[0.04] text-zinc-500",
-  "in-progress": "bg-sky-500/10 text-sky-600 dark:text-sky-400",
-  done:          "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  pending:       "bg-zinc-100 dark:bg-zinc-800/70 text-zinc-500 dark:text-zinc-400",
+  "in-progress": "bg-sky-500/[0.09] text-sky-700 dark:text-sky-300 ring-1 ring-inset ring-sky-500/20",
+  done:          "bg-emerald-500/[0.09] text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-500/20",
 }
 
 const STATUS_LABELS = {
@@ -321,10 +321,10 @@ const STATUS_LABELS = {
 }
 
 const REC_STATUS_STYLES: Record<RecStatus, string> = {
-  primary:   "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  secondary: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  mentioned: "bg-foreground/[0.04] text-zinc-500",
-  absent:    "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+  primary:   "bg-emerald-500/[0.09] text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-500/20",
+  secondary: "bg-amber-500/[0.09] text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-500/20",
+  mentioned: "bg-zinc-100 dark:bg-zinc-800/70 text-zinc-500 dark:text-zinc-400",
+  absent:    "bg-rose-500/[0.09] text-rose-700 dark:text-rose-300 ring-1 ring-inset ring-rose-500/20",
 }
 
 const REC_STATUS_LABELS: Record<RecStatus, string> = {
@@ -347,21 +347,21 @@ const TREND_COLOUR: Record<Trend, string> = {
 }
 
 const STRENGTH_STYLES: Record<Strength, string> = {
-  strong:   "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  moderate: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  weak:     "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+  strong:   "bg-emerald-500/[0.09] text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-500/20",
+  moderate: "bg-amber-500/[0.09] text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-500/20",
+  weak:     "bg-rose-500/[0.09] text-rose-700 dark:text-rose-300 ring-1 ring-inset ring-rose-500/20",
 }
 
 const FREQ_STYLES: Record<Freq, string> = {
-  high:   "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  low:    "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+  high:   "bg-emerald-500/[0.09] text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-500/20",
+  medium: "bg-amber-500/[0.09] text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-500/20",
+  low:    "bg-rose-500/[0.09] text-rose-700 dark:text-rose-300 ring-1 ring-inset ring-rose-500/20",
 }
 
 const STANCE_STYLES: Record<Stance, string> = {
-  favorable:   "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  neutral:     "bg-foreground/[0.04] text-zinc-500",
-  unfavorable: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+  favorable:   "bg-emerald-500/[0.09] text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-500/20",
+  neutral:     "bg-zinc-100 dark:bg-zinc-800/70 text-zinc-500 dark:text-zinc-400",
+  unfavorable: "bg-rose-500/[0.09] text-rose-700 dark:text-rose-300 ring-1 ring-inset ring-rose-500/20",
 }
 
 // ---------------------------------------------------------------------------
@@ -525,7 +525,7 @@ export default async function AuditResultPage({ params }: Props) {
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 whitespace-nowrap">
               {stat.label}
             </p>
-            <p className={`text-[22px] font-bold leading-none tabular-nums ${stat.colour || "text-foreground"}`}>
+            <p className={`text-[24px] font-bold leading-none tabular-nums tracking-tight ${stat.colour || "text-foreground"}`}>
               {stat.value}
             </p>
             <p className="text-[10px] text-zinc-400 mt-0.5">{stat.sublabel}</p>
@@ -639,9 +639,9 @@ export default async function AuditResultPage({ params }: Props) {
                 {AUDIT.prompts.map((p, i) => (
                   <tr
                     key={i}
-                    className={`border-b border-border transition-colors hover:bg-muted/20 ${
-                      p.recStatus === "primary" ? "bg-emerald-500/[0.02]" :
-                      p.recStatus === "absent"  ? "bg-rose-500/[0.02]"   : ""
+                    className={`border-b border-border transition-colors duration-150 hover:bg-zinc-100/60 dark:hover:bg-zinc-900/40 ${
+                      p.recStatus === "primary" ? "bg-emerald-500/[0.025]" :
+                      p.recStatus === "absent"  ? "bg-rose-500/[0.025]"   : ""
                     }`}
                   >
                     {/* Prompt text */}

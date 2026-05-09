@@ -126,7 +126,7 @@ export default function CompetitorsPage() {
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 whitespace-nowrap">
               {stat.label}
             </p>
-            <p className={`text-[20px] font-bold leading-none tabular-nums ${stat.colour || "text-foreground"}`}>
+            <p className={`text-[22px] font-bold leading-none tabular-nums tracking-tight ${stat.colour || "text-foreground"}`}>
               {stat.value}
             </p>
           </div>
@@ -161,7 +161,7 @@ export default function CompetitorsPage() {
         {MOCK_COMPETITORS.map((c) => {
           const delta = YOUR_SCORE - c.score
           return (
-            <div key={c.id} className="py-3 border-b border-border">
+            <div key={c.id} className="py-3 border-b border-border transition-colors duration-150 hover:bg-zinc-100/40 dark:hover:bg-zinc-900/30 -mx-2 px-2 rounded-sm">
 
               {/* Main row */}
               <div className="grid grid-cols-1 lg:grid-cols-[1fr_72px_72px_56px_56px_64px] gap-3 lg:gap-5 items-center">
@@ -243,7 +243,7 @@ export default function CompetitorsPage() {
       {/* Add competitor — minimal footer */}
       <div className="mt-6 flex items-center justify-between gap-4 py-3 border-t border-border">
         <div>
-          <p className="text-[12px] font-medium text-zinc-500">Track another competitor</p>
+          <p className="text-[12px] font-semibold text-zinc-600 dark:text-zinc-400">Track another competitor</p>
           <p className="text-[11px] text-zinc-400 mt-0.5">
             Add up to 10 competitors. Cavro AI will include them in every audit run.
           </p>

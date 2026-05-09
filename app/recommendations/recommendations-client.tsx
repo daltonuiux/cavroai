@@ -239,18 +239,18 @@ const EFFORT_LABEL: Record<Effort, string> = {
 }
 
 const CAT_STYLES: Record<Category, string> = {
-  positioning: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
-  trust:       "bg-sky-500/10 text-sky-600 dark:text-sky-400",
-  content:     "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  technical:   "bg-foreground/[0.04] text-zinc-500",
-  pricing:     "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  positioning: "bg-violet-500/[0.08] text-violet-700 dark:text-violet-300",
+  trust:       "bg-sky-500/[0.08] text-sky-700 dark:text-sky-300",
+  content:     "bg-emerald-500/[0.08] text-emerald-700 dark:text-emerald-300",
+  technical:   "bg-zinc-100 dark:bg-zinc-800/70 text-zinc-500 dark:text-zinc-400",
+  pricing:     "bg-amber-500/[0.08] text-amber-700 dark:text-amber-300",
 }
 
 const STATUS_STYLES: Record<Status, string> = {
-  pending:       "bg-foreground/[0.04] text-zinc-500",
-  "in-progress": "bg-sky-500/10 text-sky-600 dark:text-sky-400",
-  implemented:   "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  verified:      "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+  pending:       "bg-zinc-100 dark:bg-zinc-800/70 text-zinc-500 dark:text-zinc-400",
+  "in-progress": "bg-sky-500/[0.09] text-sky-700 dark:text-sky-300 ring-1 ring-inset ring-sky-500/20",
+  implemented:   "bg-emerald-500/[0.09] text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-500/20",
+  verified:      "bg-violet-500/[0.09] text-violet-700 dark:text-violet-300 ring-1 ring-inset ring-violet-500/20",
 }
 
 const STATUS_LABELS: Record<Status, string> = {
@@ -300,12 +300,12 @@ function RecRow({
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left flex items-start gap-3.5 py-2.5 border-b border-border last:border-b-0 rounded-sm transition-colors -mx-2 px-2 ${
+      className={`w-full text-left flex items-start gap-3.5 py-2.5 border-b border-border last:border-b-0 rounded-sm transition-colors duration-150 -mx-2 px-2 ${
         isSelected
-          ? "bg-foreground/[0.04]"
+          ? "bg-zinc-100/80 dark:bg-zinc-800/60"
           : dim
-          ? "opacity-45 hover:opacity-60"
-          : "hover:bg-muted/20"
+          ? "opacity-45 hover:opacity-65 transition-opacity duration-150"
+          : "hover:bg-zinc-100/60 dark:hover:bg-zinc-900/40"
       }`}
     >
       {/* Impact dot */}
@@ -338,7 +338,7 @@ function RecRow({
       {/* Score delta */}
       {!dim && (
         <div className="shrink-0 text-right min-w-[36px]">
-          <p className="text-[16px] font-bold tabular-nums leading-none text-emerald-600 dark:text-emerald-400">
+          <p className="text-[18px] font-bold tabular-nums leading-none text-emerald-600 dark:text-emerald-400">
             +{rec.scoreDelta}
           </p>
           <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mt-0.5">pts</p>
@@ -371,14 +371,16 @@ function ImpactGroup({
   return (
     <div className="mb-5">
       <div className="flex items-center gap-2 pb-2 border-b border-border mb-0.5">
-        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${IMPACT_SECTION_DOT[impact]}`} />
-        <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
+        <div className={`w-2 h-2 rounded-full shrink-0 ${IMPACT_SECTION_DOT[impact]}`} />
+        <p className={`text-[9px] font-bold uppercase tracking-widest ${
+          impact === "high" ? "text-zinc-600 dark:text-zinc-300" : "text-zinc-400"
+        }`}>
           {IMPACT_SECTION_LABEL[impact]}
         </p>
         <span className="text-[10px] text-zinc-400">
           {recs.length} {recs.length === 1 ? "fix" : "fixes"}
         </span>
-        <span className="ml-auto text-[10px] font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+        <span className="ml-auto text-[11px] font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
           +{groupUpside} pts possible
         </span>
       </div>
@@ -448,21 +450,21 @@ function Drawer({
         {/* Score impact */}
         <div className="flex items-center gap-4 mt-3">
           <div>
-            <p className="text-[22px] font-bold tabular-nums leading-none text-emerald-600 dark:text-emerald-400">
+            <p className="text-[24px] font-bold tabular-nums leading-none tracking-tight text-emerald-600 dark:text-emerald-400">
               +{rec.scoreDelta}
             </p>
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mt-0.5">pts impact</p>
           </div>
           <div className="h-8 w-px bg-border" />
           <div>
-            <p className="text-[22px] font-bold tabular-nums leading-none text-foreground">
+            <p className="text-[24px] font-bold tabular-nums leading-none tracking-tight text-foreground">
               {rec.outcome.likelihoodGain}
             </p>
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mt-0.5">likelihood</p>
           </div>
           <div className="h-8 w-px bg-border" />
           <div>
-            <p className="text-[22px] font-bold tabular-nums leading-none text-foreground">
+            <p className="text-[24px] font-bold tabular-nums leading-none tracking-tight text-foreground">
               {rec.outcome.promptsImproved}
             </p>
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mt-0.5">prompts</p>
@@ -472,19 +474,19 @@ function Drawer({
 
       {/* ── Status selector ───────────────────────────────────────────────── */}
       <div className="shrink-0 px-5 py-3 border-b border-border">
-        <div className="flex items-center gap-0.5 rounded-md border border-border bg-foreground/[0.02] p-0.5">
+        <div className="flex items-center gap-0.5 rounded-md border border-border bg-zinc-100/50 dark:bg-zinc-800/40 p-0.5">
           {DRAWER_STATUSES.map((s) => (
             <button
               key={s}
               onClick={() => onStatusChange(s)}
-              className={`flex-1 rounded py-1.5 text-[10px] font-semibold transition-colors truncate px-1 ${
+              className={`flex-1 rounded py-1.5 text-[10px] font-semibold transition-colors duration-100 truncate px-1 ${
                 currentStatus === s
                   ? "bg-background text-foreground"
-                  : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                  : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200"
               }`}
               style={
                 currentStatus === s
-                  ? { boxShadow: "0 1px 1px 0 rgba(0,0,0,0.04)" }
+                  ? { boxShadow: "0 1px 3px 0 rgba(0,0,0,0.08), 0 1px 1px 0 rgba(0,0,0,0.04)" }
                   : undefined
               }
             >
@@ -585,10 +587,10 @@ function Drawer({
             ].map((m) => (
               <div
                 key={m.label}
-                className="rounded border border-border px-2.5 py-2.5"
-                style={{ boxShadow: "0 1px 1px 0 rgba(0,0,0,0.04)" }}
+                className="rounded border border-border bg-zinc-50/60 dark:bg-zinc-900/30 px-2.5 py-2.5"
+                style={{ boxShadow: "0 1px 2px 0 rgba(0,0,0,0.04)" }}
               >
-                <p className="text-[14px] font-bold tabular-nums text-foreground">{m.value}</p>
+                <p className="text-[15px] font-bold tabular-nums tracking-tight text-foreground">{m.value}</p>
                 <p className="text-[10px] text-zinc-500 mt-0.5">{m.label}</p>
               </div>
             ))}
@@ -730,7 +732,7 @@ export function RecommendationsClient() {
               <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 whitespace-nowrap">
                 {stat.label}
               </p>
-              <p className={`text-[20px] font-bold leading-none tabular-nums ${stat.colour}`}>
+              <p className={`text-[22px] font-bold leading-none tabular-nums tracking-tight ${stat.colour}`}>
                 {stat.value}
               </p>
             </div>
@@ -753,7 +755,7 @@ export function RecommendationsClient() {
                 <button
                   key={r.id}
                   onClick={() => setSelectedRec(r)}
-                  className="flex items-center gap-2 rounded-md border border-border bg-foreground/[0.02] px-2.5 py-1.5 hover:bg-foreground/[0.04] transition-colors"
+                  className="flex items-center gap-2 rounded-md border border-border bg-foreground/[0.02] px-2.5 py-1.5 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/50 hover:border-border/80 transition-colors duration-150"
                 >
                   <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${IMPACT_DOT[r.impact]}`} />
                   <span className="text-[11px] font-medium text-foreground/80 leading-snug">
@@ -797,7 +799,8 @@ export function RecommendationsClient() {
         {doneRecs.length > 0 && (
           <div className="pt-4 border-t border-border">
             <div className="flex items-center gap-2 mb-1">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">Completed</p>
+              <div className="w-2 h-2 rounded-full shrink-0 bg-emerald-500" />
+              <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">Completed</p>
               <span className="text-[10px] text-zinc-400">
                 {doneRecs.length} {doneRecs.length === 1 ? "fix" : "fixes"} now improving your score
               </span>

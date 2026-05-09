@@ -241,10 +241,10 @@ const REWRITES: Rewrite[] = [
 // ---------------------------------------------------------------------------
 
 const STANCE_STYLES: Record<Stance, string> = {
-  strong:     "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  developing: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  neutral:    "bg-foreground/[0.04] text-zinc-500",
-  weak:       "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+  strong:     "bg-emerald-500/[0.09] text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-500/20",
+  developing: "bg-amber-500/[0.09] text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-500/20",
+  neutral:    "bg-zinc-100 dark:bg-zinc-800/70 text-zinc-500 dark:text-zinc-400",
+  weak:       "bg-rose-500/[0.09] text-rose-700 dark:text-rose-300 ring-1 ring-inset ring-rose-500/20",
 }
 
 const STANCE_LABELS: Record<Stance, string> = {
@@ -255,9 +255,9 @@ const STANCE_LABELS: Record<Stance, string> = {
 }
 
 const STATUS_STYLES: Record<Status, string> = {
-  resolved:   "text-emerald-600 dark:text-emerald-400",
-  partial:    "text-amber-600 dark:text-amber-400",
-  unresolved: "text-rose-600 dark:text-rose-400",
+  resolved:   "bg-emerald-500/[0.09] text-emerald-700 dark:text-emerald-300 rounded px-1.5 py-px ring-1 ring-inset ring-emerald-500/20",
+  partial:    "bg-amber-500/[0.09] text-amber-700 dark:text-amber-300 rounded px-1.5 py-px ring-1 ring-inset ring-amber-500/20",
+  unresolved: "bg-rose-500/[0.09] text-rose-700 dark:text-rose-300 rounded px-1.5 py-px ring-1 ring-inset ring-rose-500/20",
 }
 
 const STATUS_LABELS: Record<Status, string> = {
@@ -267,9 +267,9 @@ const STATUS_LABELS: Record<Status, string> = {
 }
 
 const IMPACT_STYLES: Record<Impact, string> = {
-  high:   "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-  medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  low:    "bg-foreground/[0.04] text-zinc-500",
+  high:   "bg-rose-500/[0.09] text-rose-700 dark:text-rose-300 ring-1 ring-inset ring-rose-500/20",
+  medium: "bg-amber-500/[0.09] text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-500/20",
+  low:    "bg-zinc-100 dark:bg-zinc-800/70 text-zinc-500 dark:text-zinc-400",
 }
 
 // ---------------------------------------------------------------------------
@@ -322,26 +322,26 @@ export function PerceptionClient() {
         </div>
 
         {/* Mode toggle */}
-        <div className="shrink-0 flex items-center rounded-md border border-border bg-foreground/[0.02] p-0.5">
+        <div className="shrink-0 flex items-center rounded-md border border-border bg-zinc-100/60 dark:bg-zinc-800/40 p-0.5">
           <button
             onClick={() => setMode("current")}
-            className={`rounded px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+            className={`rounded px-3 py-1.5 text-[11px] font-semibold transition-colors duration-100 ${
               !isSimulated
                 ? "bg-background text-foreground"
-                : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                : "text-zinc-500 hover:text-foreground"
             }`}
-            style={!isSimulated ? { boxShadow: "0 1px 1px 0 rgba(0,0,0,0.04)" } : undefined}
+            style={!isSimulated ? { boxShadow: "0 1px 3px 0 rgba(0,0,0,0.08), 0 1px 1px 0 rgba(0,0,0,0.04)" } : undefined}
           >
             Current
           </button>
           <button
             onClick={() => setMode("simulated")}
-            className={`rounded px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+            className={`rounded px-3 py-1.5 text-[11px] font-semibold transition-colors duration-100 ${
               isSimulated
                 ? "bg-background text-emerald-600 dark:text-emerald-400"
-                : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                : "text-zinc-500 hover:text-foreground"
             }`}
-            style={isSimulated ? { boxShadow: "0 1px 1px 0 rgba(0,0,0,0.04)" } : undefined}
+            style={isSimulated ? { boxShadow: "0 1px 3px 0 rgba(0,0,0,0.08), 0 1px 1px 0 rgba(0,0,0,0.04)" } : undefined}
           >
             Simulated
           </button>
@@ -356,10 +356,10 @@ export function PerceptionClient() {
 
         {/* The statement itself */}
         <p
-          className={`text-[22px] font-medium italic leading-snug tracking-[-0.02em] transition-colors ${
+          className={`text-[22px] font-semibold italic leading-snug tracking-[-0.02em] transition-colors duration-300 ${
             isSimulated
               ? "text-foreground"
-              : "text-foreground/55"
+              : "text-zinc-400"
           }`}
         >
           &ldquo;{perception.statement}&rdquo;
@@ -447,10 +447,10 @@ export function PerceptionClient() {
               Overall
             </p>
             <p
-              className={`text-[52px] font-bold tabular-nums leading-none tracking-tight transition-colors ${
+              className={`text-[52px] font-bold tabular-nums leading-none tracking-tight transition-colors duration-300 ${
                 isSimulated
                   ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-foreground/55"
+                  : "text-zinc-400"
               }`}
             >
               {overallLikelihood}%
@@ -478,7 +478,7 @@ export function PerceptionClient() {
         </div>
 
         {/* Overall bar */}
-        <div className="h-1.5 rounded-full bg-foreground/[0.06] overflow-hidden mb-5 max-w-[400px]">
+        <div className="h-2 rounded-full bg-foreground/[0.06] overflow-hidden mb-5 max-w-[400px]">
           <div
             className={`h-full rounded-full transition-all duration-300 ${
               isSimulated ? "bg-emerald-500" : "bg-foreground/30"
@@ -511,7 +511,7 @@ export function PerceptionClient() {
                 const delta      = p.simulated - p.current
                 const barValue   = isSimulated ? p.simulated : p.current
                 return (
-                  <tr key={p.text} className="border-b border-border">
+                  <tr key={p.text} className="border-b border-border hover:bg-zinc-100/40 dark:hover:bg-zinc-900/30 transition-colors duration-150">
                     <td className="py-3 pr-4">
                       <p className="text-[11px] font-medium text-foreground/80 leading-snug">
                         &ldquo;{p.text}&rdquo;
@@ -544,7 +544,7 @@ export function PerceptionClient() {
                     </td>
                     <td className="py-3 pl-4">
                       <div className="flex items-center gap-2">
-                        <div className="flex-1 h-1 rounded-full bg-foreground/[0.06] overflow-hidden">
+                        <div className="flex-1 h-1.5 rounded-full bg-foreground/[0.06] overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all duration-300 ${
                               barValue >= 60

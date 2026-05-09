@@ -53,19 +53,19 @@ function NavItem({
     <Link
       href={href}
       className={cn(
-        "group flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[13px] leading-none transition-colors duration-75",
+        "group flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[13px] leading-none transition-colors duration-100",
         active
           ? "font-semibold text-foreground"
-          : "font-medium text-zinc-500 hover:text-foreground/90",
+          : "font-medium text-zinc-500 hover:text-foreground hover:bg-zinc-950/[0.04] dark:hover:bg-zinc-100/[0.04]",
       )}
-      style={active ? { backgroundColor: "rgba(24, 24, 27, 0.06)" } : undefined}
+      style={active ? { backgroundColor: "rgba(24, 24, 27, 0.07)" } : undefined}
     >
       <Icon
         className={cn(
           "size-[14px] shrink-0",
           active
             ? "text-foreground"
-            : "text-zinc-500 group-hover:text-foreground/55",
+            : "text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300",
         )}
         strokeWidth={active ? 2.25 : 1.75}
       />
