@@ -121,7 +121,7 @@ export default function OverviewPage() {
     <div className="flex flex-col w-full">
 
       {/* ── Hero zone ───────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between gap-8 pb-7 border-b border-border">
+      <div className="flex items-start justify-between gap-5 pb-5 border-b border-border">
 
         <div className="flex items-start gap-5 min-w-0">
           {/* Primary score */}
@@ -145,7 +145,7 @@ export default function OverviewPage() {
               <span className="text-foreground/15">·</span>
               <span className="text-[11px] text-zinc-400">{MOCK_AUDIT.date}</span>
             </div>
-            <p className="text-[13px] leading-relaxed text-foreground/60 max-w-[58ch]">
+            <p className="text-[13px] leading-relaxed text-zinc-500 max-w-[58ch]">
               {MOCK_AUDIT.summary}
             </p>
           </div>
@@ -175,7 +175,7 @@ export default function OverviewPage() {
         ].map((stat, i) => (
           <div
             key={stat.label}
-            className={`flex flex-col gap-1 py-4 px-6 ${i > 0 ? "border-l border-border" : ""}`}
+            className={`flex flex-col gap-1 py-3 px-5 ${i > 0 ? "border-l border-border" : ""}`}
           >
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 whitespace-nowrap">
               {stat.label}
@@ -191,11 +191,11 @@ export default function OverviewPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] xl:grid-cols-[1fr_300px] items-start">
 
         {/* Primary column */}
-        <div className="py-8 lg:pr-10 flex flex-col gap-10">
+        <div className="py-6 lg:pr-8 flex flex-col gap-7">
 
           {/* ── Recommendation risks ── */}
           <section>
-            <div className="flex items-baseline justify-between mb-4">
+            <div className="flex items-baseline justify-between mb-3">
               <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
                 Recommendation risks
               </p>
@@ -224,7 +224,7 @@ export default function OverviewPage() {
               {MOCK_RISKS.map((risk, i) => (
                 <div
                   key={risk.id}
-                  className={`flex items-start gap-3.5 pl-3.5 py-4 ${SEVERITY_BAR[risk.severity]} ${i > 0 ? "mt-1.5" : ""}`}
+                  className={`flex items-start gap-3.5 pl-3.5 py-3 ${SEVERITY_BAR[risk.severity]} ${i > 0 ? "mt-1" : ""}`}
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-3 mb-1">
@@ -263,11 +263,11 @@ export default function OverviewPage() {
             </div>
             <div className="divide-y divide-border">
               {MOCK_QUICK_WINS.map((win, i) => (
-                <div key={win.id} className="flex items-start gap-3 py-2.5">
+                <div key={win.id} className="flex items-start gap-3 py-2">
                   <span className="text-[11px] font-bold text-zinc-300 tabular-nums w-3.5 shrink-0 mt-px">
                     {i + 1}
                   </span>
-                  <p className="flex-1 text-[12px] text-foreground/65 leading-snug">
+                  <p className="flex-1 text-[12px] text-zinc-500 leading-snug">
                     {win.action}
                   </p>
                 </div>
@@ -310,12 +310,12 @@ export default function OverviewPage() {
                     "bg-rose-500"
                   return (
                     <tr key={p.id} className="border-b border-border hover:bg-muted/20 transition-colors">
-                      <td className="py-2.5 pr-4">
-                        <p className="text-[12px] text-foreground/60 truncate max-w-[240px] xl:max-w-none">
+                      <td className="py-2 pr-4">
+                        <p className="text-[12px] text-zinc-500 truncate max-w-[240px] xl:max-w-none">
                           &ldquo;{p.text}&rdquo;
                         </p>
                       </td>
-                      <td className="py-2.5 px-4 text-right">
+                      <td className="py-2 px-4 text-right">
                         <span className={`text-[12px] font-bold tabular-nums ${vc.text}`}>
                           #{p.position}
                         </span>
@@ -325,7 +325,7 @@ export default function OverviewPage() {
                           {VISIBILITY_LABEL[p.visibility]}
                         </span>
                       </td>
-                      <td className="py-2.5 pl-4">
+                      <td className="py-2 pl-4">
                         <div className="flex items-center gap-2 justify-end">
                           <div className="w-12 h-1 rounded-full bg-foreground/[0.07] overflow-hidden">
                             <div className={`h-full rounded-full ${barColor}`} style={{ width: `${p.score}%` }} />
@@ -345,7 +345,7 @@ export default function OverviewPage() {
         </div>
 
         {/* ── Right rail ──────────────────────────────────────────────────── */}
-        <div className="border-t border-border lg:border-t-0 lg:border-l pt-8 lg:pt-0 lg:pl-8 py-8 flex flex-col gap-7">
+        <div className="border-t border-border lg:border-t-0 lg:border-l pt-6 lg:pt-0 lg:pl-6 py-6 flex flex-col gap-5">
 
           {/* Audit history */}
           <section>
@@ -359,10 +359,10 @@ export default function OverviewPage() {
                   <Link
                     key={audit.id}
                     href="/audits"
-                    className="flex items-center justify-between py-3 hover:bg-muted/20 -mx-2 px-2 rounded-sm transition-colors"
+                    className="flex items-center justify-between py-2.5 hover:bg-muted/20 -mx-2 px-2 rounded-sm transition-colors"
                   >
                     <div className="min-w-0">
-                      <p className={`text-[12px] font-medium truncate ${i === 0 ? "text-foreground/80" : "text-foreground/55"}`}>
+                      <p className={`text-[12px] font-medium truncate ${i === 0 ? "text-foreground" : "text-zinc-500"}`}>
                         {audit.label}
                       </p>
                       <p className="text-[10px] text-zinc-400 mt-0.5">{audit.date}</p>

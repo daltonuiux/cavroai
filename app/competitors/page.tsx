@@ -85,7 +85,7 @@ export default function CompetitorsPage() {
     <div className="flex flex-col w-full">
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between gap-4 pb-7 border-b border-border">
+      <div className="flex items-start justify-between gap-4 pb-5 border-b border-border">
         <div>
           <h1 className="text-[18px] font-bold tracking-[-0.02em] text-foreground">
             Competitors
@@ -104,7 +104,7 @@ export default function CompetitorsPage() {
 
       {/* ── Your position — stat strip ───────────────────────────────────── */}
       <div className="flex items-stretch border-b border-border">
-        <div className="flex flex-col gap-1 py-4 pr-6">
+        <div className="flex flex-col gap-1 py-3 pr-5">
           <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
             Your AI score
           </p>
@@ -121,7 +121,7 @@ export default function CompetitorsPage() {
         ].map((stat, i) => (
           <div
             key={stat.label}
-            className="flex flex-col gap-1 py-4 px-5 border-l border-border"
+            className="flex flex-col gap-1 py-3 px-4 border-l border-border"
           >
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 whitespace-nowrap">
               {stat.label}
@@ -161,7 +161,7 @@ export default function CompetitorsPage() {
         {MOCK_COMPETITORS.map((c) => {
           const delta = YOUR_SCORE - c.score
           return (
-            <div key={c.id} className="py-4 border-b border-border">
+            <div key={c.id} className="py-3 border-b border-border">
 
               {/* Main row */}
               <div className="grid grid-cols-1 lg:grid-cols-[1fr_72px_72px_56px_56px_64px] gap-3 lg:gap-5 items-center">
@@ -241,7 +241,7 @@ export default function CompetitorsPage() {
       </div>
 
       {/* Add competitor — minimal footer */}
-      <div className="mt-8 flex items-center justify-between gap-4 py-4 border-t border-border">
+      <div className="mt-6 flex items-center justify-between gap-4 py-3 border-t border-border">
         <div>
           <p className="text-[12px] font-medium text-zinc-500">Track another competitor</p>
           <p className="text-[11px] text-zinc-400 mt-0.5">

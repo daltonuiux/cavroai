@@ -300,7 +300,7 @@ function RecRow({
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left flex items-start gap-3.5 py-3.5 border-b border-border last:border-b-0 rounded-sm transition-colors -mx-2 px-2 ${
+      className={`w-full text-left flex items-start gap-3.5 py-2.5 border-b border-border last:border-b-0 rounded-sm transition-colors -mx-2 px-2 ${
         isSelected
           ? "bg-foreground/[0.04]"
           : dim
@@ -369,7 +369,7 @@ function ImpactGroup({
   const groupUpside = recs.reduce((s, r) => s + r.scoreDelta, 0)
 
   return (
-    <div className="mb-7">
+    <div className="mb-5">
       <div className="flex items-center gap-2 pb-2 border-b border-border mb-0.5">
         <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${IMPACT_SECTION_DOT[impact]}`} />
         <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
@@ -424,7 +424,7 @@ function Drawer({
     <div className="flex flex-col h-full">
 
       {/* ── Drawer header ─────────────────────────────────────────────────── */}
-      <div className="shrink-0 px-5 pt-5 pb-4 border-b border-border">
+      <div className="shrink-0 px-5 pt-4 pb-3 border-b border-border">
         <div className="flex items-start gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2">
@@ -495,7 +495,7 @@ function Drawer({
       </div>
 
       {/* ── Scrollable content ─────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-5">
+      <div className="flex-1 overflow-y-auto px-5 py-3.5 flex flex-col gap-4">
 
         {/* Why this matters */}
         <div>
@@ -598,7 +598,7 @@ function Drawer({
       </div>
 
       {/* ── Footer actions ────────────────────────────────────────────────── */}
-      <div className="shrink-0 border-t border-border px-5 py-4 flex items-center gap-2.5">
+      <div className="shrink-0 border-t border-border px-5 py-3 flex items-center gap-2.5">
         {!isCompleted ? (
           <button
             onClick={onMarkImplemented}
@@ -694,7 +694,7 @@ export function RecommendationsClient() {
       <div className="flex flex-col w-full">
 
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 pb-6 border-b border-border">
+        <div className="flex items-start justify-between gap-4 pb-4 border-b border-border">
           <div>
             <h1 className="text-[18px] font-bold tracking-[-0.02em] text-foreground">
               Recommendations
@@ -725,7 +725,7 @@ export function RecommendationsClient() {
           ].map((stat, i) => (
             <div
               key={stat.label}
-              className={`flex flex-col gap-1 py-4 px-5 shrink-0 ${i > 0 ? "border-l border-border" : ""}`}
+              className={`flex flex-col gap-1 py-3 px-4 shrink-0 ${i > 0 ? "border-l border-border" : ""}`}
             >
               <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 whitespace-nowrap">
                 {stat.label}
@@ -739,8 +739,8 @@ export function RecommendationsClient() {
 
         {/* Quick wins */}
         {quickWins.length > 0 && (
-          <div className="py-4 border-b border-border">
-            <div className="flex items-baseline gap-2.5 mb-2.5">
+          <div className="py-3 border-b border-border">
+            <div className="flex items-baseline gap-2.5 mb-2">
               <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
                 Quick wins
               </p>
@@ -769,7 +769,7 @@ export function RecommendationsClient() {
         )}
 
         {/* Recommendation queue */}
-        <div className="pt-5">
+        <div className="pt-4">
           <ImpactGroup
             impact="high"
             recs={highRecs}
@@ -818,8 +818,8 @@ export function RecommendationsClient() {
         )}
 
         {/* Momentum */}
-        <div className="mt-8 pt-5 border-t border-border">
-          <div className="flex items-baseline justify-between gap-4 mb-4">
+        <div className="mt-6 pt-4 border-t border-border">
+          <div className="flex items-baseline justify-between gap-4 mb-3">
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
               Since last audit
             </p>

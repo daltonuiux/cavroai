@@ -311,7 +311,7 @@ export function PerceptionClient() {
     <div className="flex flex-col w-full">
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between gap-4 pb-6 border-b border-border">
+      <div className="flex items-start justify-between gap-4 pb-4 border-b border-border">
         <div>
           <h1 className="text-[18px] font-bold tracking-[-0.02em] text-foreground">
             AI Perception
@@ -349,7 +349,7 @@ export function PerceptionClient() {
       </div>
 
       {/* ── Perception statement ─────────────────────────────────────────── */}
-      <div className="py-7 border-b border-border">
+      <div className="py-5 border-b border-border">
         <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3">
           How AI models currently describe your company
         </p>
@@ -370,7 +370,7 @@ export function PerceptionClient() {
         </p>
 
         {/* Signal breakdown */}
-        <div className="flex flex-wrap items-center gap-5 mt-5">
+        <div className="flex flex-wrap items-center gap-5 mt-4">
           {[
             { label: "ICP",            value: perception.icp           },
             { label: "Category",       value: perception.category      },
@@ -395,18 +395,18 @@ export function PerceptionClient() {
       </div>
 
       {/* ── Issues ───────────────────────────────────────────────────────── */}
-      <div className="py-6 border-b border-border">
+      <div className="py-5 border-b border-border">
         <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-4">
           {isSimulated ? "Issues resolved by improved positioning" : "Why this hurts recommendations"}
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-0 divide-y sm:divide-y-0">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0 divide-y sm:divide-y-0">
           {ISSUES.map((issue, i) => {
             const showStatus = isSimulated
             const statusStyle = STATUS_STYLES[issue.status]
             return (
               <div
                 key={issue.label}
-                className={`py-3.5 ${i > 0 ? "sm:border-t-0" : ""} border-b border-border last:border-b-0 sm:last:border-b-0`}
+                className={`py-3 ${i > 0 ? "sm:border-t-0" : ""} border-b border-border last:border-b-0 sm:last:border-b-0`}
               >
                 <div className="flex items-start justify-between gap-3 mb-1">
                   <p className="text-[12px] font-semibold text-foreground tracking-[-0.01em]">
@@ -430,8 +430,8 @@ export function PerceptionClient() {
       </div>
 
       {/* ── Recommendation likelihood ────────────────────────────────────── */}
-      <div className="py-6 border-b border-border">
-        <div className="flex items-baseline justify-between gap-4 mb-5">
+      <div className="py-5 border-b border-border">
+        <div className="flex items-baseline justify-between gap-4 mb-4">
           <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
             Recommendation likelihood
           </p>
@@ -441,7 +441,7 @@ export function PerceptionClient() {
         </div>
 
         {/* Overall stat */}
-        <div className="flex items-end gap-6 mb-6">
+        <div className="flex items-end gap-6 mb-4">
           <div>
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-1">
               Overall
@@ -478,7 +478,7 @@ export function PerceptionClient() {
         </div>
 
         {/* Overall bar */}
-        <div className="h-1.5 rounded-full bg-foreground/[0.06] overflow-hidden mb-7 max-w-[400px]">
+        <div className="h-1.5 rounded-full bg-foreground/[0.06] overflow-hidden mb-5 max-w-[400px]">
           <div
             className={`h-full rounded-full transition-all duration-300 ${
               isSimulated ? "bg-emerald-500" : "bg-foreground/30"
@@ -578,8 +578,8 @@ export function PerceptionClient() {
       </div>
 
       {/* ── AI model behavior ────────────────────────────────────────────── */}
-      <div className="py-6 border-b border-border">
-        <div className="flex items-baseline justify-between gap-4 mb-4">
+      <div className="py-5 border-b border-border">
+        <div className="flex items-baseline justify-between gap-4 mb-3">
           <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
             AI model behavior
           </p>
@@ -601,7 +601,7 @@ export function PerceptionClient() {
             const activeStance   = isSimulated ? m.simulated : m.current
             const inactiveStance = isSimulated ? m.current : m.simulated
             return (
-              <div key={m.model} className="py-3.5">
+              <div key={m.model} className="py-3">
                 {/* Desktop layout */}
                 <div className="hidden md:grid md:grid-cols-[1fr_1fr_80px_80px] gap-4 items-start">
                   <div>
@@ -650,8 +650,8 @@ export function PerceptionClient() {
       </div>
 
       {/* ── Positioning overlap matrix ────────────────────────────────────── */}
-      <div className="py-6 border-b border-border">
-        <div className="flex items-baseline justify-between gap-4 mb-4">
+      <div className="py-5 border-b border-border">
+        <div className="flex items-baseline justify-between gap-4 mb-3">
           <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
             Positioning overlap
           </p>
@@ -737,8 +737,8 @@ export function PerceptionClient() {
       </div>
 
       {/* ── Suggested positioning rewrites ───────────────────────────────── */}
-      <div className="py-6">
-        <div className="flex items-baseline justify-between gap-4 mb-5">
+      <div className="py-5">
+        <div className="flex items-baseline justify-between gap-4 mb-4">
           <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
             Suggested positioning rewrites
           </p>
@@ -751,7 +751,7 @@ export function PerceptionClient() {
           {REWRITES.map((r, i) => (
             <div
               key={r.type}
-              className={`py-5 ${i > 0 ? "border-t border-border" : ""}`}
+              className={`py-4 ${i > 0 ? "border-t border-border" : ""}`}
             >
               <div className="flex items-center gap-2 mb-3">
                 <p className="text-[11px] font-semibold text-foreground/70">{r.type}</p>

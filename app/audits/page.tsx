@@ -71,7 +71,7 @@ export default function AuditsPage() {
     <div className="flex flex-col w-full">
 
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 pb-7 border-b border-border">
+      <div className="flex items-start justify-between gap-4 pb-5 border-b border-border">
         <div>
           <h1 className="text-[18px] font-bold tracking-[-0.02em] text-foreground">Audits</h1>
           <p className="mt-0.5 text-[12px] text-zinc-500">
@@ -87,7 +87,7 @@ export default function AuditsPage() {
       </div>
 
       {/* ── Featured: most recent audit ────────────────────────────────── */}
-      <div className="py-7 border-b border-border">
+      <div className="py-5 border-b border-border">
         <div className="flex items-start gap-6">
 
           {/* Score */}
@@ -145,7 +145,7 @@ export default function AuditsPage() {
 
       {/* ── Audit history ──────────────────────────────────────────────── */}
       {older.length > 0 && (
-        <div className="pt-5">
+        <div className="pt-4">
           <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3">
             Previous audits
           </p>
@@ -156,7 +156,7 @@ export default function AuditsPage() {
                 <Link
                   key={audit.id}
                   href={`/audits/${audit.id}`}
-                  className="flex items-center justify-between gap-6 py-3.5 hover:bg-muted/20 -mx-2 px-2 rounded-sm transition-colors group"
+                  className="flex items-center justify-between gap-6 py-3 hover:bg-muted/20 -mx-2 px-2 rounded-sm transition-colors group"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="text-[13px] font-medium text-foreground/65 group-hover:text-foreground/80 transition-colors">
@@ -183,7 +183,7 @@ export default function AuditsPage() {
       )}
 
       {/* New audit CTA */}
-      <div className="mt-8 rounded-md border border-dashed border-border px-6 py-7 flex items-center justify-between gap-6">
+      <div className="mt-6 rounded-md border border-dashed border-border px-5 py-5 flex items-center justify-between gap-6">
         <div>
           <p className="text-[13px] font-medium text-foreground/60">Run your next audit</p>
           <p className="text-[12px] text-zinc-400 mt-0.5 max-w-xs leading-relaxed">

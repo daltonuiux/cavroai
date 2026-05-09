@@ -510,7 +510,7 @@ export function PromptsClient() {
     <div className="flex flex-col w-full">
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between gap-4 pb-6 border-b border-border">
+      <div className="flex items-start justify-between gap-4 pb-4 border-b border-border">
         <div>
           <h1 className="text-[18px] font-bold tracking-[-0.02em] text-foreground">Prompts</h1>
           <p className="mt-0.5 text-[12px] text-zinc-500">
@@ -537,7 +537,7 @@ export function PromptsClient() {
         ].map((stat, i) => (
           <div
             key={stat.label}
-            className={`flex flex-col gap-1 py-4 px-5 shrink-0 ${i > 0 ? "border-l border-border" : ""}`}
+            className={`flex flex-col gap-1 py-3 px-4 shrink-0 ${i > 0 ? "border-l border-border" : ""}`}
           >
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 whitespace-nowrap">
               {stat.label}
@@ -550,7 +550,7 @@ export function PromptsClient() {
       </div>
 
       {/* ── Intelligence summary ─────────────────────────────────────────── */}
-      <div className="py-3.5 border-b border-border">
+      <div className="py-3 border-b border-border">
         <p className="text-[12px] text-zinc-500 leading-snug">
           You win{" "}
           <span className="font-semibold text-foreground">
@@ -573,7 +573,7 @@ export function PromptsClient() {
       <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-border border-b border-border">
 
         {/* Competitor dominance */}
-        <div className="py-4 sm:pr-6">
+        <div className="py-3 sm:pr-5">
           <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3">
             Competitor prompt dominance
           </p>
@@ -605,7 +605,7 @@ export function PromptsClient() {
         </div>
 
         {/* Momentum */}
-        <div className="py-4 sm:pl-6">
+        <div className="py-3 sm:pl-5">
           <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3">
             Prompt momentum
           </p>
@@ -693,7 +693,7 @@ export function PromptsClient() {
                   isExpanded ? "bg-muted/20" : ""
                 }`}
               >
-                <div className="grid grid-cols-1 lg:grid-cols-[1fr_44px_108px_88px_80px_148px_40px] gap-3 py-3.5 px-0 items-center">
+                <div className="grid grid-cols-1 lg:grid-cols-[1fr_44px_108px_88px_80px_148px_40px] gap-3 py-2.5 px-0 items-center">
 
                   {/* Prompt text */}
                   <div>
@@ -771,7 +771,7 @@ export function PromptsClient() {
       </div>
 
       {/* ── Add CTA ──────────────────────────────────────────────────────── */}
-      <div className="mt-8 flex items-center justify-between gap-4 py-4 border-t border-border">
+      <div className="mt-6 flex items-center justify-between gap-4 py-3 border-t border-border">
         <div>
           <p className="text-[12px] font-medium text-zinc-500">Track another buyer prompt</p>
           <p className="text-[11px] text-zinc-400 mt-0.5">

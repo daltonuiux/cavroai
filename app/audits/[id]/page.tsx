@@ -483,7 +483,7 @@ export default async function AuditResultPage({ params }: Props) {
             </span>
           </div>
 
-          <p className="text-[14px] font-medium leading-relaxed text-foreground/70 max-w-[62ch]">
+          <p className="text-[14px] font-medium leading-relaxed text-zinc-500 max-w-[62ch]">
             {AUDIT.summary}
           </p>
         </div>
@@ -520,7 +520,7 @@ export default async function AuditResultPage({ params }: Props) {
         ].map((stat, i) => (
           <div
             key={stat.label}
-            className={`flex flex-col gap-0.5 py-4 px-5 ${i > 0 ? "border-l border-border" : ""}`}
+            className={`flex flex-col gap-0.5 py-3 px-4 ${i > 0 ? "border-l border-border" : ""}`}
           >
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 whitespace-nowrap">
               {stat.label}
@@ -537,7 +537,7 @@ export default async function AuditResultPage({ params }: Props) {
           AI PERCEPTION PANEL — full width
       ════════════════════════════════════════════════════════════════════ */}
       <div className="border-b border-border">
-        <div className="flex items-center gap-3 py-3.5 border-b border-border">
+        <div className="flex items-center gap-3 py-3 border-b border-border">
           <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
             AI perception
           </p>
@@ -550,7 +550,7 @@ export default async function AuditResultPage({ params }: Props) {
         <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-border">
 
           {/* Current perception */}
-          <div className="py-5 pr-0 md:pr-7">
+          <div className="py-4 pr-0 md:pr-7">
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3">
               Current
             </p>
@@ -560,7 +560,7 @@ export default async function AuditResultPage({ params }: Props) {
           </div>
 
           {/* Problem */}
-          <div className="py-5 px-0 md:px-7">
+          <div className="py-4 px-0 md:px-7">
             <p className="text-[9px] font-bold uppercase tracking-widest text-rose-500/70 mb-3">
               Why this hurts recommendations
             </p>
@@ -570,7 +570,7 @@ export default async function AuditResultPage({ params }: Props) {
           </div>
 
           {/* Suggested */}
-          <div className="py-5 pl-0 md:pl-7">
+          <div className="py-4 pl-0 md:pl-7">
             <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-600/70 dark:text-emerald-400/70 mb-3">
               Suggested positioning
             </p>
@@ -591,8 +591,8 @@ export default async function AuditResultPage({ params }: Props) {
         <div className="lg:pr-8 xl:pr-10 border-b border-border lg:border-b-0 lg:border-r flex flex-col">
 
           {/* ── PROMPT PERFORMANCE TABLE ─────────────────────────────────── */}
-          <div className="py-7 border-b border-border">
-            <div className="flex items-baseline justify-between mb-4">
+          <div className="py-5 border-b border-border">
+            <div className="flex items-baseline justify-between mb-3">
               <div>
                 <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
                   Prompt performance
@@ -668,7 +668,7 @@ export default async function AuditResultPage({ params }: Props) {
 
                     {/* AI coverage */}
                     <td className="py-3 px-3 text-right hidden md:table-cell">
-                      <span className="text-[12px] font-semibold tabular-nums text-foreground/65">
+                      <span className="text-[12px] font-semibold tabular-nums text-zinc-500">
                         {p.coverage}
                       </span>
                       <span className="text-[12px] text-zinc-400">/{AUDIT.aiModels}</span>
@@ -703,8 +703,8 @@ export default async function AuditResultPage({ params }: Props) {
           </div>
 
           {/* ── PRIORITY FIXES ───────────────────────────────────────────── */}
-          <div className="py-7">
-            <div className="flex items-baseline justify-between mb-4">
+          <div className="py-5">
+            <div className="flex items-baseline justify-between mb-3">
               <div>
                 <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
                   Priority fixes
@@ -725,7 +725,7 @@ export default async function AuditResultPage({ params }: Props) {
               {AUDIT.fixes.map((fix, i) => (
                 <div
                   key={i}
-                  className={`flex items-start gap-4 py-4 ${fix.status === "done" ? "opacity-45" : ""}`}
+                  className={`flex items-start gap-4 py-3 ${fix.status === "done" ? "opacity-45" : ""}`}
                 >
                   {/* Index */}
                   <span className="shrink-0 text-[11px] font-bold text-zinc-300 tabular-nums w-4 mt-0.5">
@@ -771,11 +771,11 @@ export default async function AuditResultPage({ params }: Props) {
         </div>
 
         {/* ── Right rail ────────────────────────────────────────────────── */}
-        <div className="lg:pl-7 xl:pl-8 py-7 flex flex-col gap-8">
+        <div className="lg:pl-7 xl:pl-8 py-5 flex flex-col gap-6">
 
           {/* ── COMPETITOR COMPARISON ──────────────────────────────────── */}
           <section>
-            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3.5">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3">
               Competitor comparison
             </p>
 
@@ -831,7 +831,7 @@ export default async function AuditResultPage({ params }: Props) {
 
           {/* ── AI MODEL OBSERVATIONS ──────────────────────────────────── */}
           <section>
-            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3.5">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3">
               AI model behaviour
             </p>
             <div className="divide-y divide-border">
@@ -879,7 +879,7 @@ export default async function AuditResultPage({ params }: Props) {
                 )
               })}
             </div>
-            <div className="flex justify-between mb-5">
+            <div className="flex justify-between mb-4">
               {AUDIT.momentum.scoreHistory.map((h) => (
                 <div key={h.date} className="text-center">
                   <p className="text-[9px] font-bold text-zinc-400 tabular-nums">{h.score}</p>
@@ -919,7 +919,7 @@ export default async function AuditResultPage({ params }: Props) {
       </div>
 
       {/* ── Footer ─────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-2.5 py-6 border-t border-border mt-2">
+      <div className="flex items-center gap-2.5 py-4 border-t border-border mt-2">
         <Link
           href="/recommendations"
           className="btn-cavro-primary rounded-md px-4 text-[12px] font-semibold text-primary-foreground"

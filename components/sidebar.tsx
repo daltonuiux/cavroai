@@ -53,7 +53,7 @@ function NavItem({
     <Link
       href={href}
       className={cn(
-        "group flex items-center gap-2.5 rounded-md px-3 py-[7px] text-[13px] leading-none transition-colors duration-75",
+        "group flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[13px] leading-none transition-colors duration-75",
         active
           ? "font-semibold text-foreground"
           : "font-medium text-zinc-500 hover:text-foreground/90",
@@ -96,7 +96,7 @@ export function Sidebar() {
       </Link>
 
       {/* Main nav */}
-      <nav className="flex flex-1 flex-col overflow-y-auto px-2 py-3 gap-4">
+      <nav className="flex flex-1 flex-col overflow-y-auto px-2 py-3 gap-3">
         {navSections.map(({ group, items }) => (
           <div key={group ?? "__main"}>
             {group && (
