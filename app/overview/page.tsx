@@ -19,25 +19,34 @@ const MOCK_COMPETITORS_TRACKED = 4
 
 const MOCK_RISKS = [
   {
-    id:       "r-1",
-    title:    "Differentiation is vague",
-    detail:   "AI models describe you in generic terms rather than your specific advantages. Competitors win recommendation slots because they have clearer positioning signals.",
-    severity: "high" as const,
-    action:   "Rewrite homepage headline",
+    id:         "r-1",
+    title:      "Differentiation is vague",
+    detail:     "AI models describe you in generic terms rather than your specific advantages. Competitors win recommendation slots because they have clearer positioning signals.",
+    severity:   "high"      as const,
+    action:     "Rewrite homepage headline",
+    scoreDelta: -8,
+    aiModels:   ["ChatGPT", "Claude"],
+    trend:      "worsening" as const,
   },
   {
-    id:       "r-2",
-    title:    "No social proof AI can cite",
-    detail:   "Case studies are not indexed. Competitors are cited 3× more in trust-driven prompts.",
-    severity: "high" as const,
-    action:   "Publish /customers page",
+    id:         "r-2",
+    title:      "No social proof AI can cite",
+    detail:     "Case studies are not indexed. Competitors are cited 3× more in trust-driven prompts.",
+    severity:   "high"      as const,
+    action:     "Publish /customers page",
+    scoreDelta: -7,
+    aiModels:   ["Perplexity", "Gemini"],
+    trend:      "worsening" as const,
   },
   {
-    id:       "r-3",
-    title:    "Pricing invisible to AI",
-    detail:   "Buyers asking about cost get no answer, then a competitor recommendation.",
-    severity: "medium" as const,
-    action:   "Add pricing FAQ",
+    id:         "r-3",
+    title:      "Pricing invisible to AI",
+    detail:     "Buyers asking about cost get no answer, then a competitor recommendation.",
+    severity:   "medium"    as const,
+    action:     "Add pricing FAQ",
+    scoreDelta: -4,
+    aiModels:   ["ChatGPT", "Gemini"],
+    trend:      "stable"    as const,
   },
 ]
 
@@ -49,10 +58,42 @@ const MOCK_QUICK_WINS = [
 ]
 
 const MOCK_PROMPTS = [
-  { id: "p-1", text: "Best knowledge base tool for remote teams",      position: 3, visibility: "medium" as const, score: 58 },
-  { id: "p-2", text: "Notion alternatives that are more affordable",   position: 1, visibility: "high"   as const, score: 83 },
-  { id: "p-3", text: "No-code database tool with views and automations", position: 5, visibility: "low"  as const, score: 32 },
-  { id: "p-4", text: "Best tool for internal team wikis",              position: 3, visibility: "medium" as const, score: 55 },
+  {
+    id:         "p-1",
+    text:       "Best knowledge base tool for remote teams",
+    position:   3,
+    visibility: "medium" as const,
+    score:      58,
+    coverage:   4,
+    trend:      "stable" as const,
+  },
+  {
+    id:         "p-2",
+    text:       "Notion alternatives that are more affordable",
+    position:   1,
+    visibility: "high"   as const,
+    score:      83,
+    coverage:   6,
+    trend:      "up"     as const,
+  },
+  {
+    id:         "p-3",
+    text:       "No-code database tool with views and automations",
+    position:   5,
+    visibility: "low"    as const,
+    score:      32,
+    coverage:   1,
+    trend:      "down"   as const,
+  },
+  {
+    id:         "p-4",
+    text:       "Best tool for internal team wikis",
+    position:   3,
+    visibility: "medium" as const,
+    score:      55,
+    coverage:   3,
+    trend:      "stable" as const,
+  },
 ]
 
 const MOCK_RECENT_AUDITS = [
@@ -61,12 +102,47 @@ const MOCK_RECENT_AUDITS = [
   { id: "audit-001", date: "Apr 8, 2026",  score: 49, label: "Baseline audit"       },
 ]
 
+// AI model interpretations — how each model currently reads this brand
+const AI_MODEL_SIGNALS = [
+  {
+    model:   "ChatGPT",
+    favors:  "Authority & social proof",
+    stance:  "neutral"   as const,
+    note:    "Mentions you as an alternative, not a primary rec",
+  },
+  {
+    model:   "Claude",
+    favors:  "Technical specificity",
+    stance:  "favorable" as const,
+    note:    "Surfaces you for engineering-team prompts",
+  },
+  {
+    model:   "Perplexity",
+    favors:  "Indexed citations & proof",
+    stance:  "weak"      as const,
+    note:    "Insufficient trust signals to cite you confidently",
+  },
+  {
+    model:   "Gemini",
+    favors:  "Pricing clarity & structure",
+    stance:  "neutral"   as const,
+    note:    "Surfaces you occasionally — pricing helps",
+  },
+]
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+type Severity    = "high" | "medium" | "low"
+type Visibility  = "high" | "medium" | "low" | "none"
+type RiskTrend   = "worsening" | "stable" | "improving"
+type PromptTrend = "up" | "down" | "stable"
+type ModelStance = "favorable" | "neutral" | "weak"
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-type Severity   = "high" | "medium" | "low"
-type Visibility = "high" | "medium" | "low" | "none"
 
 function scoreColour(score: number) {
   if (score >= 75) return { text: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10" }
@@ -80,11 +156,15 @@ function scoreLabel(score: number) {
   return "Weak"
 }
 
+// ---------------------------------------------------------------------------
+// Style maps
+// ---------------------------------------------------------------------------
+
 // Left border accent per severity
 const SEVERITY_BAR: Record<Severity, string> = {
-  high:   "border-l-2 border-rose-500",
-  medium: "border-l-2 border-amber-400",
-  low:    "border-l-2 border-foreground/10",
+  high:   "border-l-[3px] border-rose-500",
+  medium: "border-l-[3px] border-amber-400",
+  low:    "border-l-[3px] border-foreground/10",
 }
 
 const SEVERITY_BADGE: Record<Severity, string> = {
@@ -107,6 +187,42 @@ const VISIBILITY_LABEL: Record<Visibility, string> = {
   none:   "Not found",
 }
 
+const RISK_TREND_ICON: Record<RiskTrend, string> = {
+  worsening: "↓",
+  stable:    "→",
+  improving: "↑",
+}
+
+const RISK_TREND_COLOUR: Record<RiskTrend, string> = {
+  worsening: "text-rose-600 dark:text-rose-400",
+  stable:    "text-zinc-400",
+  improving: "text-emerald-600 dark:text-emerald-400",
+}
+
+const PROMPT_TREND: Record<PromptTrend, { icon: string; colour: string }> = {
+  up:     { icon: "↑", colour: "text-emerald-600 dark:text-emerald-400" },
+  down:   { icon: "↓", colour: "text-rose-600 dark:text-rose-400" },
+  stable: { icon: "→", colour: "text-zinc-400" },
+}
+
+const MODEL_STANCE_COLOUR: Record<ModelStance, string> = {
+  favorable: "text-emerald-600 dark:text-emerald-400",
+  neutral:   "text-zinc-400",
+  weak:      "text-rose-600 dark:text-rose-400",
+}
+
+const MODEL_STANCE_LABEL: Record<ModelStance, string> = {
+  favorable: "Favorable",
+  neutral:   "Neutral",
+  weak:      "Weak",
+}
+
+const MODEL_STANCE_DOT: Record<ModelStance, string> = {
+  favorable: "bg-emerald-500",
+  neutral:   "bg-zinc-300 dark:bg-zinc-600",
+  weak:      "bg-rose-500",
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -116,6 +232,7 @@ export default function OverviewPage() {
   const highRisks = MOCK_RISKS.filter((r) => r.severity === "high").length
   const midRisks  = MOCK_RISKS.filter((r) => r.severity === "medium").length
   const winning   = MOCK_PROMPTS.filter((p) => p.position === 1).length
+  const totalImpact = MOCK_RISKS.reduce((s, r) => s + r.scoreDelta, 0)
 
   return (
     <div className="flex flex-col w-full">
@@ -144,6 +261,10 @@ export default function OverviewPage() {
               <span className="text-[11px] text-zinc-400">AI Recommendation Score</span>
               <span className="text-foreground/15">·</span>
               <span className="text-[11px] text-zinc-400">{MOCK_AUDIT.date}</span>
+              <span className="text-foreground/15">·</span>
+              <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 tabular-nums">
+                {totalImpact} pts at risk
+              </span>
             </div>
             <p className="text-[13px] leading-relaxed text-zinc-500 max-w-[58ch]">
               {MOCK_AUDIT.summary}
@@ -159,7 +280,7 @@ export default function OverviewPage() {
           >
             Run new audit
           </Link>
-          <Link href="/audits" className="text-[12px] text-zinc-400 hover:text-foreground transition-colors">
+          <Link href="/audits" className="text-[12px] text-zinc-400 hover:text-foreground transition-colors duration-150">
             History →
           </Link>
         </div>
@@ -172,6 +293,7 @@ export default function OverviewPage() {
           { label: "Competitors",        value: String(MOCK_COMPETITORS_TRACKED), colour: ""                                    },
           { label: "High-priority gaps", value: String(highRisks),                colour: "text-rose-600 dark:text-rose-400"    },
           { label: "AI assistants",      value: "7",                              colour: ""                                    },
+          { label: "Score change",       value: "+12",                            colour: "text-emerald-600 dark:text-emerald-400" },
         ].map((stat, i) => (
           <div
             key={stat.label}
@@ -214,7 +336,7 @@ export default function OverviewPage() {
                   </>
                 )}
                 <span className="text-foreground/15 ml-1">·</span>
-                <Link href="/recommendations" className="text-[11px] text-zinc-400 hover:text-foreground transition-colors">
+                <Link href="/recommendations" className="text-[11px] text-zinc-400 hover:text-foreground transition-colors duration-150">
                   All →
                 </Link>
               </div>
@@ -224,28 +346,46 @@ export default function OverviewPage() {
               {MOCK_RISKS.map((risk, i) => (
                 <div
                   key={risk.id}
-                  className={`flex items-start gap-3.5 pl-3.5 py-3 ${SEVERITY_BAR[risk.severity]} ${i > 0 ? "mt-1" : ""}`}
+                  className={`pl-4 py-3.5 ${SEVERITY_BAR[risk.severity]} ${i > 0 ? "mt-1.5" : ""}`}
                 >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-3 mb-1">
-                      <p className={`text-[13px] font-semibold leading-snug ${
-                        risk.severity === "high" ? "text-foreground" : "text-foreground/75"
-                      }`}>
-                        {risk.title}
-                      </p>
-                      <span className={`shrink-0 rounded px-1.5 py-px text-[9px] font-bold uppercase tracking-wide ${SEVERITY_BADGE[risk.severity]}`}>
-                        {risk.severity}
-                      </span>
-                    </div>
-                    <p className={`text-[11px] leading-snug mb-1.5 ${
-                      risk.severity === "high" ? "text-zinc-500" : "text-zinc-400"
+                  {/* Title + severity badge */}
+                  <div className="flex items-start justify-between gap-3 mb-1.5">
+                    <p className={`text-[13px] font-semibold leading-snug tracking-[-0.01em] ${
+                      risk.severity === "high" ? "text-foreground" : "text-foreground/80"
                     }`}>
-                      {risk.detail}
+                      {risk.title}
                     </p>
-                    <p className="text-[11px] font-medium text-zinc-400">
-                      Fix: <span className="font-semibold text-zinc-600 dark:text-zinc-300">{risk.action}</span>
-                    </p>
+                    <span className={`shrink-0 rounded px-1.5 py-px text-[9px] font-bold uppercase tracking-wide ${SEVERITY_BADGE[risk.severity]}`}>
+                      {risk.severity}
+                    </span>
                   </div>
+
+                  {/* Detail */}
+                  <p className={`text-[11px] leading-snug mb-2.5 ${
+                    risk.severity === "high" ? "text-zinc-500" : "text-zinc-400"
+                  }`}>
+                    {risk.detail}
+                  </p>
+
+                  {/* Intelligence metadata strip */}
+                  <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mb-2">
+                    <span className="flex items-center gap-1 text-[10px] font-bold tabular-nums text-rose-600 dark:text-rose-400">
+                      {risk.scoreDelta} pts
+                    </span>
+                    <span className="text-foreground/15">·</span>
+                    <span className={`flex items-center gap-0.5 text-[10px] font-semibold ${RISK_TREND_COLOUR[risk.trend]}`}>
+                      {RISK_TREND_ICON[risk.trend]}&thinsp;{risk.trend}
+                    </span>
+                    <span className="text-foreground/15">·</span>
+                    <span className="text-[10px] text-zinc-400">
+                      {risk.aiModels.join(", ")}
+                    </span>
+                  </div>
+
+                  {/* Fix action */}
+                  <p className="text-[11px] font-medium text-zinc-400">
+                    Fix: <span className="font-semibold text-zinc-600 dark:text-zinc-300">{risk.action}</span>
+                  </p>
                 </div>
               ))}
             </div>
@@ -257,7 +397,7 @@ export default function OverviewPage() {
               <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
                 Quick wins
               </p>
-              <Link href="/recommendations" className="text-[11px] text-zinc-400 hover:text-foreground transition-colors">
+              <Link href="/recommendations" className="text-[11px] text-zinc-400 hover:text-foreground transition-colors duration-150">
                 All →
               </Link>
             </div>
@@ -277,7 +417,7 @@ export default function OverviewPage() {
 
           {/* ── Prompt readiness ── */}
           <section>
-            <div className="flex items-baseline justify-between mb-3.5">
+            <div className="flex items-baseline justify-between mb-3">
               <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
                 Prompt readiness
               </p>
@@ -287,7 +427,7 @@ export default function OverviewPage() {
                   /{MOCK_PROMPTS.length} winning
                 </span>
                 <span className="text-foreground/15">·</span>
-                <Link href="/prompts" className="text-[11px] text-zinc-400 hover:text-foreground transition-colors">
+                <Link href="/prompts" className="text-[11px] text-zinc-400 hover:text-foreground transition-colors duration-150">
                   All prompts →
                 </Link>
               </div>
@@ -295,39 +435,72 @@ export default function OverviewPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="text-left pb-2.5 pr-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">Prompt</th>
-                  <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">Position</th>
-                  <th className="text-right pb-2.5 px-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400 hidden sm:table-cell">Visibility</th>
-                  <th className="text-right pb-2.5 pl-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">Score</th>
+                  <th className="text-left pb-2 pr-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">Prompt</th>
+                  <th className="text-right pb-2 px-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">Pos.</th>
+                  <th className="text-right pb-2 px-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400 hidden sm:table-cell">Visibility</th>
+                  <th className="text-right pb-2 pl-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">Score</th>
                 </tr>
               </thead>
               <tbody>
                 {MOCK_PROMPTS.map((p) => {
                   const vc = scoreColour(p.score)
-                  const barColor =
+                  const isWinning = p.position === 1
+                  const isWeak    = p.score < 40
+                  const barColor  =
                     p.score >= 70 ? "bg-emerald-500" :
-                    p.score >= 45 ? "bg-amber-400" :
-                    "bg-rose-500"
+                    p.score >= 45 ? "bg-amber-400"   : "bg-rose-500"
+                  const promptTextClass = isWinning
+                    ? "text-foreground font-medium"
+                    : isWeak
+                    ? "text-zinc-400"
+                    : "text-zinc-500"
+
                   return (
-                    <tr key={p.id} className="border-b border-border hover:bg-zinc-100/60 dark:hover:bg-zinc-900/40 transition-colors duration-150">
-                      <td className="py-2 pr-4">
-                        <p className="text-[12px] text-zinc-500 truncate max-w-[240px] xl:max-w-none">
+                    <tr
+                      key={p.id}
+                      className={`border-b border-border hover:bg-zinc-100/60 dark:hover:bg-zinc-900/40 transition-colors duration-150 ${
+                        isWinning ? "bg-emerald-500/[0.02]" : ""
+                      }`}
+                    >
+                      {/* Prompt text + model coverage */}
+                      <td className="py-2.5 pr-4">
+                        <p className={`text-[12px] leading-snug truncate max-w-[240px] xl:max-w-none ${promptTextClass}`}>
                           &ldquo;{p.text}&rdquo;
                         </p>
+                        <p className="text-[10px] text-zinc-400 mt-0.5 tabular-nums">
+                          {p.coverage}/7 models
+                        </p>
                       </td>
-                      <td className="py-2 px-4 text-right">
-                        <span className={`text-[12px] font-bold tabular-nums ${vc.text}`}>
-                          #{p.position}
-                        </span>
+
+                      {/* Position + trend */}
+                      <td className="py-2.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {isWinning ? (
+                            <span className="rounded bg-emerald-500/[0.09] px-1.5 py-px text-[10px] font-bold tabular-nums text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-500/20">
+                              #1
+                            </span>
+                          ) : (
+                            <span className={`text-[12px] font-bold tabular-nums ${vc.text}`}>
+                              #{p.position}
+                            </span>
+                          )}
+                          <span className={`text-[11px] font-bold leading-none ${PROMPT_TREND[p.trend].colour}`}>
+                            {PROMPT_TREND[p.trend].icon}
+                          </span>
+                        </div>
                       </td>
+
+                      {/* Visibility badge */}
                       <td className="py-2.5 px-4 text-right hidden sm:table-cell">
                         <span className={`rounded px-1.5 py-px text-[9px] font-bold uppercase tracking-wide ${VISIBILITY_BADGE[p.visibility]}`}>
                           {VISIBILITY_LABEL[p.visibility]}
                         </span>
                       </td>
-                      <td className="py-2 pl-4">
+
+                      {/* Score + bar */}
+                      <td className="py-2.5 pl-4">
                         <div className="flex items-center gap-2 justify-end">
-                          <div className="w-12 h-1.5 rounded-full bg-foreground/[0.07] overflow-hidden">
+                          <div className="w-14 h-1.5 rounded-full bg-foreground/[0.07] overflow-hidden">
                             <div className={`h-full rounded-full ${barColor}`} style={{ width: `${p.score}%` }} />
                           </div>
                           <span className={`text-[11px] font-bold tabular-nums w-6 text-right ${vc.text}`}>
@@ -367,7 +540,7 @@ export default function OverviewPage() {
                       </p>
                       <p className="text-[10px] text-zinc-400 mt-0.5">{audit.date}</p>
                     </div>
-                    <span className={`shrink-0 text-[18px] font-bold tabular-nums ml-4 ${i === 0 ? ac.text : "text-zinc-400"}`}>
+                    <span className={`shrink-0 text-[18px] font-bold tabular-nums tracking-tight ml-4 ${i === 0 ? ac.text : "text-zinc-400"}`}>
                       {audit.score}
                     </span>
                   </Link>
@@ -387,36 +560,74 @@ export default function OverviewPage() {
               </span>
             </div>
             <div className="flex items-end gap-1.5 h-9">
-              {MOCK_RECENT_AUDITS.slice().reverse().map((a) => {
-                const h   = Math.max((a.score / 100) * 32, 4)
+              {MOCK_RECENT_AUDITS.slice().reverse().map((a, i, arr) => {
+                const h   = Math.max((a.score / 100) * 36, 4)
                 const col = a.score >= 75
                   ? "bg-emerald-400"
                   : a.score >= 50
                   ? "bg-amber-400"
                   : "bg-rose-400"
+                const isLatest = i === arr.length - 1
                 return (
                   <div
                     key={a.id}
                     title={`${a.score} — ${a.date}`}
-                    className={`flex-1 rounded-sm opacity-60 ${col}`}
+                    className={`flex-1 rounded-sm ${col} ${isLatest ? "opacity-100" : "opacity-40"}`}
                     style={{ height: `${h}px` }}
                   />
                 )
               })}
             </div>
             <div className="flex justify-between mt-1.5">
-              {MOCK_RECENT_AUDITS.slice().reverse().map((a) => (
-                <p key={a.id} className="text-[9px] text-zinc-300 tabular-nums">{a.score}</p>
+              {MOCK_RECENT_AUDITS.slice().reverse().map((a, i, arr) => (
+                <p
+                  key={a.id}
+                  className={`text-[9px] tabular-nums ${i === arr.length - 1 ? "text-zinc-500 font-semibold" : "text-zinc-300 dark:text-zinc-600"}`}
+                >
+                  {a.score}
+                </p>
+              ))}
+            </div>
+          </section>
+
+          {/* AI model signals */}
+          <section>
+            <div className="flex items-baseline justify-between mb-3">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
+                AI model signals
+              </p>
+              <Link href="/perception" className="text-[10px] text-zinc-400 hover:text-foreground transition-colors duration-150">
+                Details →
+              </Link>
+            </div>
+            <div className="divide-y divide-border">
+              {AI_MODEL_SIGNALS.map((m) => (
+                <div key={m.model} className="flex items-start justify-between gap-3 py-2.5">
+                  <div className="flex items-start gap-2 min-w-0">
+                    <div className={`mt-[5px] w-1.5 h-1.5 rounded-full shrink-0 ${MODEL_STANCE_DOT[m.stance]}`} />
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold text-foreground leading-none">
+                        {m.model}
+                      </p>
+                      <p className="text-[10px] text-zinc-400 mt-0.5 leading-snug">
+                        {m.favors}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`text-[10px] font-semibold shrink-0 tabular-nums ${MODEL_STANCE_COLOUR[m.stance]}`}>
+                    {MODEL_STANCE_LABEL[m.stance]}
+                  </span>
+                </div>
               ))}
             </div>
           </section>
 
           {/* Next audit */}
           <section>
-            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-2.5">
               Next scheduled audit
             </p>
-            <p className="text-[12px] text-foreground/60 font-medium">May 20, 2026</p>
+            <p className="text-[12px] font-semibold text-foreground/80">May 20, 2026</p>
             <p className="text-[11px] text-zinc-400 mt-0.5">Bi-weekly · Full audit</p>
           </section>
 
