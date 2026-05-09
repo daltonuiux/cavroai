@@ -22,7 +22,8 @@
       "Bash(grep -v \"^$\")",
       "Bash(npx next *)",
       "Bash(xargs perl -i -pe ' *)",
-      "Bash(xargs perl -i -pe 's/text-foreground\\\\/55\\(?=[^0-9]\\)/text-zinc-500/g')"
+      "Bash(xargs perl -i -pe 's/text-foreground\\\\/55\\(?=[^0-9]\\)/text-zinc-500/g')",
+      "Bash(npx eslint *)"
     ]
   }
 }
