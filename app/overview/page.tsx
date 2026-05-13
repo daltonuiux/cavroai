@@ -117,7 +117,7 @@ export default function OverviewPage() {
     <div className="flex flex-col w-full gap-4">
 
       {/* ── 2 × 2 panel grid ──────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
         {/* ── Panel 1: Score + Summary ──────────────────────────────────── */}
         <div className="rounded-lg border border-border p-5 flex flex-col gap-4 min-h-[220px]">
@@ -186,12 +186,14 @@ export default function OverviewPage() {
             </span>
           </div>
 
-          {/* SVG line chart */}
-          <div className="flex-1">
+          {/* SVG line chart — flex-1 so the chart fills the card's extra height */}
+          <div className="flex-1 min-h-0 flex flex-col gap-2">
+            <div className="flex-1 min-h-[60px]">
             <svg
               viewBox={`0 0 ${CW} ${CH}`}
               width="100%"
-              height={CH}
+              height="100%"
+              preserveAspectRatio="xMidYMid meet"
               className="overflow-visible"
               aria-hidden="true"
             >
@@ -259,9 +261,10 @@ export default function OverviewPage() {
                 {SCORE_HISTORY[SCORE_HISTORY.length - 1].score}
               </text>
             </svg>
+            </div>{/* /SVG wrapper */}
 
             {/* X-axis */}
-            <div className="flex justify-between mt-2 px-1">
+            <div className="flex justify-between px-1">
               {SCORE_HISTORY.map((d, i) => (
                 <div key={d.label} className="flex flex-col gap-0.5">
                   <span
