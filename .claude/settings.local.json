@@ -23,7 +23,9 @@
       "Bash(npx next *)",
       "Bash(xargs perl -i -pe ' *)",
       "Bash(xargs perl -i -pe 's/text-foreground\\\\/55\\(?=[^0-9]\\)/text-zinc-500/g')",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Bash(echo \"TSC exit: $?\")",
+      "Bash(echo \"ESLint exit: $?\")"
     ]
   }
 }

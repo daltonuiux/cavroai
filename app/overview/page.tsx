@@ -27,6 +27,42 @@ const QUICK_WINS = [
 ]
 
 // ---------------------------------------------------------------------------
+// Chart geometry — all constants in one place
+// ---------------------------------------------------------------------------
+
+// SVG viewport
+const CW  = 280   // viewBox width
+const CH  = 120   // viewBox height — tall enough for generous inner padding
+const PAD = 22    // inner padding on all sides
+
+// Data domain — extend beyond actual min/max so the line breathes
+const D_MIN = Math.min(...SCORE_HISTORY.map((d) => d.score)) - 14  // 35
+const D_MAX = Math.max(...SCORE_HISTORY.map((d) => d.score)) + 14  // 75
+const D_RNG = D_MAX - D_MIN                                          // 40
+
+// Horizontal grid lines drawn at these score values
+const GRID_VALUES = [40, 50, 60, 70] as const
+
+// Map a score → SVG y coordinate
+function scoreToY(val: number): number {
+  return CH - PAD - ((val - D_MIN) / D_RNG) * (CH - PAD * 2)
+}
+
+// Map a series index → SVG x coordinate
+function indexToX(i: number): number {
+  return PAD + (i / (SCORE_HISTORY.length - 1)) * (CW - PAD * 2)
+}
+
+// Pre-build polyline points string
+const TREND_POINTS = SCORE_HISTORY
+  .map((d, i) => `${indexToX(i).toFixed(1)},${scoreToY(d.score).toFixed(1)}`)
+  .join(" ")
+
+// Last point — for end-dot and score label
+const LX = indexToX(SCORE_HISTORY.length - 1)
+const LY = scoreToY(SCORE_HISTORY[SCORE_HISTORY.length - 1].score)
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -46,26 +82,6 @@ function scoreLabel(score: number) {
   if (score >= 75) return "Strong"
   if (score >= 50) return "Developing"
   return "Weak"
-}
-
-// Map score history to SVG polyline coordinates
-function buildTrendPoints(
-  history: { score: number }[],
-  w: number,
-  h: number,
-  pad = 6,
-): string {
-  const scores = history.map((d) => d.score)
-  const min    = Math.min(...scores) - 8
-  const max    = Math.max(...scores) + 8
-  const range  = max - min || 1
-  return history
-    .map((d, i) => {
-      const x = pad + (i / (history.length - 1)) * (w - pad * 2)
-      const y = h - pad - ((d.score - min) / range) * (h - pad * 2)
-      return `${x.toFixed(1)},${y.toFixed(1)}`
-    })
-    .join(" ")
 }
 
 // ---------------------------------------------------------------------------
@@ -98,21 +114,6 @@ export default function OverviewPage() {
   const scoreText  = scoreColour(MOCK_SCORE)
   const scoreTitle = scoreLabel(MOCK_SCORE)
 
-  // Pre-compute SVG chart geometry
-  const CW = 280
-  const CH = 88
-  const trendPoints = buildTrendPoints(SCORE_HISTORY, CW, CH)
-  const pts         = trendPoints.split(" ")
-  const [lx, ly]    = pts[pts.length - 1].split(",").map(Number)
-
-  // Grid line y-coords for the chart thresholds
-  const chartMin   = Math.min(...SCORE_HISTORY.map((d) => d.score)) - 8
-  const chartMax   = Math.max(...SCORE_HISTORY.map((d) => d.score)) + 8
-  const chartRange = chartMax - chartMin || 1
-  function threshY(val: number) {
-    return CH - 6 - ((val - chartMin) / chartRange) * (CH - 12)
-  }
-
   return (
     <div className="flex flex-col w-full gap-4">
 
@@ -120,7 +121,7 @@ export default function OverviewPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
         {/* ── Panel 1: Score + Summary ──────────────────────────────────── */}
-        <div className="rounded-lg border border-border p-5 flex flex-col gap-4 min-h-[220px]">
+        <div className="rounded-lg border border-border p-5 flex flex-col gap-4">
 
           {/* Score */}
           <div>
@@ -156,21 +157,12 @@ export default function OverviewPage() {
             </p>
           </div>
 
-          {/* CTA */}
-          <div className="flex items-center gap-3 mt-auto pt-1">
-            <Link
-              href="/audits/new"
-              className="btn-cavro-primary rounded-md px-4 py-2 text-[12px] font-semibold text-primary-foreground"
-            >
-              Run new audit
+          {/* Subtle history link */}
+          <p className="text-[11px] text-zinc-400">
+            <Link href="/audits" className="hover:text-foreground transition-colors duration-150">
+              View audit history →
             </Link>
-            <Link
-              href="/audits"
-              className="text-[12px] text-zinc-400 hover:text-foreground transition-colors duration-150"
-            >
-              View history →
-            </Link>
-          </div>
+          </p>
         </div>
 
         {/* ── Panel 2: Score Trend ──────────────────────────────────────── */}
@@ -186,87 +178,107 @@ export default function OverviewPage() {
             </span>
           </div>
 
-          {/* SVG line chart — flex-1 so the chart fills the card's extra height */}
+          {/* Chart area — flex-1 absorbs the extra card height */}
           <div className="flex-1 min-h-0 flex flex-col gap-2">
-            <div className="flex-1 min-h-[60px]">
-            <svg
-              viewBox={`0 0 ${CW} ${CH}`}
-              width="100%"
-              height="100%"
-              preserveAspectRatio="xMidYMid meet"
-              className="overflow-visible"
-              aria-hidden="true"
-            >
-              <defs>
-                <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%"   stopColor="rgb(245,158,11)" stopOpacity={0.14} />
-                  <stop offset="100%" stopColor="rgb(245,158,11)" stopOpacity={0}    />
-                </linearGradient>
-              </defs>
 
-              {/* Threshold grid lines */}
-              {([50, 75] as const).map((v) => (
-                <line
-                  key={v}
-                  x1={6}       y1={threshY(v)}
-                  x2={CW - 6}  y2={threshY(v)}
-                  stroke="currentColor"
-                  strokeWidth={0.5}
-                  strokeDasharray="3 3"
-                  className="text-foreground/[0.08]"
-                />
-              ))}
-
-              {/* Area under line */}
-              <polygon
-                points={`6,${CH} ${trendPoints} ${CW - 6},${CH}`}
-                fill="url(#areaGrad)"
-              />
-
-              {/* Trend line */}
-              <polyline
-                points={trendPoints}
-                fill="none"
-                stroke="rgb(245,158,11)"
-                strokeWidth={2}
-                strokeLinejoin="round"
-                strokeLinecap="round"
-              />
-
-              {/* Data point dots */}
-              {SCORE_HISTORY.map((d, i) => {
-                const [px, py] = pts[i].split(",").map(Number)
-                const isLast   = i === SCORE_HISTORY.length - 1
-                return (
-                  <circle
-                    key={d.label}
-                    cx={px}
-                    cy={py}
-                    r={isLast ? 4 : 3}
-                    fill={isLast ? "rgb(245,158,11)" : "transparent"}
-                    stroke="rgb(245,158,11)"
-                    strokeWidth={isLast ? 0 : 1.5}
-                  />
-                )
-              })}
-
-              {/* Latest score label */}
-              <text
-                x={lx + 8}
-                y={ly + 4}
-                fontSize={11}
-                fontWeight={700}
-                fill="rgb(245,158,11)"
+            {/* SVG scales with the flex-1 wrapper */}
+            <div className="flex-1 min-h-[80px]">
+              <svg
+                viewBox={`0 0 ${CW} ${CH}`}
+                width="100%"
+                height="100%"
+                preserveAspectRatio="xMidYMid meet"
+                className="overflow-visible"
+                aria-hidden="true"
               >
-                {SCORE_HISTORY[SCORE_HISTORY.length - 1].score}
-              </text>
-            </svg>
+                <defs>
+                  <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stopColor="rgb(245,158,11)" stopOpacity={0.10} />
+                    <stop offset="100%" stopColor="rgb(245,158,11)" stopOpacity={0}    />
+                  </linearGradient>
+                </defs>
+
+                {/* Horizontal grid lines — one per GRID_VALUES entry */}
+                {GRID_VALUES.map((v) => {
+                  const y = scoreToY(v)
+                  return (
+                    <g key={v}>
+                      <line
+                        x1={PAD}      y1={y}
+                        x2={CW - PAD} y2={y}
+                        stroke="currentColor"
+                        strokeWidth={0.5}
+                        strokeDasharray="3 4"
+                        className="text-zinc-200 dark:text-zinc-700"
+                      />
+                      {/* Grid label — left edge, restrained */}
+                      <text
+                        x={PAD - 4}
+                        y={y + 3.5}
+                        fontSize={7}
+                        textAnchor="end"
+                        fill="currentColor"
+                        className="text-zinc-300 dark:text-zinc-600"
+                      >
+                        {v}
+                      </text>
+                    </g>
+                  )
+                })}
+
+                {/* Area under line */}
+                <polygon
+                  points={`${PAD},${CH - PAD} ${TREND_POINTS} ${CW - PAD},${CH - PAD}`}
+                  fill="url(#areaGrad)"
+                />
+
+                {/* Trend line */}
+                <polyline
+                  points={TREND_POINTS}
+                  fill="none"
+                  stroke="rgb(245,158,11)"
+                  strokeWidth={1.5}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
+
+                {/* Data point dots */}
+                {SCORE_HISTORY.map((d, i) => {
+                  const cx     = indexToX(i)
+                  const cy     = scoreToY(d.score)
+                  const isLast = i === SCORE_HISTORY.length - 1
+                  return (
+                    <circle
+                      key={d.label}
+                      cx={cx}
+                      cy={cy}
+                      r={isLast ? 3.5 : 2.5}
+                      fill={isLast ? "rgb(245,158,11)" : "transparent"}
+                      stroke="rgb(245,158,11)"
+                      strokeWidth={isLast ? 0 : 1.5}
+                    />
+                  )
+                })}
+
+                {/* Latest score label — sits above the end dot */}
+                <text
+                  x={LX}
+                  y={LY - 8}
+                  fontSize={10}
+                  fontWeight={700}
+                  textAnchor="middle"
+                  fill="rgb(245,158,11)"
+                >
+                  {SCORE_HISTORY[SCORE_HISTORY.length - 1].score}
+                </text>
+              </svg>
             </div>{/* /SVG wrapper */}
 
-            {/* X-axis */}
+            {/* X-axis labels */}
             <div className="flex justify-between px-1">
               {SCORE_HISTORY.map((d, i) => (
                 <div key={d.label} className="flex flex-col gap-0.5">
+                  <span className="text-[9px] text-zinc-400 leading-none">{d.label}</span>
                   <span
                     className={`text-[10px] tabular-nums font-semibold leading-none ${
                       i === SCORE_HISTORY.length - 1
@@ -276,13 +288,13 @@ export default function OverviewPage() {
                   >
                     {d.score}
                   </span>
-                  <span className="text-[9px] text-zinc-400 leading-none">{d.label}</span>
                 </div>
               ))}
             </div>
+
           </div>
 
-          {/* Footer row */}
+          {/* Footer */}
           <div className="flex items-center gap-2 pt-1 border-t border-border">
             <span className="text-[10px] text-zinc-400">Latest:</span>
             <span className="text-[11px] font-medium text-foreground">Full audit</span>
@@ -313,10 +325,10 @@ export default function OverviewPage() {
             </Link>
           </div>
 
-          {/* 2×2 matrix */}
-          <div className="grid grid-cols-2 gap-px rounded-lg overflow-hidden border border-border bg-border">
+          {/* 2×2 matrix — flex-1 so the grid fills the card height */}
+          <div className="flex-1 min-h-0 grid grid-cols-2 grid-rows-2 gap-px rounded-lg overflow-hidden border border-border bg-border">
             {AI_SIGNALS.map((m) => (
-              <div key={m.model} className="flex flex-col gap-2 px-3.5 py-3 bg-background">
+              <div key={m.model} className="flex flex-col justify-center gap-2.5 px-3.5 py-3 bg-background">
                 {/* Name + stance */}
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[12px] font-semibold text-foreground leading-none">
@@ -359,7 +371,7 @@ export default function OverviewPage() {
           </div>
 
           {/* Checklist */}
-          <div className="flex flex-col divide-y divide-border">
+          <div className="flex-1 flex flex-col divide-y divide-border">
             {QUICK_WINS.map((win, i) => (
               <div
                 key={i}
@@ -369,7 +381,6 @@ export default function OverviewPage() {
                 <span className="shrink-0 mt-0.5 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-zinc-50 dark:bg-zinc-900/50">
                   <span className="text-[9px] font-bold tabular-nums text-zinc-400">{i + 1}</span>
                 </span>
-
                 <p className="flex-1 text-[12px] text-zinc-500 leading-snug">{win}</p>
               </div>
             ))}
