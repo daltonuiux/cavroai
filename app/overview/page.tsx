@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { ModelIcon } from "@/components/model-icon"
 
 // ---------------------------------------------------------------------------
 // Data
@@ -255,14 +256,20 @@ export default function OverviewPage() {
 
           <div className="flex flex-col divide-y divide-border">
             {AI_READS.map((m) => (
-              <div key={m.model} className="flex items-start gap-4 py-3 first:pt-0 last:pb-0">
-                {/* Model name */}
-                <span className="text-[13px] font-medium text-foreground w-[88px] shrink-0 leading-snug">
-                  {m.model}
-                </span>
+              <div key={m.model} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                {/* Icon + model name */}
+                <div className="flex items-center gap-2 w-[112px] shrink-0">
+                  <ModelIcon
+                    model={m.model}
+                    className="w-[18px] h-[18px] shrink-0 text-foreground/40"
+                  />
+                  <span className="text-[13px] font-medium text-foreground leading-none">
+                    {m.model}
+                  </span>
+                </div>
 
                 {/* Stance */}
-                <div className="flex items-center gap-1.5 w-[80px] shrink-0 mt-[2px]">
+                <div className="flex items-center gap-1.5 w-[80px] shrink-0">
                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STANCE_DOT[m.stance]}`} />
                   <span className={`text-[11px] font-semibold leading-none ${STANCE_TEXT[m.stance]}`}>
                     {STANCE_LABEL[m.stance]}

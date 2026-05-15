@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { ModelIcon } from "@/components/model-icon"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -265,12 +266,18 @@ export function PerceptionClient() {
           {MODELS.map((m) => {
             const active = isSimulated ? m.simulated : m.current
             return (
-              <div key={m.model} className="flex items-start gap-4 py-3.5 first:pt-0 last:pb-0">
+              <div key={m.model} className="flex items-start gap-3 py-3.5 first:pt-0 last:pb-0">
 
-                {/* Model */}
-                <span className="text-[13px] font-semibold text-foreground w-[96px] shrink-0 leading-snug pt-px">
-                  {m.model}
-                </span>
+                {/* Icon + model name */}
+                <div className="flex items-center gap-2 w-[116px] shrink-0 pt-px">
+                  <ModelIcon
+                    model={m.model}
+                    className="w-[18px] h-[18px] shrink-0 text-foreground/40"
+                  />
+                  <span className="text-[13px] font-semibold text-foreground leading-none">
+                    {m.model}
+                  </span>
+                </div>
 
                 {/* Stance */}
                 <span
