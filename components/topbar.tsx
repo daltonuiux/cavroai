@@ -4,10 +4,9 @@ import { usePathname } from "next/navigation"
 
 const ROUTE_TITLES: { path: string; title: string }[] = [
   { path: "/overview",        title: "Overview"        },
-  { path: "/audits",          title: "Audits"          },
-  { path: "/competitors",     title: "Competitors"     },
-  { path: "/prompts",         title: "Prompts"         },
+  { path: "/perception",      title: "Perception"      },
   { path: "/recommendations", title: "Recommendations" },
+  { path: "/research",        title: "Research"        },
   { path: "/settings",        title: "Settings"        },
 ]
 

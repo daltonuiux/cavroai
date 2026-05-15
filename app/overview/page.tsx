@@ -4,69 +4,90 @@ import Link from "next/link"
 // Data
 // ---------------------------------------------------------------------------
 
-const MOCK_SCORE = 61
+const MOCK_SCORE    = 61
+const SCORE_CHANGE  = +12
+const SCORE_DATE    = "May 6, 2026"
 
 const SCORE_HISTORY = [
-  { score: 49, label: "Apr 8",  short: "Baseline" },
-  { score: 54, label: "Apr 22", short: "Coverage" },
-  { score: 61, label: "May 6",  short: "Current"  },
+  { score: 49, label: "Apr 8"  },
+  { score: 54, label: "Apr 22" },
+  { score: 61, label: "May 6"  },
 ]
 
-const AI_SIGNALS = [
-  { model: "ChatGPT",    stance: "neutral"   as const, value: 50, note: "Alternative mention" },
-  { model: "Claude",     stance: "favorable" as const, value: 82, note: "Engineering prompts" },
-  { model: "Perplexity", stance: "weak"      as const, value: 22, note: "Low citation trust"  },
-  { model: "Gemini",     stance: "neutral"   as const, value: 48, note: "Occasional surface"  },
+const AI_READS = [
+  {
+    model:  "ChatGPT",
+    stance: "neutral"   as const,
+    read:   "Mentions you as an alternative, not a primary recommendation.",
+  },
+  {
+    model:  "Claude",
+    stance: "favorable" as const,
+    read:   "Surfaces you for engineering-team prompts with good confidence.",
+  },
+  {
+    model:  "Perplexity",
+    stance: "weak"      as const,
+    read:   "Insufficient indexed trust signals to cite you confidently.",
+  },
+  {
+    model:  "Gemini",
+    stance: "neutral"   as const,
+    read:   "Appears occasionally — pricing clarity helps, positioning does not.",
+  },
 ]
 
 const QUICK_WINS = [
   "Rewrite homepage headline with a concrete differentiator",
   "Publish 3 named case studies on /customers",
   "Add transparent pricing FAQ to /pricing",
-  "Create a /vs-notion comparison page",
+  "Build a /vs-notion comparison page",
 ]
 
 // ---------------------------------------------------------------------------
-// Chart geometry — all constants in one place
+// Sparkline geometry (hero accent — tiny, decorative)
 // ---------------------------------------------------------------------------
 
-// SVG viewport
-const CW  = 280   // viewBox width
-const CH  = 120   // viewBox height — tall enough for generous inner padding
-const PAD = 22    // inner padding on all sides
+const SW = 72   // sparkline SVG width
+const SH = 24   // sparkline SVG height
+const SP = 3    // sparkline inner padding
 
-// Data domain — extend beyond actual min/max so the line breathes
-const D_MIN = Math.min(...SCORE_HISTORY.map((d) => d.score)) - 14  // 35
-const D_MAX = Math.max(...SCORE_HISTORY.map((d) => d.score)) + 14  // 75
-const D_RNG = D_MAX - D_MIN                                          // 40
+const _scores = SCORE_HISTORY.map((d) => d.score)
+const _sMin   = Math.min(..._scores) - 4
+const _sMax   = Math.max(..._scores) + 4
+const _sRng   = _sMax - _sMin
 
-// Horizontal grid lines drawn at these score values
-const GRID_VALUES = [40, 50, 60, 70] as const
-
-// Map a score → SVG y coordinate
-function scoreToY(val: number): number {
-  return CH - PAD - ((val - D_MIN) / D_RNG) * (CH - PAD * 2)
-}
-
-// Map a series index → SVG x coordinate
-function indexToX(i: number): number {
-  return PAD + (i / (SCORE_HISTORY.length - 1)) * (CW - PAD * 2)
-}
-
-// Pre-build polyline points string
-const TREND_POINTS = SCORE_HISTORY
-  .map((d, i) => `${indexToX(i).toFixed(1)},${scoreToY(d.score).toFixed(1)}`)
+const SPARK_POINTS = SCORE_HISTORY
+  .map((d, i) => {
+    const x = SP + (i / (SCORE_HISTORY.length - 1)) * (SW - SP * 2)
+    const y = SH - SP - ((d.score - _sMin) / _sRng) * (SH - SP * 2)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  })
   .join(" ")
 
-// Last point — for end-dot and score label
-const LX = indexToX(SCORE_HISTORY.length - 1)
-const LY = scoreToY(SCORE_HISTORY[SCORE_HISTORY.length - 1].score)
-
 // ---------------------------------------------------------------------------
-// Types
+// Types + style maps
 // ---------------------------------------------------------------------------
 
 type ModelStance = "favorable" | "neutral" | "weak"
+
+const STANCE_DOT: Record<ModelStance, string> = {
+  favorable: "bg-emerald-500",
+  neutral:   "bg-zinc-300 dark:bg-zinc-600",
+  weak:      "bg-rose-500",
+}
+
+const STANCE_LABEL: Record<ModelStance, string> = {
+  favorable: "Favorable",
+  neutral:   "Neutral",
+  weak:      "Weak",
+}
+
+const STANCE_TEXT: Record<ModelStance, string> = {
+  favorable: "text-emerald-600 dark:text-emerald-400",
+  neutral:   "text-zinc-400",
+  weak:      "text-rose-600 dark:text-rose-400",
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -78,32 +99,10 @@ function scoreColour(score: number) {
   return "text-rose-600 dark:text-rose-400"
 }
 
-function scoreLabel(score: number) {
+function scoreStatus(score: number) {
   if (score >= 75) return "Strong"
   if (score >= 50) return "Developing"
   return "Weak"
-}
-
-// ---------------------------------------------------------------------------
-// Style maps
-// ---------------------------------------------------------------------------
-
-const STANCE_COLOUR: Record<ModelStance, string> = {
-  favorable: "text-emerald-600 dark:text-emerald-400",
-  neutral:   "text-zinc-400",
-  weak:      "text-rose-600 dark:text-rose-400",
-}
-
-const STANCE_LABEL: Record<ModelStance, string> = {
-  favorable: "Favorable",
-  neutral:   "Neutral",
-  weak:      "Weak",
-}
-
-const STANCE_BAR: Record<ModelStance, string> = {
-  favorable: "bg-emerald-500",
-  neutral:   "bg-zinc-300 dark:bg-zinc-600",
-  weak:      "bg-rose-500",
 }
 
 // ---------------------------------------------------------------------------
@@ -111,293 +110,245 @@ const STANCE_BAR: Record<ModelStance, string> = {
 // ---------------------------------------------------------------------------
 
 export default function OverviewPage() {
-  const scoreText  = scoreColour(MOCK_SCORE)
-  const scoreTitle = scoreLabel(MOCK_SCORE)
+  const colour = scoreColour(MOCK_SCORE)
+  const status = scoreStatus(MOCK_SCORE)
 
   return (
-    <div className="flex flex-col w-full gap-4">
+    <div className="flex flex-col w-full">
 
-      {/* ── 2 × 2 panel grid ──────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* ── 1. Hero ────────────────────────────────────────────────────────── */}
+      <div className="pt-2 pb-9">
 
-        {/* ── Panel 1: Score + Summary ──────────────────────────────────── */}
-        <div className="rounded-lg border border-border p-5 flex flex-col gap-4">
-
-          {/* Score */}
-          <div>
-            <div className="flex items-baseline gap-2 mb-1.5">
-              <span className={`text-[58px] font-bold leading-none tabular-nums tracking-tight ${scoreText}`}>
-                {MOCK_SCORE}
-              </span>
-              <span className="text-[15px] font-medium text-zinc-400">/100</span>
-            </div>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className={`text-[10px] font-bold uppercase tracking-widest ${scoreText}`}>
-                {scoreTitle}
-              </span>
-              <span className="text-foreground/15">·</span>
-              <span className="text-[11px] text-zinc-400">AI Recommendation Score</span>
-              <span className="text-foreground/15">·</span>
-              <span className="text-[11px] text-zinc-400">May 6, 2026</span>
-            </div>
+        {/* Score row */}
+        <div className="flex items-end gap-5 mb-3">
+          <div className="flex items-baseline gap-2.5 leading-none">
+            <span className={`text-[64px] font-bold tabular-nums tracking-tight leading-none ${colour}`}>
+              {MOCK_SCORE}
+            </span>
+            <span className="text-[18px] font-medium text-zinc-400 mb-1">/100</span>
           </div>
 
-          {/* Summary */}
-          <p className="text-[13px] leading-relaxed text-zinc-500">
-            AI assistants recognise your brand, but rarely recommend you first. Positioning is too generic to win competitive prompts.
-          </p>
-
-          {/* Top priority callout */}
-          <div className="rounded-md bg-zinc-50 dark:bg-zinc-900/50 border border-border px-3.5 py-2.5">
-            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-1">
-              Top priority
-            </p>
-            <p className="text-[12px] font-medium text-foreground leading-snug">
-              Rewrite homepage headline with a concrete differentiator
-            </p>
+          {/* Sparkline — decorative trend accent */}
+          <div className="mb-2 opacity-70">
+            <svg
+              width={SW}
+              height={SH}
+              viewBox={`0 0 ${SW} ${SH}`}
+              aria-hidden="true"
+            >
+              <polyline
+                points={SPARK_POINTS}
+                fill="none"
+                stroke="rgb(245,158,11)"
+                strokeWidth={1.5}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+            </svg>
           </div>
-
-          {/* Subtle history link */}
-          <p className="text-[11px] text-zinc-400">
-            <Link href="/audits" className="hover:text-foreground transition-colors duration-150">
-              View audit history →
-            </Link>
-          </p>
         </div>
 
-        {/* ── Panel 2: Score Trend ──────────────────────────────────────── */}
-        <div className="rounded-lg border border-border p-5 flex flex-col gap-4 min-h-[220px]">
+        {/* Status + meta row */}
+        <div className="flex items-center gap-2 flex-wrap mb-5">
+          <span className={`text-[11px] font-bold uppercase tracking-widest ${colour}`}>
+            {status}
+          </span>
+          <span className="text-foreground/20">·</span>
+          <span className="text-[12px] text-zinc-400">AI Recommendation Score</span>
+          <span className="text-foreground/20">·</span>
+          <span className="text-[12px] text-zinc-400">{SCORE_DATE}</span>
+          <span className="text-foreground/20">·</span>
+          <span className="text-[12px] font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+            +{SCORE_CHANGE} pts
+          </span>
+        </div>
 
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
-              Score trend
-            </p>
-            <span className="text-[12px] font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
-              +12 pts
+        {/* Narrative summary */}
+        <p className="text-[15px] leading-relaxed text-zinc-500 max-w-[56ch]">
+          AI assistants recognise your brand, but rarely recommend you first.
+          Your positioning is too generic to win competitive searches — competitors
+          with clearer language consistently rank above you.
+        </p>
+      </div>
+
+      {/* ── 2. Key insight ─────────────────────────────────────────────────── */}
+      <div className="py-7 border-t border-border">
+        <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-4">
+          What this means
+        </p>
+        <p className="text-[17px] font-semibold text-foreground tracking-tight leading-snug mb-3">
+          Visible, but not preferred.
+        </p>
+        <p className="text-[13px] text-zinc-500 leading-relaxed max-w-[58ch]">
+          3 of 7 tracked prompts return you outside the top two results.
+          The gap is not brand awareness — it is positioning language.
+          Competitors carry clearer category signals that AI models surface first
+          when buyers search. Fix the language, and the rankings follow.
+        </p>
+      </div>
+
+      {/* ── 3. Top recommendation ──────────────────────────────────────────── */}
+      <div className="py-7 border-t border-border">
+        <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-5">
+          Top recommendation
+        </p>
+
+        <div className="pl-4 border-l-2 border-foreground/10">
+
+          {/* Badges */}
+          <div className="flex items-center gap-2 mb-2.5">
+            <span className="rounded px-1.5 py-px text-[9px] font-bold uppercase tracking-wide bg-rose-500/[0.09] text-rose-700 dark:text-rose-300 ring-1 ring-inset ring-rose-500/20">
+              High impact
+            </span>
+            <span className="rounded px-1.5 py-px text-[9px] font-bold uppercase tracking-wide bg-zinc-100 dark:bg-zinc-800/70 text-zinc-500 dark:text-zinc-400">
+              Small effort
             </span>
           </div>
 
-          {/* Chart area — flex-1 absorbs the extra card height */}
-          <div className="flex-1 min-h-0 flex flex-col gap-2">
+          {/* Title */}
+          <p className="text-[17px] font-semibold text-foreground tracking-tight mb-2">
+            Rewrite your homepage headline
+          </p>
 
-            {/* SVG scales with the flex-1 wrapper */}
-            <div className="flex-1 min-h-[80px]">
-              <svg
-                viewBox={`0 0 ${CW} ${CH}`}
-                width="100%"
-                height="100%"
-                preserveAspectRatio="xMidYMid meet"
-                className="overflow-visible"
-                aria-hidden="true"
-              >
-                <defs>
-                  <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%"   stopColor="rgb(245,158,11)" stopOpacity={0.10} />
-                    <stop offset="100%" stopColor="rgb(245,158,11)" stopOpacity={0}    />
-                  </linearGradient>
-                </defs>
+          {/* Why */}
+          <p className="text-[13px] text-zinc-500 leading-relaxed max-w-[56ch] mb-4">
+            AI models read your homepage verbatim. Generic language like "a flexible
+            workspace for any team" produces generic recommendations — and generic does
+            not win competitive searches where every alternative sounds the same.
+          </p>
 
-                {/* Horizontal grid lines — one per GRID_VALUES entry */}
-                {GRID_VALUES.map((v) => {
-                  const y = scoreToY(v)
-                  return (
-                    <g key={v}>
-                      <line
-                        x1={PAD}      y1={y}
-                        x2={CW - PAD} y2={y}
-                        stroke="currentColor"
-                        strokeWidth={0.5}
-                        strokeDasharray="3 4"
-                        className="text-zinc-200 dark:text-zinc-700"
-                      />
-                      {/* Grid label — left edge, restrained */}
-                      <text
-                        x={PAD - 4}
-                        y={y + 3.5}
-                        fontSize={7}
-                        textAnchor="end"
-                        fill="currentColor"
-                        className="text-zinc-300 dark:text-zinc-600"
-                      >
-                        {v}
-                      </text>
-                    </g>
-                  )
-                })}
-
-                {/* Area under line */}
-                <polygon
-                  points={`${PAD},${CH - PAD} ${TREND_POINTS} ${CW - PAD},${CH - PAD}`}
-                  fill="url(#areaGrad)"
-                />
-
-                {/* Trend line */}
-                <polyline
-                  points={TREND_POINTS}
-                  fill="none"
-                  stroke="rgb(245,158,11)"
-                  strokeWidth={1.5}
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                />
-
-                {/* Data point dots */}
-                {SCORE_HISTORY.map((d, i) => {
-                  const cx     = indexToX(i)
-                  const cy     = scoreToY(d.score)
-                  const isLast = i === SCORE_HISTORY.length - 1
-                  return (
-                    <circle
-                      key={d.label}
-                      cx={cx}
-                      cy={cy}
-                      r={isLast ? 3.5 : 2.5}
-                      fill={isLast ? "rgb(245,158,11)" : "transparent"}
-                      stroke="rgb(245,158,11)"
-                      strokeWidth={isLast ? 0 : 1.5}
-                    />
-                  )
-                })}
-
-                {/* Latest score label — sits above the end dot */}
-                <text
-                  x={LX}
-                  y={LY - 8}
-                  fontSize={10}
-                  fontWeight={700}
-                  textAnchor="middle"
-                  fill="rgb(245,158,11)"
-                >
-                  {SCORE_HISTORY[SCORE_HISTORY.length - 1].score}
-                </text>
-              </svg>
-            </div>{/* /SVG wrapper */}
-
-            {/* X-axis labels */}
-            <div className="flex justify-between px-1">
-              {SCORE_HISTORY.map((d, i) => (
-                <div key={d.label} className="flex flex-col gap-0.5">
-                  <span className="text-[9px] text-zinc-400 leading-none">{d.label}</span>
-                  <span
-                    className={`text-[10px] tabular-nums font-semibold leading-none ${
-                      i === SCORE_HISTORY.length - 1
-                        ? "text-zinc-500"
-                        : "text-zinc-300 dark:text-zinc-600"
-                    }`}
-                  >
-                    {d.score}
-                  </span>
-                </div>
-              ))}
-            </div>
-
+          {/* Suggested copy */}
+          <div className="rounded-md bg-zinc-50 dark:bg-zinc-900/40 border border-border/70 px-4 py-3 mb-5 max-w-[52ch]">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-1.5">
+              Suggested headline
+            </p>
+            <p className="text-[13px] font-medium text-foreground/75 italic leading-snug">
+              &ldquo;The structured knowledge base for async engineering teams.&rdquo;
+            </p>
           </div>
 
-          {/* Footer */}
-          <div className="flex items-center gap-2 pt-1 border-t border-border">
-            <span className="text-[10px] text-zinc-400">Latest:</span>
-            <span className="text-[11px] font-medium text-foreground">Full audit</span>
-            <span className="text-foreground/20 mx-0.5">·</span>
-            <span className="text-[10px] text-zinc-400">May 6, 2026</span>
-            <Link
-              href="/audits"
-              className="ml-auto text-[10px] text-zinc-400 hover:text-foreground transition-colors duration-150"
-            >
-              History →
-            </Link>
-          </div>
+          <Link
+            href="/recommendations"
+            className="text-[12px] font-medium text-foreground/70 hover:text-foreground transition-colors duration-150"
+          >
+            View all recommendations →
+          </Link>
         </div>
+      </div>
 
-        {/* ── Panel 3: AI Model Signals ─────────────────────────────────── */}
-        <div className="rounded-lg border border-border p-5 flex flex-col gap-4">
+      {/* ── 4. Model reads + Score history ─────────────────────────────────── */}
+      <div className="py-7 border-t border-border grid grid-cols-1 lg:grid-cols-[1fr_180px] gap-8 lg:gap-12">
 
-          {/* Header */}
-          <div className="flex items-center justify-between">
+        {/* AI model reads */}
+        <div>
+          <div className="flex items-baseline justify-between mb-4">
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
-              AI model signals
+              AI model reads
             </p>
             <Link
               href="/perception"
-              className="text-[10px] text-zinc-400 hover:text-foreground transition-colors duration-150"
+              className="text-[11px] text-zinc-400 hover:text-foreground transition-colors duration-150"
             >
-              Details →
+              Full analysis →
             </Link>
           </div>
 
-          {/* 2×2 matrix — flex-1 so the grid fills the card height */}
-          <div className="flex-1 min-h-0 grid grid-cols-2 grid-rows-2 gap-px rounded-lg overflow-hidden border border-border bg-border">
-            {AI_SIGNALS.map((m) => (
-              <div key={m.model} className="flex flex-col justify-center gap-2.5 px-3.5 py-3 bg-background">
-                {/* Name + stance */}
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12px] font-semibold text-foreground leading-none">
-                    {m.model}
-                  </span>
-                  <span className={`text-[9px] font-bold uppercase tracking-wide leading-none ${STANCE_COLOUR[m.stance]}`}>
+          <div className="flex flex-col divide-y divide-border">
+            {AI_READS.map((m) => (
+              <div key={m.model} className="flex items-start gap-4 py-3 first:pt-0 last:pb-0">
+                {/* Model name */}
+                <span className="text-[13px] font-medium text-foreground w-[88px] shrink-0 leading-snug">
+                  {m.model}
+                </span>
+
+                {/* Stance */}
+                <div className="flex items-center gap-1.5 w-[80px] shrink-0 mt-[2px]">
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STANCE_DOT[m.stance]}`} />
+                  <span className={`text-[11px] font-semibold leading-none ${STANCE_TEXT[m.stance]}`}>
                     {STANCE_LABEL[m.stance]}
                   </span>
                 </div>
 
-                {/* Signal bar */}
-                <div className="h-1 w-full rounded-full bg-foreground/[0.07] overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${STANCE_BAR[m.stance]}`}
-                    style={{ width: `${m.value}%` }}
-                  />
-                </div>
-
-                {/* Note */}
-                <p className="text-[9px] text-zinc-400 leading-none truncate">{m.note}</p>
+                {/* Read */}
+                <p className="text-[12px] text-zinc-400 leading-snug flex-1 min-w-0">
+                  {m.read}
+                </p>
               </div>
             ))}
           </div>
         </div>
 
-        {/* ── Panel 4: Quick Wins ───────────────────────────────────────── */}
-        <div className="rounded-lg border border-border p-5 flex flex-col gap-4">
+        {/* Score history */}
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-4">
+            Recent audits
+          </p>
 
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
-              Quick wins
-            </p>
-            <Link
-              href="/recommendations"
-              className="text-[10px] text-zinc-400 hover:text-foreground transition-colors duration-150"
-            >
-              All →
-            </Link>
+          <div className="flex flex-col gap-3">
+            {[...SCORE_HISTORY].reverse().map((h, i) => {
+              const isLatest = i === 0
+              return (
+                <div key={h.label} className="flex items-center justify-between">
+                  <div className="flex flex-col gap-px">
+                    <span className={`text-[12px] leading-none ${isLatest ? "font-medium text-foreground" : "text-zinc-400"}`}>
+                      {h.label}
+                    </span>
+                    {isLatest && (
+                      <span className="text-[9px] text-zinc-400">Latest</span>
+                    )}
+                  </div>
+                  <span
+                    className={`text-[18px] font-bold tabular-nums tracking-tight leading-none ${
+                      isLatest ? scoreColour(h.score) : "text-zinc-300 dark:text-zinc-600"
+                    }`}
+                  >
+                    {h.score}
+                  </span>
+                </div>
+              )
+            })}
           </div>
 
-          {/* Checklist */}
-          <div className="flex-1 flex flex-col divide-y divide-border">
-            {QUICK_WINS.map((win, i) => (
-              <div
-                key={i}
-                className="flex items-start gap-3 py-2.5 first:pt-0 last:pb-0 hover:bg-zinc-100/60 dark:hover:bg-zinc-900/40 -mx-2 px-2 rounded-sm transition-colors duration-150"
-              >
-                {/* Step circle */}
-                <span className="shrink-0 mt-0.5 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-zinc-50 dark:bg-zinc-900/50">
-                  <span className="text-[9px] font-bold tabular-nums text-zinc-400">{i + 1}</span>
-                </span>
-                <p className="flex-1 text-[12px] text-zinc-500 leading-snug">{win}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Footer */}
-          <div className="mt-auto pt-3 border-t border-border">
+          <div className="mt-5">
             <Link
-              href="/recommendations"
+              href="/research"
               className="text-[11px] text-zinc-400 hover:text-foreground transition-colors duration-150"
             >
-              View all recommendations →
+              View history →
             </Link>
           </div>
         </div>
 
       </div>
+
+      {/* ── 5. Quick wins ──────────────────────────────────────────────────── */}
+      <div className="py-7 border-t border-border">
+        <div className="flex items-baseline justify-between mb-5">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
+            Quick wins
+          </p>
+          <Link
+            href="/recommendations"
+            className="text-[11px] text-zinc-400 hover:text-foreground transition-colors duration-150"
+          >
+            See all →
+          </Link>
+        </div>
+
+        <div className="flex flex-col gap-3.5">
+          {QUICK_WINS.map((win, i) => (
+            <div key={i} className="flex items-baseline gap-3.5">
+              <span className="text-[12px] font-bold tabular-nums text-zinc-300 dark:text-zinc-600 w-4 shrink-0">
+                {i + 1}
+              </span>
+              <p className="text-[13px] text-zinc-500 leading-snug">
+                {win}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
     </div>
   )
 }

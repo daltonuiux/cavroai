@@ -1,238 +1,119 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type Mode    = "current" | "simulated"
-type Impact  = "high" | "medium" | "low"
-type Stance  = "strong" | "developing" | "weak" | "neutral"
-type Status  = "resolved" | "partial" | "unresolved"
+type Mode   = "current" | "simulated"
+type Stance = "strong" | "developing" | "weak" | "neutral"
 
 // ---------------------------------------------------------------------------
-// Perception statements
+// Data
 // ---------------------------------------------------------------------------
 
 const PERCEPTION = {
   current: {
-    statement:   "A flexible workspace for teams of any size.",
-    description:
-      "AI models describe your product using generic productivity language. This positioning overlaps with dozens of tools and provides no category signal, weak trust, and no defined buyer.",
+    statement:    "AI models understand your company as a flexible productivity workspace, but struggle to identify strong differentiation.",
+    summary:      "Your positioning overlaps with dozens of general tools — Notion, Coda, Airtable, and others. Without a specific category claim or defined buyer, AI models default to mentioning you as an alternative rather than recommending you first.",
     icp:          "Not defined",
     category:     "General productivity",
     differentiator: "None indexed",
   },
   simulated: {
-    statement:   "The structured knowledge base built for async engineering teams, with Git-level version control.",
-    description:
-      "A specific category claim with a defined ICP and a quotable technical differentiator. AI models can match this positioning to engineering team prompts and cite version control as a unique mechanism.",
+    statement:    "AI models identify your company as the structured knowledge base for async engineering teams, with a clear technical differentiator.",
+    summary:      "A specific category claim with a defined buyer and a quotable mechanism. AI models can match this positioning to engineering team prompts and cite version control as a unique capability — separating you from general productivity tools.",
     icp:          "Async engineering teams",
     category:     "Structured knowledge management",
     differentiator: "Git-level version control",
   },
 }
 
-// ---------------------------------------------------------------------------
-// Issues
-// ---------------------------------------------------------------------------
-
-interface Issue {
-  label:       string
-  detail:      string
-  status:      Status
-  improvement: string
+const OBSERVATIONS = {
+  current: [
+    {
+      headline: "You're invisible in high-intent searches",
+      body:     "Buyers searching for tools built for engineering teams or async documentation don't see you recommended first. Your positioning doesn't match those specific prompts.",
+    },
+    {
+      headline: "AI models have nothing quotable to cite",
+      body:     "Without a concrete differentiator, models describe you in the same generic language as competitors. There's no specific claim to anchor a recommendation on.",
+    },
+    {
+      headline: "Flexibility reads as undifferentiated",
+      body:     "\"Flexible workspace for any team\" signals a broad tool to AI models — a reason to mention you as an option, not a reason to recommend you over a specialist.",
+    },
+  ],
+  simulated: [
+    {
+      headline: "You own a defensible category",
+      body:     "Structured knowledge management is specific enough for AI models to match you to buyer-intent queries. The category creates a clear, citable slot in their reasoning.",
+    },
+    {
+      headline: "Engineering teams is a quotable ICP",
+      body:     "A defined buyer gives every recommendation context. AI models now have a specific reason to surface you for engineering prompts rather than defaulting to general alternatives.",
+    },
+    {
+      headline: "Version control is a concrete mechanism",
+      body:     "Git-level version control is a claim AI models can reproduce directly in a recommendation. It separates you from Notion and Confluence without requiring a comparison chart.",
+    },
+  ],
 }
 
-const ISSUES: Issue[] = [
-  {
-    label:       "Category overlap",
-    detail:      "Overlaps with Notion, Coda, and Monday in the 'flexible workspace' category. AI models default to more established options when positioning is generic.",
-    status:      "resolved",
-    improvement: "Clear category claim eliminates overlap with general productivity tools.",
-  },
-  {
-    label:       "No ICP signal",
-    detail:      "No indication of who the product is for. AI models cannot match you to specific buyer intents like 'best tool for engineering teams'.",
-    status:      "resolved",
-    improvement: "Async engineering teams is specific enough for AI models to match against buyer-intent prompts.",
-  },
-  {
-    label:       "Missing differentiator",
-    detail:      "No unique mechanism or category claim separates you from the productivity tool category. AI models have no specific reason to cite you over competitors.",
-    status:      "resolved",
-    improvement: "Git-level version control is a concrete, quotable differentiator AI models can surface when comparing options.",
-  },
-  {
-    label:       "Weak trust signals",
-    detail:      "No indexed proof points, case studies, or customer categories that AI models can cite. G2 and Capterra reviews are not consistently crawled.",
-    status:      "partial",
-    improvement: "Positioning improvements help but customer proof pages still need to be published and indexed.",
-  },
-]
-
-// ---------------------------------------------------------------------------
-// Recommendation likelihood — per prompt
-// ---------------------------------------------------------------------------
-
-interface PromptLikelihood {
-  text:      string
-  current:   number
-  simulated: number
-}
-
-const PROMPT_LIKELIHOODS: PromptLikelihood[] = [
-  { text: "What is the best knowledge base tool?",              current: 18, simulated: 64 },
-  { text: "Notion alternatives that are more affordable",       current: 71, simulated: 82 },
-  { text: "How do I build a knowledge base without engineering?", current: 68, simulated: 79 },
-  { text: "Best tool for internal team wikis and docs",         current: 22, simulated: 51 },
-  { text: "No-code database tool with views and automations",   current:  8, simulated: 24 },
-  { text: "Best project management for a 20-person startup",    current: 12, simulated: 31 },
-  { text: "What software do product teams use for docs?",       current:  9, simulated: 28 },
-]
-
-const OVERALL_CURRENT   = Math.round(PROMPT_LIKELIHOODS.reduce((s, p) => s + p.current, 0)   / PROMPT_LIKELIHOODS.length)
-const OVERALL_SIMULATED = Math.round(PROMPT_LIKELIHOODS.reduce((s, p) => s + p.simulated, 0) / PROMPT_LIKELIHOODS.length)
-
-// ---------------------------------------------------------------------------
-// AI model behavior
-// ---------------------------------------------------------------------------
-
-interface ModelBehavior {
+interface ModelData {
   model:     string
   prefers:   string
   current:   { stance: Stance; note: string }
   simulated: { stance: Stance; note: string }
 }
 
-const MODEL_BEHAVIOR: ModelBehavior[] = [
+const MODELS: ModelData[] = [
   {
-    model:   "ChatGPT",
-    prefers: "Structured category clarity and explicit comparison pages",
-    current: {
-      stance: "weak",
-      note:   "Describes you as a generic workspace tool. Cites Notion first in most knowledge management prompts.",
-    },
-    simulated: {
-      stance: "strong",
-      note:   "Clear category language gives ChatGPT a strong signal to match you to engineering team prompts.",
-    },
+    model:     "ChatGPT",
+    prefers:   "Structured category clarity and comparison pages",
+    current:   { stance: "weak",    note: "Describes you as a generic workspace. Cites Notion first in most knowledge management prompts." },
+    simulated: { stance: "strong",  note: "Clear category language gives a strong signal for engineering team prompts." },
   },
   {
-    model:   "Claude",
-    prefers: "Technical specificity and clearly defined ICPs",
-    current: {
-      stance: "weak",
-      note:   "Does not surface strong differentiators. Lists you as an alternative without specific reasoning.",
-    },
-    simulated: {
-      stance: "strong",
-      note:   "Technical differentiation (version control) aligns with Claude's preference for specific mechanisms.",
-    },
+    model:     "Claude",
+    prefers:   "Technical specificity and clearly defined ICPs",
+    current:   { stance: "weak",       note: "Lists you as an alternative without specific reasoning. No differentiators to surface." },
+    simulated: { stance: "strong",     note: "Technical differentiation aligns well with Claude's preference for specific mechanisms." },
   },
   {
-    model:   "Perplexity",
-    prefers: "Publicly indexed trust signals and named references",
-    current: {
-      stance: "weak",
-      note:   "Rarely cites your product. Insufficient indexed trust signals and proof points.",
-    },
-    simulated: {
-      stance: "developing",
-      note:   "Positioning improvements help but Perplexity also needs indexed customer proof pages to reach strong citation frequency.",
-    },
+    model:     "Perplexity",
+    prefers:   "Indexed trust signals and named customer references",
+    current:   { stance: "weak",       note: "Rarely cites you. Insufficient proof points and trust signals indexed." },
+    simulated: { stance: "developing", note: "Positioning improves signal, but Perplexity also needs indexed customer proof pages." },
   },
   {
-    model:   "Gemini",
-    prefers: "Pricing transparency combined with category clarity",
-    current: {
-      stance: "neutral",
-      note:   "Surfaces you occasionally due to visible pricing, but generic positioning reduces recommendation confidence.",
-    },
-    simulated: {
-      stance: "developing",
-      note:   "Category clarity paired with visible pricing is a strong combination. Gemini citation frequency improves.",
-    },
+    model:     "Gemini",
+    prefers:   "Pricing transparency paired with category clarity",
+    current:   { stance: "neutral",    note: "Surfaces you occasionally through visible pricing. Generic positioning reduces confidence." },
+    simulated: { stance: "developing", note: "Category clarity combined with visible pricing is a strong signal combination." },
   },
 ]
 
-// ---------------------------------------------------------------------------
-// Positioning overlap matrix
-// ---------------------------------------------------------------------------
-
-interface OverlapRow {
-  category:  string
-  you:       boolean
-  notion:    boolean
-  coda:      boolean
-  airtable:  boolean
-  linear:    boolean
-}
-
-const OVERLAP_CURRENT: OverlapRow[] = [
-  { category: "General productivity", you: true,  notion: true,  coda: true,  airtable: true,  linear: true  },
-  { category: "Knowledge base",       you: true,  notion: true,  coda: true,  airtable: false, linear: false },
-  { category: "Documentation",        you: true,  notion: true,  coda: true,  airtable: false, linear: false },
-  { category: "Engineering teams",    you: false, notion: false, coda: false, airtable: false, linear: true  },
-  { category: "No-code database",     you: false, notion: true,  coda: true,  airtable: true,  linear: false },
-]
-
-const OVERLAP_SIMULATED: OverlapRow[] = [
-  { category: "Knowledge base",       you: true,  notion: true,  coda: true,  airtable: false, linear: false },
-  { category: "Engineering teams",    you: true,  notion: false, coda: false, airtable: false, linear: true  },
-  { category: "Documentation",        you: true,  notion: true,  coda: true,  airtable: false, linear: false },
-  { category: "No-code database",     you: false, notion: true,  coda: true,  airtable: true,  linear: false },
-  { category: "General productivity", you: false, notion: true,  coda: true,  airtable: true,  linear: true  },
-]
-
-// ---------------------------------------------------------------------------
-// Suggested rewrites
-// ---------------------------------------------------------------------------
-
-interface Rewrite {
-  type:    string
-  current: string
-  improved: string
-  impact:  Impact
-  note:    string
-}
-
-const REWRITES: Rewrite[] = [
+const REWRITES = [
   {
-    type:     "Homepage headline",
-    current:  "A flexible workspace for teams of any size.",
-    improved: "The structured knowledge base for async engineering teams.",
-    impact:   "high",
-    note:     "Eliminates category overlap. Creates a specific citation target for AI models answering knowledge management prompts.",
+    label:  "Homepage headline",
+    before: "A flexible workspace for any team",
+    after:  "The structured knowledge base for async engineering teams",
+    note:   "Category + ICP in one sentence. AI models can match this directly to buyer prompts.",
   },
   {
-    type:     "Product description",
-    current:  "Build, organize, and share knowledge with your team in one flexible workspace.",
-    improved: "Cavro gives async engineering teams a structured knowledge base with Git-level version history, making documentation a first-class engineering workflow.",
-    impact:   "high",
-    note:     "Specific enough for AI models to cite in engineering team prompts. Includes a quotable differentiator.",
+    label:  "Page title tag",
+    before: "YourProduct — Flexible workspace for teams",
+    after:  "YourProduct — Structured Knowledge Base for Engineering Teams",
+    note:   "Claude and ChatGPT index page titles. Including category and ICP improves match confidence.",
   },
   {
-    type:     "Category claim",
-    current:  "(None — currently defaults to 'productivity tool' across indexed pages)",
-    improved: "Structured team knowledge management",
-    impact:   "medium",
-    note:     "A repeatable category term to use across your homepage, features page, and docs. Repeated terms signal category ownership to AI indexes.",
-  },
-  {
-    type:     "Trust-enhanced version",
-    current:  "(No trust signal in current homepage positioning)",
-    improved: "Used by 200+ engineering teams to replace scattered Notion wikis with structured, version-controlled knowledge bases.",
-    impact:   "high",
-    note:     "AI models need quotable proof. Specific numbers and use cases improve citation confidence, especially in Perplexity and Claude.",
-  },
-  {
-    type:     "Technical version",
-    current:  "Organize your team knowledge in one place.",
-    improved: "Git-native knowledge management. Version-controlled docs, structured team wikis, and async-first search — built for engineers who need more than Confluence.",
-    impact:   "medium",
-    note:     "Claude and Perplexity favor technical specificity. This version targets prompts from technical buyers evaluating documentation tooling.",
+    label:  "Product description",
+    before: "Organize everything your team works on in one place",
+    after:  "Git-level version control for team knowledge — built for async engineering teams",
+    note:   "The differentiator leads, the ICP follows. A sentence AI models can quote directly.",
   },
 ]
 
@@ -240,58 +121,25 @@ const REWRITES: Rewrite[] = [
 // Styles
 // ---------------------------------------------------------------------------
 
-const STANCE_STYLES: Record<Stance, string> = {
+const STANCE_BADGE: Record<Stance, string> = {
   strong:     "bg-emerald-500/[0.09] text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-500/20",
   developing: "bg-amber-500/[0.09] text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-500/20",
   neutral:    "bg-zinc-100 dark:bg-zinc-800/70 text-zinc-500 dark:text-zinc-400",
   weak:       "bg-rose-500/[0.09] text-rose-700 dark:text-rose-300 ring-1 ring-inset ring-rose-500/20",
 }
 
-const STANCE_LABELS: Record<Stance, string> = {
+const STANCE_LABEL: Record<Stance, string> = {
   strong:     "Strong",
   developing: "Developing",
   neutral:    "Neutral",
   weak:       "Weak",
 }
 
-const STATUS_STYLES: Record<Status, string> = {
-  resolved:   "bg-emerald-500/[0.09] text-emerald-700 dark:text-emerald-300 rounded px-1.5 py-px ring-1 ring-inset ring-emerald-500/20",
-  partial:    "bg-amber-500/[0.09] text-amber-700 dark:text-amber-300 rounded px-1.5 py-px ring-1 ring-inset ring-amber-500/20",
-  unresolved: "bg-rose-500/[0.09] text-rose-700 dark:text-rose-300 rounded px-1.5 py-px ring-1 ring-inset ring-rose-500/20",
-}
-
-const STATUS_LABELS: Record<Status, string> = {
-  resolved:   "Resolved",
-  partial:    "Partial",
-  unresolved: "Open",
-}
-
-const IMPACT_STYLES: Record<Impact, string> = {
-  high:   "bg-rose-500/[0.09] text-rose-700 dark:text-rose-300 ring-1 ring-inset ring-rose-500/20",
-  medium: "bg-amber-500/[0.09] text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-500/20",
-  low:    "bg-zinc-100 dark:bg-zinc-800/70 text-zinc-500 dark:text-zinc-400",
-}
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-function Pill({ label, className }: { label: string; className: string }) {
-  return (
-    <span className={`rounded px-1.5 py-px text-[10px] font-semibold ${className}`}>
-      {label}
-    </span>
-  )
-}
-
-function OverlapDot({ active, isYou }: { active: boolean; isYou?: boolean }) {
-  if (!active) {
-    return <span className="text-[14px] text-foreground/[0.12] select-none">○</span>
+function signalValueStyle(value: string) {
+  if (value.startsWith("None") || value.startsWith("Not") || value.startsWith("General")) {
+    return "text-rose-600 dark:text-rose-400"
   }
-  if (isYou) {
-    return <span className="text-[14px] text-emerald-600 dark:text-emerald-400 font-bold select-none">●</span>
-  }
-  return <span className="text-[14px] text-foreground/40 select-none">●</span>
+  return "text-foreground"
 }
 
 // ---------------------------------------------------------------------------
@@ -302,91 +150,74 @@ export function PerceptionClient() {
   const [mode, setMode] = useState<Mode>("current")
   const isSimulated     = mode === "simulated"
 
-  const perception = PERCEPTION[mode]
-  const overallLikelihood = isSimulated ? OVERALL_SIMULATED : OVERALL_CURRENT
-  const overallBar        = (overallLikelihood / 100) * 100
-  const matrix            = isSimulated ? OVERLAP_SIMULATED : OVERLAP_CURRENT
+  const perception   = PERCEPTION[mode]
+  const observations = OBSERVATIONS[mode]
 
   return (
     <div className="flex flex-col w-full">
 
-      {/* ── Header ──────────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between gap-4 pb-4 border-b border-border">
-        <div>
-          <h1 className="text-[18px] font-bold tracking-[-0.02em] text-foreground">
+      {/* ── Hero ────────────────────────────────────────────────────────────── */}
+      <div className="pb-8 border-b border-border">
+
+        {/* Label + toggle in one row */}
+        <div className="flex items-center justify-between mb-6">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
             AI Perception
-          </h1>
-          <p className="mt-0.5 text-[12px] text-zinc-500">
-            How AI models currently understand and recommend your company
           </p>
+
+          {/* Subtle mode toggle */}
+          <div className="flex items-center rounded-md border border-border bg-zinc-100/60 dark:bg-zinc-800/40 p-0.5">
+            <button
+              onClick={() => setMode("current")}
+              className={`rounded px-3 py-1.5 text-[11px] font-semibold transition-colors duration-100 ${
+                !isSimulated
+                  ? "bg-background text-foreground"
+                  : "text-zinc-500 hover:text-foreground"
+              }`}
+              style={!isSimulated ? { boxShadow: "0 1px 3px 0 rgba(0,0,0,0.08)" } : undefined}
+            >
+              Current
+            </button>
+            <button
+              onClick={() => setMode("simulated")}
+              className={`rounded px-3 py-1.5 text-[11px] font-semibold transition-colors duration-100 ${
+                isSimulated
+                  ? "bg-background text-emerald-600 dark:text-emerald-400"
+                  : "text-zinc-500 hover:text-foreground"
+              }`}
+              style={isSimulated ? { boxShadow: "0 1px 3px 0 rgba(0,0,0,0.08)" } : undefined}
+            >
+              Improved
+            </button>
+          </div>
         </div>
 
-        {/* Mode toggle */}
-        <div className="shrink-0 flex items-center rounded-md border border-border bg-zinc-100/60 dark:bg-zinc-800/40 p-0.5">
-          <button
-            onClick={() => setMode("current")}
-            className={`rounded px-3 py-1.5 text-[11px] font-semibold transition-colors duration-100 ${
-              !isSimulated
-                ? "bg-background text-foreground"
-                : "text-zinc-500 hover:text-foreground"
-            }`}
-            style={!isSimulated ? { boxShadow: "0 1px 3px 0 rgba(0,0,0,0.08), 0 1px 1px 0 rgba(0,0,0,0.04)" } : undefined}
-          >
-            Current
-          </button>
-          <button
-            onClick={() => setMode("simulated")}
-            className={`rounded px-3 py-1.5 text-[11px] font-semibold transition-colors duration-100 ${
-              isSimulated
-                ? "bg-background text-emerald-600 dark:text-emerald-400"
-                : "text-zinc-500 hover:text-foreground"
-            }`}
-            style={isSimulated ? { boxShadow: "0 1px 3px 0 rgba(0,0,0,0.08), 0 1px 1px 0 rgba(0,0,0,0.04)" } : undefined}
-          >
-            Simulated
-          </button>
-        </div>
-      </div>
-
-      {/* ── Perception statement ─────────────────────────────────────────── */}
-      <div className="py-5 border-b border-border">
-        <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3">
-          How AI models currently describe your company
-        </p>
-
-        {/* The statement itself */}
+        {/* Perception statement */}
         <p
-          className={`text-[22px] font-semibold italic leading-snug tracking-[-0.02em] transition-colors duration-300 ${
-            isSimulated
-              ? "text-foreground"
-              : "text-zinc-400"
+          className={`text-[21px] font-semibold italic leading-snug tracking-[-0.02em] mb-4 max-w-[56ch] transition-colors duration-300 ${
+            isSimulated ? "text-foreground" : "text-zinc-500"
           }`}
         >
           &ldquo;{perception.statement}&rdquo;
         </p>
 
-        <p className="mt-3 text-[12px] text-zinc-500 leading-relaxed max-w-[65ch]">
-          {perception.description}
+        {/* Summary */}
+        <p className="text-[13px] text-zinc-500 leading-relaxed max-w-[60ch] mb-6">
+          {perception.summary}
         </p>
 
-        {/* Signal breakdown */}
-        <div className="flex flex-wrap items-center gap-5 mt-4">
+        {/* Signal tags */}
+        <div className="flex flex-wrap items-center gap-6">
           {[
-            { label: "ICP",            value: perception.icp           },
-            { label: "Category",       value: perception.category      },
+            { label: "ICP",            value: perception.icp            },
+            { label: "Category",       value: perception.category       },
             { label: "Differentiator", value: perception.differentiator },
           ].map((sig) => (
-            <div key={sig.label} className="flex items-center gap-2">
+            <div key={sig.label} className="flex items-baseline gap-2">
               <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
                 {sig.label}
               </span>
-              <span
-                className={`text-[11px] font-semibold ${
-                  sig.value.startsWith("None") || sig.value.startsWith("Not") || sig.value.startsWith("General")
-                    ? "text-rose-600 dark:text-rose-400"
-                    : "text-foreground"
-                }`}
-              >
+              <span className={`text-[12px] font-semibold ${signalValueStyle(sig.value)}`}>
                 {sig.value}
               </span>
             </div>
@@ -394,254 +225,68 @@ export function PerceptionClient() {
         </div>
       </div>
 
-      {/* ── Issues ───────────────────────────────────────────────────────── */}
-      <div className="py-5 border-b border-border">
-        <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-4">
-          {isSimulated ? "Issues resolved by improved positioning" : "Why this hurts recommendations"}
+      {/* ── What this means ─────────────────────────────────────────────────── */}
+      <div className="py-8 border-b border-border">
+        <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-6">
+          What this means
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0 divide-y sm:divide-y-0">
-          {ISSUES.map((issue, i) => {
-            const showStatus = isSimulated
-            const statusStyle = STATUS_STYLES[issue.status]
-            return (
-              <div
-                key={issue.label}
-                className={`py-3 ${i > 0 ? "sm:border-t-0" : ""} border-b border-border last:border-b-0 sm:last:border-b-0`}
-              >
-                <div className="flex items-start justify-between gap-3 mb-1">
-                  <p className="text-[12px] font-semibold text-foreground tracking-[-0.01em]">
-                    {issue.label}
-                  </p>
-                  {showStatus && (
-                    <span className={`text-[10px] font-bold shrink-0 ${statusStyle}`}>
-                      {STATUS_LABELS[issue.status]}
-                    </span>
-                  )}
-                </div>
-                <p className="text-[11px] text-zinc-500 leading-snug">
-                  {isSimulated && issue.status !== "unresolved"
-                    ? issue.improvement
-                    : issue.detail}
+
+        <div className="flex flex-col gap-5">
+          {observations.map((obs, i) => (
+            <div key={i} className="flex items-start gap-4">
+              <span className="text-[11px] font-bold tabular-nums text-zinc-300 dark:text-zinc-600 w-4 shrink-0 mt-[2px]">
+                {i + 1}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[14px] font-semibold text-foreground leading-snug tracking-[-0.01em] mb-1">
+                  {obs.headline}
+                </p>
+                <p className="text-[13px] text-zinc-500 leading-relaxed max-w-[60ch]">
+                  {obs.body}
                 </p>
               </div>
-            )
-          })}
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* ── Recommendation likelihood ────────────────────────────────────── */}
-      <div className="py-5 border-b border-border">
-        <div className="flex items-baseline justify-between gap-4 mb-4">
+      {/* ── How each model sees you ──────────────────────────────────────────── */}
+      <div className="py-8 border-b border-border">
+        <div className="flex items-baseline justify-between mb-5">
           <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
-            Recommendation likelihood
+            How each model sees you
           </p>
-          <p className="text-[11px] text-zinc-400">
-            Estimated probability AI models recommend you per prompt
-          </p>
-        </div>
-
-        {/* Overall stat */}
-        <div className="flex items-end gap-6 mb-4">
-          <div>
-            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-1">
-              Overall
-            </p>
-            <p
-              className={`text-[52px] font-bold tabular-nums leading-none tracking-tight transition-colors duration-300 ${
-                isSimulated
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-zinc-400"
-              }`}
-            >
-              {overallLikelihood}%
-            </p>
-          </div>
-          {!isSimulated && (
-            <div className="pb-2 flex items-center gap-2 text-[11px] text-zinc-400">
-              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                {OVERALL_SIMULATED}%
-              </span>
-              <span>possible with improved positioning</span>
-            </div>
-          )}
           {isSimulated && (
-            <div className="pb-2 flex items-center gap-2 text-[11px] text-zinc-400">
-              <span>
-                up from{" "}
-                <span className="font-semibold text-foreground/50">{OVERALL_CURRENT}%</span>
-              </span>
-              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                +{OVERALL_SIMULATED - OVERALL_CURRENT} pts
-              </span>
-            </div>
+            <span className="text-[11px] text-zinc-400 italic">Projected with improved positioning</span>
           )}
         </div>
 
-        {/* Overall bar */}
-        <div className="h-2 rounded-full bg-foreground/[0.06] overflow-hidden mb-5 max-w-[400px]">
-          <div
-            className={`h-full rounded-full transition-all duration-300 ${
-              isSimulated ? "bg-emerald-500" : "bg-foreground/30"
-            }`}
-            style={{ width: `${overallBar}%` }}
-          />
-        </div>
-
-        {/* Per-prompt table */}
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="text-left py-2 pr-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400">
-                  Prompt
-                </th>
-                <th className="text-right py-2 px-3 text-[9px] font-bold uppercase tracking-widest text-zinc-400 w-[100px] hidden sm:table-cell">
-                  Current
-                </th>
-                <th className="text-right py-2 pl-3 text-[9px] font-bold uppercase tracking-widest text-zinc-400 w-[100px] hidden sm:table-cell">
-                  Simulated
-                </th>
-                <th className="text-right py-2 pl-4 text-[9px] font-bold uppercase tracking-widest text-zinc-400 w-[180px]">
-                  Likelihood
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {PROMPT_LIKELIHOODS.map((p) => {
-                const delta      = p.simulated - p.current
-                const barValue   = isSimulated ? p.simulated : p.current
-                return (
-                  <tr key={p.text} className="border-b border-border hover:bg-zinc-100/40 dark:hover:bg-zinc-900/30 transition-colors duration-150">
-                    <td className="py-3 pr-4">
-                      <p className="text-[11px] font-medium text-foreground/80 leading-snug">
-                        &ldquo;{p.text}&rdquo;
-                      </p>
-                    </td>
-                    <td className="py-3 px-3 text-right hidden sm:table-cell">
-                      <span
-                        className={`text-[12px] font-bold tabular-nums ${
-                          !isSimulated ? "text-foreground" : "text-foreground/35"
-                        }`}
-                      >
-                        {p.current}%
-                      </span>
-                    </td>
-                    <td className="py-3 pl-3 text-right hidden sm:table-cell">
-                      <span
-                        className={`text-[12px] font-bold tabular-nums ${
-                          isSimulated
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : "text-foreground/35"
-                        }`}
-                      >
-                        {p.simulated}%
-                        {isSimulated && (
-                          <span className="text-[10px] font-bold text-emerald-500 ml-1">
-                            +{delta}
-                          </span>
-                        )}
-                      </span>
-                    </td>
-                    <td className="py-3 pl-4">
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-1.5 rounded-full bg-foreground/[0.06] overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-300 ${
-                              barValue >= 60
-                                ? "bg-emerald-500"
-                                : barValue >= 30
-                                ? "bg-amber-400"
-                                : "bg-foreground/30"
-                            }`}
-                            style={{ width: `${barValue}%` }}
-                          />
-                        </div>
-                        <span
-                          className={`text-[11px] font-bold tabular-nums w-8 text-right ${
-                            barValue >= 60
-                              ? "text-emerald-600 dark:text-emerald-400"
-                              : barValue >= 30
-                              ? "text-amber-600 dark:text-amber-400"
-                              : "text-foreground/40"
-                          }`}
-                        >
-                          {barValue}%
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* ── AI model behavior ────────────────────────────────────────────── */}
-      <div className="py-5 border-b border-border">
-        <div className="flex items-baseline justify-between gap-4 mb-3">
-          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
-            AI model behavior
-          </p>
-          <p className="text-[11px] text-zinc-400">
-            How each model interprets your positioning
-          </p>
-        </div>
-
-        {/* Header row */}
-        <div className="hidden md:grid md:grid-cols-[1fr_1fr_80px_80px] gap-4 pb-2 border-b border-border">
-          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">Model</p>
-          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">Prefers</p>
-          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 text-right">Current</p>
-          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 text-right">Simulated</p>
-        </div>
-
-        <div className="divide-y divide-border">
-          {MODEL_BEHAVIOR.map((m) => {
-            const activeStance   = isSimulated ? m.simulated : m.current
-            const inactiveStance = isSimulated ? m.current : m.simulated
+        <div className="flex flex-col divide-y divide-border">
+          {MODELS.map((m) => {
+            const active = isSimulated ? m.simulated : m.current
             return (
-              <div key={m.model} className="py-3">
-                {/* Desktop layout */}
-                <div className="hidden md:grid md:grid-cols-[1fr_1fr_80px_80px] gap-4 items-start">
-                  <div>
-                    <p className="text-[13px] font-semibold text-foreground tracking-[-0.01em]">
-                      {m.model}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] text-zinc-500 leading-snug">{m.prefers}</p>
-                  </div>
-                  <div className="text-right">
-                    <Pill
-                      label={STANCE_LABELS[m.current.stance]}
-                      className={STANCE_STYLES[m.current.stance]}
-                    />
-                  </div>
-                  <div className="text-right">
-                    <Pill
-                      label={STANCE_LABELS[m.simulated.stance]}
-                      className={STANCE_STYLES[m.simulated.stance]}
-                    />
-                  </div>
-                </div>
+              <div key={m.model} className="flex items-start gap-4 py-3.5 first:pt-0 last:pb-0">
 
-                {/* Active note */}
-                <p className="hidden md:block text-[11px] text-zinc-400 leading-snug mt-2 max-w-[55ch]">
-                  {activeStance.note}
-                </p>
+                {/* Model */}
+                <span className="text-[13px] font-semibold text-foreground w-[96px] shrink-0 leading-snug pt-px">
+                  {m.model}
+                </span>
 
-                {/* Mobile layout */}
-                <div className="md:hidden">
-                  <div className="flex items-start justify-between gap-3 mb-1">
-                    <p className="text-[13px] font-semibold text-foreground">{m.model}</p>
-                    <Pill
-                      label={STANCE_LABELS[activeStance.stance]}
-                      className={STANCE_STYLES[activeStance.stance]}
-                    />
-                  </div>
-                  <p className="text-[11px] text-zinc-500 leading-snug mb-1">{m.prefers}</p>
-                  <p className="text-[11px] text-zinc-400 leading-snug">{activeStance.note}</p>
+                {/* Stance */}
+                <span
+                  className={`shrink-0 rounded px-1.5 py-px text-[10px] font-semibold mt-px ${STANCE_BADGE[active.stance]}`}
+                >
+                  {STANCE_LABEL[active.stance]}
+                </span>
+
+                {/* Note + prefers */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12px] text-zinc-500 leading-snug">
+                    {active.note}
+                  </p>
+                  <p className="text-[11px] text-zinc-400 mt-1">
+                    Prefers: {m.prefers}
+                  </p>
                 </div>
               </div>
             )
@@ -649,143 +294,70 @@ export function PerceptionClient() {
         </div>
       </div>
 
-      {/* ── Positioning overlap matrix ────────────────────────────────────── */}
-      <div className="py-5 border-b border-border">
-        <div className="flex items-baseline justify-between gap-4 mb-3">
+      {/* ── Positioning improvements ─────────────────────────────────────────── */}
+      <div className="py-8 border-b border-border">
+        <div className="flex items-baseline justify-between mb-5">
           <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
-            Positioning overlap
+            Suggested language improvements
           </p>
-          <p className="text-[11px] text-zinc-400">
-            {isSimulated
-              ? "Specific positioning reduces your competitive overlap"
-              : "Generic positioning creates overlap in crowded categories"}
-          </p>
+          <Link
+            href="/recommendations"
+            className="text-[11px] text-zinc-400 hover:text-foreground transition-colors duration-150"
+          >
+            See all recommendations →
+          </Link>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="text-left py-2 pr-6 text-[9px] font-bold uppercase tracking-widest text-zinc-400 w-[180px]">
-                  Category
-                </th>
-                {["You", "Notion", "Coda", "Airtable", "Linear"].map((col, i) => (
-                  <th
-                    key={col}
-                    className={`py-2 px-4 text-[9px] font-bold uppercase tracking-widest text-center ${
-                      i === 0
-                        ? isSimulated
-                          ? "text-emerald-600 dark:text-emerald-400"
-                          : "text-foreground"
-                        : "text-zinc-400"
-                    }`}
-                  >
-                    {col}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {matrix.map((row, ri) => {
-                const cells = [
-                  { val: row.you,      isYou: true  },
-                  { val: row.notion,   isYou: false },
-                  { val: row.coda,     isYou: false },
-                  { val: row.airtable, isYou: false },
-                  { val: row.linear,   isYou: false },
-                ]
-                // In simulated mode, highlight "engineering teams" row
-                const isUnique = isSimulated && row.category === "Engineering teams"
-                return (
-                  <tr
-                    key={`${mode}-${ri}`}
-                    className={`border-b border-border ${isUnique ? "bg-emerald-500/[0.03]" : ""}`}
-                  >
-                    <td className="py-3 pr-6">
-                      <span
-                        className={`text-[11px] font-medium ${
-                          isUnique
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : "text-foreground/70"
-                        }`}
-                      >
-                        {row.category}
-                        {isUnique && (
-                          <span className="ml-2 text-[9px] font-bold text-emerald-600/60 dark:text-emerald-400/60 uppercase tracking-widest">
-                            Unique
-                          </span>
-                        )}
-                      </span>
-                    </td>
-                    {cells.map((cell, ci) => (
-                      <td key={ci} className="py-3 px-4 text-center">
-                        <OverlapDot active={cell.val} isYou={cell.isYou} />
-                      </td>
-                    ))}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        <div className="flex flex-col gap-5">
+          {REWRITES.map((rw) => (
+            <div key={rw.label} className="flex flex-col gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                {rw.label}
+              </p>
 
-        {isSimulated && (
-          <p className="mt-3 text-[11px] text-zinc-400 leading-snug">
-            With specific positioning, you exit the crowded general productivity category and claim engineering teams as a primary segment. Only Linear serves this audience, targeting a different workflow.
-          </p>
-        )}
-      </div>
-
-      {/* ── Suggested positioning rewrites ───────────────────────────────── */}
-      <div className="py-5">
-        <div className="flex items-baseline justify-between gap-4 mb-4">
-          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
-            Suggested positioning rewrites
-          </p>
-          <p className="text-[11px] text-zinc-400">
-            Copy suggestions optimized for AI recommendation indexes
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-0">
-          {REWRITES.map((r, i) => (
-            <div
-              key={r.type}
-              className={`py-4 ${i > 0 ? "border-t border-border" : ""}`}
-            >
-              <div className="flex items-center gap-2 mb-3">
-                <p className="text-[11px] font-semibold text-foreground/70">{r.type}</p>
-                <Pill label={r.impact} className={IMPACT_STYLES[r.impact]} />
+              {/* Before */}
+              <div className="flex items-start gap-3">
+                <span className="text-[10px] font-semibold text-zinc-400 w-8 shrink-0 pt-[3px]">
+                  Before
+                </span>
+                <p className="text-[13px] text-zinc-400 italic leading-snug line-through decoration-zinc-300 dark:decoration-zinc-600">
+                  &ldquo;{rw.before}&rdquo;
+                </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {/* Current */}
-                <div className="rounded bg-foreground/[0.025] px-3.5 py-3">
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-rose-500/60 mb-2">
-                    Current
-                  </p>
-                  <p className="text-[12px] text-zinc-400 leading-relaxed italic">
-                    {r.current}
-                  </p>
-                </div>
-
-                {/* Improved */}
-                <div className="rounded bg-emerald-500/[0.04] px-3.5 py-3">
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-600/60 dark:text-emerald-400/60 mb-2">
-                    Suggested
-                  </p>
-                  <p className="text-[12px] text-foreground/80 leading-relaxed font-medium">
-                    {r.improved}
-                  </p>
-                </div>
+              {/* After */}
+              <div className="flex items-start gap-3">
+                <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 w-8 shrink-0 pt-[3px]">
+                  After
+                </span>
+                <p className="text-[13px] font-semibold text-foreground leading-snug">
+                  &ldquo;{rw.after}&rdquo;
+                </p>
               </div>
 
-              <p className="mt-2.5 text-[11px] text-zinc-400 leading-snug max-w-[65ch]">
-                {r.note}
+              {/* Note */}
+              <p className="text-[11px] text-zinc-400 leading-relaxed ml-11 max-w-[55ch]">
+                {rw.note}
               </p>
             </div>
           ))}
         </div>
+      </div>
+
+      {/* ── Footer ──────────────────────────────────────────────────────────── */}
+      <div className="pt-6 flex items-center gap-5">
+        <Link
+          href="/recommendations"
+          className="text-[12px] font-semibold text-foreground hover:text-foreground/70 transition-colors duration-150"
+        >
+          View all recommendations →
+        </Link>
+        <Link
+          href="/research"
+          className="text-[12px] text-zinc-400 hover:text-foreground transition-colors duration-150"
+        >
+          Deeper analysis in Research
+        </Link>
       </div>
 
     </div>
