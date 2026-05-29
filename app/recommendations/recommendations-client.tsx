@@ -970,14 +970,14 @@ function Drawer({
           <>
             <button
               onClick={() => onStatusChange("done")}
-              className="btn-cavro-primary rounded-md px-4 py-2 text-[12px] font-semibold text-primary-foreground"
+              className="btn-kaelor-primary rounded-md px-4 py-2 text-[12px] font-semibold text-primary-foreground"
             >
               Mark done
             </button>
             {status === "pending" && (
               <button
                 onClick={() => onStatusChange("in-progress")}
-                className="btn-cavro-secondary rounded-md border border-border px-4 py-2 text-[12px] font-medium text-foreground/70 hover:text-foreground transition-colors duration-150"
+                className="btn-kaelor-secondary rounded-md border border-border px-4 py-2 text-[12px] font-medium text-foreground/70 hover:text-foreground transition-colors duration-150"
               >
                 Start
               </button>
@@ -986,7 +986,7 @@ function Drawer({
         ) : (
           <button
             onClick={() => onStatusChange("pending")}
-            className="btn-cavro-secondary rounded-md border border-border px-4 py-2 text-[12px] font-medium text-foreground/70 hover:text-foreground transition-colors duration-150"
+            className="btn-kaelor-secondary rounded-md border border-border px-4 py-2 text-[12px] font-medium text-foreground/70 hover:text-foreground transition-colors duration-150"
           >
             Reopen
           </button>

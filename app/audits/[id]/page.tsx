@@ -398,7 +398,7 @@ type Props = { params: Promise<{ id: string }> }
 
 export async function generateMetadata({ params }: Props) {
   const { id } = await params
-  return { title: `Audit ${id} — Cavro AI` }
+  return { title: `Audit ${id} — Kaelor AI` }
 }
 
 export default async function AuditResultPage({ params }: Props) {
@@ -431,7 +431,7 @@ export default async function AuditResultPage({ params }: Props) {
           </Link>
           <Link
             href="/audits/new"
-            className="btn-cavro-primary rounded-md px-3.5 text-[12px] font-semibold text-primary-foreground"
+            className="btn-kaelor-primary rounded-md px-3.5 text-[12px] font-semibold text-primary-foreground"
           >
             Run new audit
           </Link>
@@ -922,7 +922,7 @@ export default async function AuditResultPage({ params }: Props) {
       <div className="flex items-center gap-2.5 py-4 border-t border-border mt-2">
         <Link
           href="/recommendations"
-          className="btn-cavro-primary rounded-md px-4 text-[12px] font-semibold text-primary-foreground"
+          className="btn-kaelor-primary rounded-md px-4 text-[12px] font-semibold text-primary-foreground"
         >
           View all recommendations
         </Link>

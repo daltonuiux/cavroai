@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { ResearchClient } from "./research-client"
 
-export const metadata: Metadata = { title: "Research — Cavro AI" }
+export const metadata: Metadata = { title: "Research — Kaelor AI" }
 
 type Props = {
   searchParams: Promise<{ tab?: string }>

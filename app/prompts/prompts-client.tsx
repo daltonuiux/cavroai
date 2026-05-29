@@ -519,7 +519,7 @@ export function PromptsClient() {
         </div>
         <button
           disabled
-          className="shrink-0 btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="shrink-0 btn-kaelor-secondary rounded-md border px-3.5 text-[12px] font-medium text-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Add prompt
         </button>
@@ -780,7 +780,7 @@ export function PromptsClient() {
         </div>
         <button
           disabled
-          className="shrink-0 btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="shrink-0 btn-kaelor-secondary rounded-md border px-3.5 text-[12px] font-medium text-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Add prompt
         </button>

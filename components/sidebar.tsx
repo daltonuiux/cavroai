@@ -68,7 +68,7 @@ export function Sidebar() {
       >
         <Image
           src="/logo.svg"
-          alt="Cavro AI"
+          alt="Kaelor AI"
           width={88}
           height={16}
           priority

@@ -16,7 +16,7 @@ function getTitle(pathname: string): string {
       return title
     }
   }
-  return "Cavro AI"
+  return "Kaelor AI"
 }
 
 export function Topbar() {

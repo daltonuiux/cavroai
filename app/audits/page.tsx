@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 
-export const metadata: Metadata = { title: "Audits — Cavro AI" }
+export const metadata: Metadata = { title: "Audits — Kaelor AI" }
 
 // ---------------------------------------------------------------------------
 // Mock data
@@ -80,7 +80,7 @@ export default function AuditsPage() {
         </div>
         <Link
           href="/audits/new"
-          className="shrink-0 btn-cavro-primary rounded-md px-3.5 text-[12px] font-semibold text-primary-foreground"
+          className="shrink-0 btn-kaelor-primary rounded-md px-3.5 text-[12px] font-semibold text-primary-foreground"
         >
           Run new audit
         </Link>
@@ -126,7 +126,7 @@ export default function AuditsPage() {
               <div className="ml-auto flex items-center gap-3">
                 <Link
                   href={`/audits/${latest.id}`}
-                  className="btn-cavro-primary rounded-md px-3.5 text-[12px] font-semibold text-primary-foreground"
+                  className="btn-kaelor-primary rounded-md px-3.5 text-[12px] font-semibold text-primary-foreground"
                 >
                   View results
                 </Link>
@@ -192,7 +192,7 @@ export default function AuditsPage() {
         </div>
         <Link
           href="/audits/new"
-          className="shrink-0 btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-foreground/60"
+          className="shrink-0 btn-kaelor-secondary rounded-md border px-3.5 text-[12px] font-medium text-foreground/60"
         >
           Run new audit
         </Link>

@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 
-export const metadata: Metadata = { title: "Settings — Cavro AI" }
+export const metadata: Metadata = { title: "Settings — Kaelor AI" }
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -33,7 +33,7 @@ function SettingRow({
         {value}
         <button
           disabled
-          className="btn-cavro-secondary rounded-md border px-2.5 text-[11px] font-medium text-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="btn-kaelor-secondary rounded-md border px-2.5 text-[11px] font-medium text-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Edit
         </button>
@@ -61,10 +61,10 @@ export default function SettingsPage() {
       {/* Company */}
       <section>
         <SectionLabel>Company</SectionLabel>
-        <div className="card-cavro rounded-md divide-y divide-border overflow-hidden">
+        <div className="card-kaelor rounded-md divide-y divide-border overflow-hidden">
           <SettingRow
             label="Company URL"
-            sublabel="The primary URL Cavro AI audits against AI assistants"
+            sublabel="The primary URL Kaelor AI audits against AI assistants"
             value={<span className="text-[12px] font-mono text-zinc-500">acme.com</span>}
           />
           <SettingRow
@@ -74,7 +74,7 @@ export default function SettingsPage() {
           />
           <SettingRow
             label="Product category"
-            sublabel="Helps Cavro AI select relevant buyer prompts"
+            sublabel="Helps Kaelor AI select relevant buyer prompts"
             value={<span className="text-[12px] text-zinc-500">Knowledge management</span>}
           />
         </div>
@@ -83,7 +83,7 @@ export default function SettingsPage() {
       {/* Audit preferences */}
       <section>
         <SectionLabel>Audit preferences</SectionLabel>
-        <div className="card-cavro rounded-md divide-y divide-border overflow-hidden">
+        <div className="card-kaelor rounded-md divide-y divide-border overflow-hidden">
 
           <div className="flex items-start justify-between gap-4 px-4 py-3">
             <div className="min-w-0">
@@ -108,7 +108,7 @@ export default function SettingsPage() {
             <div className="min-w-0">
               <p className="text-[13px] font-medium text-foreground">Audit frequency</p>
               <p className="mt-0.5 text-[11px] text-zinc-500">
-                How often Cavro AI runs automatic audits
+                How often Kaelor AI runs automatic audits
               </p>
             </div>
             <span className="text-[12px] text-zinc-500">Bi-weekly</span>
@@ -120,7 +120,7 @@ export default function SettingsPage() {
       {/* Account */}
       <section>
         <SectionLabel>Account</SectionLabel>
-        <div className="card-cavro rounded-md px-4 py-3">
+        <div className="card-kaelor rounded-md px-4 py-3">
           <p className="text-[12px] text-muted-foreground">
             Billing, team members, and API access coming soon.
           </p>

@@ -130,8 +130,8 @@
 }
 
 @layer utilities {
-  /* ── Cavro primary button ── */
-  .btn-cavro-primary {
+  /* ── Kaelor primary button ── */
+  .btn-kaelor-primary {
     height: 2rem;
     display: inline-flex;
     align-items: center;
@@ -140,15 +140,17 @@
     border-color: #052e16;
     box-shadow: 0 1px 1px 0 rgba(2, 39, 61, 0.08), 0 1px 0.5px 0 rgba(255, 255, 255, 0.12) inset;
   }
-  .btn-cavro-primary:hover:not(:disabled) {
-    background: linear-gradient(180deg, #15803d 0%, #166534 50%, #14532d 100%);
-  }
-  .btn-cavro-primary:active:not(:disabled) {
-    background: linear-gradient(180deg, #14532d 0%, #052e16 100%);
+.btn-kaelor-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #5B5B66 0%, #484852 50%, #303036 100%);
+}
+
+.btn-kaelor-primary:active:not(:disabled) {
+  background: linear-gradient(180deg, #3F3F46 0%, #2F2F35 100%);
+}
   }
 
-  /* ── Cavro secondary button ── */
-  .btn-cavro-secondary {
+  /* ── Kaelor secondary button ── */
+  .btn-kaelor-secondary {
     height: 2rem;
     display: inline-flex;
     align-items: center;
@@ -157,23 +159,23 @@
     border-color: rgba(24, 24, 27, 0.12);
     box-shadow: 0 1px 1px 0 rgba(0, 0, 0, 0.04);
   }
-  .btn-cavro-secondary:hover:not(:disabled) {
+  .btn-kaelor-secondary:hover:not(:disabled) {
     background: #FAFAFA;
     border-color: rgba(24, 24, 27, 0.18);
   }
-  .btn-cavro-secondary:active:not(:disabled) {
+  .btn-kaelor-secondary:active:not(:disabled) {
     background: #F4F4F5;
   }
 
-  /* ── Cavro card ── */
-  .card-cavro {
+  /* ── Kaelor card ── */
+  .card-kaelor {
     border: 1px solid rgba(24, 24, 27, 0.12);
     box-shadow: 0 1px 1px 0 rgba(0, 0, 0, 0.04);
     background: #FFFFFF;
   }
 
-  /* ── Cavro input ── */
-  .input-cavro {
+  /* ── Kaelor input ── */
+  .input-kaelor {
     border-radius: 8px;
     border: 1px solid rgba(24, 24, 27, 0.12);
     background: #FFFFFF;
@@ -184,28 +186,28 @@
     width: 100%;
     transition: border-color 0.1s;
   }
-  .input-cavro:focus {
+  .input-kaelor:focus {
     border-color: rgba(24, 24, 27, 0.3);
   }
 
   /* Dark mode overrides */
-  .dark .input-cavro {
+  .dark .input-kaelor {
     background: oklch(0.269 0 0);
     border-color: oklch(1 0 0 / 12%);
   }
-  .dark .btn-cavro-secondary {
+  .dark .btn-kaelor-secondary {
     background: oklch(0.269 0 0);
     border-color: oklch(1 0 0 / 12%);
     box-shadow: 0 1px 1px 0 rgba(0, 0, 0, 0.12);
   }
-  .dark .btn-cavro-secondary:hover:not(:disabled) {
+  .dark .btn-kaelor-secondary:hover:not(:disabled) {
     background: oklch(0.3 0 0);
     border-color: oklch(1 0 0 / 18%);
   }
-  .dark .btn-cavro-secondary:active:not(:disabled) {
+  .dark .btn-kaelor-secondary:active:not(:disabled) {
     background: oklch(0.24 0 0);
   }
-  .dark .card-cavro {
+  .dark .card-kaelor {
     border-color: oklch(1 0 0 / 10%);
     background: oklch(0.205 0 0);
     box-shadow: 0 1px 1px 0 rgba(0, 0, 0, 0.12);

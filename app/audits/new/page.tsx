@@ -87,7 +87,7 @@ function Input({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="input-cavro placeholder:text-zinc-400 text-foreground"
+      className="input-kaelor placeholder:text-zinc-400 text-foreground"
     />
   )
 }
@@ -109,7 +109,7 @@ function Textarea({
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       rows={rows}
-      className="input-cavro resize-none placeholder:text-zinc-400 text-foreground"
+      className="input-kaelor resize-none placeholder:text-zinc-400 text-foreground"
     />
   )
 }
@@ -129,7 +129,7 @@ function Select({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="input-cavro text-foreground"
+      className="input-kaelor text-foreground"
     >
       {placeholder && (
         <option value="" disabled>
@@ -211,7 +211,7 @@ function Step1({
         Tell us about your company
       </h2>
       <p className="text-[12px] text-muted-foreground mb-6">
-        This is the company Cavro AI will audit against AI assistants.
+        This is the company Kaelor AI will audit against AI assistants.
       </p>
 
       <div className="flex flex-col gap-4">
@@ -253,7 +253,7 @@ function Step1({
             rows={4}
           />
           <p className="mt-1.5 text-[11px] text-zinc-400">
-            This becomes the baseline Cavro AI audits against. Be specific.
+            This becomes the baseline Kaelor AI audits against. Be specific.
           </p>
         </div>
       </div>
@@ -262,7 +262,7 @@ function Step1({
         <button
           onClick={onNext}
           disabled={!valid}
-          className="btn-cavro-primary rounded-md px-4 text-[13px] font-semibold text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed"
+          className="btn-kaelor-primary rounded-md px-4 text-[13px] font-semibold text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Continue →
         </button>
@@ -311,7 +311,7 @@ function Step2({
         Who are your competitors?
       </h2>
       <p className="text-[12px] text-muted-foreground mb-6">
-        Cavro AI will compare how AI assistants position you against each one. Add up to 5.
+        Kaelor AI will compare how AI assistants position you against each one. Add up to 5.
       </p>
 
       <div className="flex flex-col gap-2.5">
@@ -352,14 +352,14 @@ function Step2({
       <div className="mt-8 flex justify-between">
         <button
           onClick={onBack}
-          className="btn-cavro-secondary rounded-md border px-4 text-[13px] font-medium text-foreground/70"
+          className="btn-kaelor-secondary rounded-md border px-4 text-[13px] font-medium text-foreground/70"
         >
           ← Back
         </button>
         <button
           onClick={onNext}
           disabled={!valid}
-          className="btn-cavro-primary rounded-md px-4 text-[13px] font-semibold text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed"
+          className="btn-kaelor-primary rounded-md px-4 text-[13px] font-semibold text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Continue →
         </button>
@@ -477,14 +477,14 @@ function Step3({
       <div className="mt-8 flex justify-between">
         <button
           onClick={onBack}
-          className="btn-cavro-secondary rounded-md border px-4 text-[13px] font-medium text-foreground/70"
+          className="btn-kaelor-secondary rounded-md border px-4 text-[13px] font-medium text-foreground/70"
         >
           ← Back
         </button>
         <button
           onClick={onNext}
           disabled={!valid}
-          className="btn-cavro-primary rounded-md px-4 text-[13px] font-semibold text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed"
+          className="btn-kaelor-primary rounded-md px-4 text-[13px] font-semibold text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Continue →
         </button>
@@ -516,10 +516,10 @@ function Step4({
         Review your audit
       </h2>
       <p className="text-[12px] text-muted-foreground mb-6">
-        Confirm the details below then generate your AI Recommendation Audit.
+        Confirm the details below then run your AI Visibility Audit.
       </p>
 
-      <div className="card-cavro rounded-md divide-y divide-border overflow-hidden">
+      <div className="card-kaelor rounded-md divide-y divide-border overflow-hidden">
 
         {/* Company */}
         <div className="px-4 py-3.5">
@@ -584,13 +584,13 @@ function Step4({
       <div className="mt-8 flex justify-between">
         <button
           onClick={onBack}
-          className="btn-cavro-secondary rounded-md border px-4 text-[13px] font-medium text-foreground/70"
+          className="btn-kaelor-secondary rounded-md border px-4 text-[13px] font-medium text-foreground/70"
         >
           ← Back
         </button>
         <button
           onClick={onGenerate}
-          className="btn-cavro-primary rounded-md px-5 text-[13px] font-semibold text-primary-foreground"
+          className="btn-kaelor-primary rounded-md px-5 text-[13px] font-semibold text-primary-foreground"
         >
           Generate Audit
         </button>
@@ -716,7 +716,7 @@ export default function NewAuditPage() {
     timers.push(
       setTimeout(() => {
         try {
-          localStorage.setItem(`cavro_audit_${audit.id}`, JSON.stringify(audit))
+          localStorage.setItem(`kaelor_audit_${audit.id}`, JSON.stringify(audit))
         } catch {
           // localStorage unavailable — continue anyway
         }
@@ -744,7 +744,7 @@ export default function NewAuditPage() {
         )}
 
         {/* Form card */}
-        <div className="card-cavro rounded-md px-6 py-6">
+        <div className="card-kaelor rounded-md px-6 py-6">
           {step === 1 && (
             <Step1
               form={form}

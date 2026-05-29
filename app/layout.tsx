@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Cavro AI",
+  title: "Kaelor AI",
   description: "AI Recommendation Optimizer — understand how AI assistants perceive and recommend your company.",
 };
 

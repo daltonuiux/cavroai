@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 
-export const metadata: Metadata = { title: "Competitors — Cavro AI" }
+export const metadata: Metadata = { title: "Competitors — Kaelor AI" }
 
 // ---------------------------------------------------------------------------
 // Mock data
@@ -96,7 +96,7 @@ export default function CompetitorsPage() {
         </div>
         <button
           disabled
-          className="shrink-0 btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="shrink-0 btn-kaelor-secondary rounded-md border px-3.5 text-[12px] font-medium text-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Add competitor
         </button>
@@ -245,12 +245,12 @@ export default function CompetitorsPage() {
         <div>
           <p className="text-[12px] font-semibold text-zinc-600 dark:text-zinc-400">Track another competitor</p>
           <p className="text-[11px] text-zinc-400 mt-0.5">
-            Add up to 10 competitors. Cavro AI will include them in every audit run.
+            Add up to 10 competitors. Kaelor AI will include them in every audit run.
           </p>
         </div>
         <button
           disabled
-          className="shrink-0 btn-cavro-secondary rounded-md border px-3.5 text-[12px] font-medium text-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="shrink-0 btn-kaelor-secondary rounded-md border px-3.5 text-[12px] font-medium text-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Add competitor
         </button>

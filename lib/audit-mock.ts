@@ -1,3 +1,19 @@
+/**
+ * MOCK DATA — TEMPORARY
+ *
+ * This file generates realistic-looking audit results entirely client-side
+ * using a seeded hash. It exists so the frontend is fully functional before
+ * the real backend is built.
+ *
+ * TODO (Johan): once POST /api/audits/run and GET /api/audits/[id] return
+ * real data, the frontend (app/audits/new/page.tsx and app/audits/[id]/page.tsx)
+ * should be updated to call those routes instead of this generator.
+ *
+ * TODO (Luke): the AuditResult type defined here is the source of truth for
+ * the data shape the frontend understands. Copy it to types/index.ts (or
+ * re-export it from there) once Johan's API returns the same shape.
+ */
+
 // ---------------------------------------------------------------------------
 // Audit types
 // ---------------------------------------------------------------------------
