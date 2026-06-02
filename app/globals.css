@@ -140,13 +140,12 @@
     border-color: #052e16;
     box-shadow: 0 1px 1px 0 rgba(2, 39, 61, 0.08), 0 1px 0.5px 0 rgba(255, 255, 255, 0.12) inset;
   }
-.btn-kaelor-primary:hover:not(:disabled) {
-  background: linear-gradient(180deg, #5B5B66 0%, #484852 50%, #303036 100%);
-}
+  .btn-kaelor-primary:hover:not(:disabled) {
+    background: linear-gradient(180deg, #5B5B66 0%, #484852 50%, #303036 100%);
+  }
 
-.btn-kaelor-primary:active:not(:disabled) {
-  background: linear-gradient(180deg, #3F3F46 0%, #2F2F35 100%);
-}
+  .btn-kaelor-primary:active:not(:disabled) {
+    background: linear-gradient(180deg, #3F3F46 0%, #2F2F35 100%);
   }
 
   /* ── Kaelor secondary button ── */
