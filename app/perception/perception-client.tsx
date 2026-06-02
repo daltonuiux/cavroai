@@ -1,371 +1,296 @@
-"use client"
-
-import { useState } from "react"
 import Link from "next/link"
+import { RefreshCw, ArrowRight } from "lucide-react"
 import { ModelIcon } from "@/components/model-icon"
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type Mode   = "current" | "simulated"
-type Stance = "strong" | "developing" | "weak" | "neutral"
+type Stance = "favorable" | "neutral" | "weak"
 
 // ---------------------------------------------------------------------------
-// Data
+// Design tokens for stance badges
+// Figma: Favorable = lime/100+lime/600, Neutral = stone/100+stone/600,
+//        Weak = red/100+red/600
 // ---------------------------------------------------------------------------
 
-const PERCEPTION = {
-  current: {
-    statement:    "AI models understand your company as a flexible productivity workspace, but struggle to identify strong differentiation.",
-    summary:      "Your positioning overlaps with dozens of general tools — Notion, Coda, Airtable, and others. Without a specific category claim or defined buyer, AI models default to mentioning you as an alternative rather than recommending you first.",
-    icp:          "Not defined",
-    category:     "General productivity",
-    differentiator: "None indexed",
-  },
-  simulated: {
-    statement:    "AI models identify your company as the structured knowledge base for async engineering teams, with a clear technical differentiator.",
-    summary:      "A specific category claim with a defined buyer and a quotable mechanism. AI models can match this positioning to engineering team prompts and cite version control as a unique capability — separating you from general productivity tools.",
-    icp:          "Async engineering teams",
-    category:     "Structured knowledge management",
-    differentiator: "Git-level version control",
-  },
+const STANCE_BADGE: Record<Stance, { bg: string; color: string; label: string }> = {
+  favorable: { bg: "#ecfccb", color: "#65a30d", label: "Favorable" },
+  neutral:   { bg: "#f5f5f4", color: "#57534e", label: "Neutral"   },
+  weak:      { bg: "#fee2e2", color: "#dc2626", label: "Weak"      },
 }
 
-const OBSERVATIONS = {
-  current: [
-    {
-      headline: "You're invisible in high-intent searches",
-      body:     "Buyers searching for tools built for engineering teams or async documentation don't see you recommended first. Your positioning doesn't match those specific prompts.",
-    },
-    {
-      headline: "AI models have nothing quotable to cite",
-      body:     "Without a concrete differentiator, models describe you in the same generic language as competitors. There's no specific claim to anchor a recommendation on.",
-    },
-    {
-      headline: "Flexibility reads as undifferentiated",
-      body:     "\"Flexible workspace for any team\" signals a broad tool to AI models — a reason to mention you as an option, not a reason to recommend you over a specialist.",
-    },
-  ],
-  simulated: [
-    {
-      headline: "You own a defensible category",
-      body:     "Structured knowledge management is specific enough for AI models to match you to buyer-intent queries. The category creates a clear, citable slot in their reasoning.",
-    },
-    {
-      headline: "Engineering teams is a quotable ICP",
-      body:     "A defined buyer gives every recommendation context. AI models now have a specific reason to surface you for engineering prompts rather than defaulting to general alternatives.",
-    },
-    {
-      headline: "Version control is a concrete mechanism",
-      body:     "Git-level version control is a claim AI models can reproduce directly in a recommendation. It separates you from Notion and Confluence without requiring a comparison chart.",
-    },
-  ],
-}
+// ---------------------------------------------------------------------------
+// Mock data — AI Model Summary
+// ---------------------------------------------------------------------------
 
-interface ModelData {
-  model:     string
-  prefers:   string
-  current:   { stance: Stance; note: string }
-  simulated: { stance: Stance; note: string }
-}
-
-const MODELS: ModelData[] = [
+const MODEL_SUMMARY = [
   {
-    model:     "ChatGPT",
-    prefers:   "Structured category clarity and comparison pages",
-    current:   { stance: "weak",    note: "Describes you as a generic workspace. Cites Notion first in most knowledge management prompts." },
-    simulated: { stance: "strong",  note: "Clear category language gives a strong signal for engineering team prompts." },
+    model:      "ChatGPT",
+    stance:     "neutral"   as Stance,
+    score:      62,
+    citations:  12,
+    sentiment:  "Mixed",
   },
   {
-    model:     "Claude",
-    prefers:   "Technical specificity and clearly defined ICPs",
-    current:   { stance: "weak",       note: "Lists you as an alternative without specific reasoning. No differentiators to surface." },
-    simulated: { stance: "strong",     note: "Technical differentiation aligns well with Claude's preference for specific mechanisms." },
+    model:      "Claude",
+    stance:     "favorable" as Stance,
+    score:      71,
+    citations:  18,
+    sentiment:  "Positive",
   },
   {
-    model:     "Perplexity",
-    prefers:   "Indexed trust signals and named customer references",
-    current:   { stance: "weak",       note: "Rarely cites you. Insufficient proof points and trust signals indexed." },
-    simulated: { stance: "developing", note: "Positioning improves signal, but Perplexity also needs indexed customer proof pages." },
+    model:      "Perplexity",
+    stance:     "weak"      as Stance,
+    score:      48,
+    citations:  7,
+    sentiment:  "Neutral",
   },
   {
-    model:     "Gemini",
-    prefers:   "Pricing transparency paired with category clarity",
-    current:   { stance: "neutral",    note: "Surfaces you occasionally through visible pricing. Generic positioning reduces confidence." },
-    simulated: { stance: "developing", note: "Category clarity combined with visible pricing is a strong signal combination." },
-  },
-]
-
-const REWRITES = [
-  {
-    label:  "Homepage headline",
-    before: "A flexible workspace for any team",
-    after:  "The structured knowledge base for async engineering teams",
-    note:   "Category + ICP in one sentence. AI models can match this directly to buyer prompts.",
-  },
-  {
-    label:  "Page title tag",
-    before: "YourProduct — Flexible workspace for teams",
-    after:  "YourProduct — Structured Knowledge Base for Engineering Teams",
-    note:   "Claude and ChatGPT index page titles. Including category and ICP improves match confidence.",
-  },
-  {
-    label:  "Product description",
-    before: "Organize everything your team works on in one place",
-    after:  "Git-level version control for team knowledge — built for async engineering teams",
-    note:   "The differentiator leads, the ICP follows. A sentence AI models can quote directly.",
+    model:      "Gemini",
+    stance:     "neutral"   as Stance,
+    score:      55,
+    citations:  9,
+    sentiment:  "Mixed",
   },
 ]
 
 // ---------------------------------------------------------------------------
-// Styles
+// Mock data — per-model deep dive cards
 // ---------------------------------------------------------------------------
 
-const STANCE_BADGE: Record<Stance, string> = {
-  strong:     "bg-emerald-500/[0.09] text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-500/20",
-  developing: "bg-amber-500/[0.09] text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-500/20",
-  neutral:    "bg-zinc-100 dark:bg-zinc-800/70 text-zinc-500 dark:text-zinc-400",
-  weak:       "bg-rose-500/[0.09] text-rose-700 dark:text-rose-300 ring-1 ring-inset ring-rose-500/20",
-}
+const MODEL_CARDS = [
+  {
+    model:       "ChatGPT",
+    stance:      "neutral" as Stance,
+    description: "Mentions you as an alternative, not a primary recommendation.",
+    query:       "\"What’s a good knowledge management tool for engineering teams?\"",
+    response:    "You could try alternatives like Notion, Confluence, or Slab. Some smaller players like your brand also exist in this space.",
+    queries:     [
+      "Knowledge management for engineering teams",
+      "Notion alternatives for async teams",
+      "Best wiki for technical docs",
+    ],
+  },
+  {
+    model:       "Claude",
+    stance:      "favorable" as Stance,
+    description: "Surfaces you for engineering-team prompts with good confidence.",
+    query:       "\"Best knowledge base tool for async engineering teams?\"",
+    response:    "For engineering-team prompts, your brand is well-positioned with strong async workflows. Notion remains the broader choice for mixed teams.",
+    queries:     [
+      "Async knowledge base for engineering",
+      "Engineering documentation tools",
+      "Technical wiki for distributed teams",
+    ],
+  },
+  {
+    model:       "Perplexity",
+    stance:      "weak" as Stance,
+    description: "Insufficient indexed trust signals to cite you confidently.",
+    query:       "\"What knowledge management tools do engineering teams use?\"",
+    response:    "Popular options include Notion, Confluence, and GitBook. Pricing and team-size details vary — check vendor sites.",
+    queries:     [
+      "Knowledge tools for engineering teams",
+      "Wiki software comparison",
+      "Tools like Notion",
+    ],
+  },
+  {
+    model:       "Gemini",
+    stance:      "neutral" as Stance,
+    description: "Appears occasionally — pricing clarity helps, positioning does not.",
+    query:       "\"Recommend an async-friendly documentation tool.\"",
+    response:    "A few options stand out: Notion, your brand, and Slab. Compare based on pricing and team size.",
+    queries:     [
+      "Async documentation tools",
+      "Team wiki recommendation",
+      "Documentation for remote teams",
+    ],
+  },
+]
 
-const STANCE_LABEL: Record<Stance, string> = {
-  strong:     "Strong",
-  developing: "Developing",
-  neutral:    "Neutral",
-  weak:       "Weak",
-}
+const LAST_UPDATED = "May 6, 2026"
 
-function signalValueStyle(value: string) {
-  if (value.startsWith("None") || value.startsWith("Not") || value.startsWith("General")) {
-    return "text-rose-600 dark:text-rose-400"
-  }
-  return "text-foreground"
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
+function StanceBadge({ stance }: { stance: Stance }) {
+  const { bg, color, label } = STANCE_BADGE[stance]
+  return (
+    <span
+      className="rounded px-2 py-1 text-[12px] font-medium leading-none"
+      style={{ backgroundColor: bg, color }}
+    >
+      {label}
+    </span>
+  )
 }
 
 // ---------------------------------------------------------------------------
-// Main export
+// Main export (server component — no "use client" needed)
 // ---------------------------------------------------------------------------
 
 export function PerceptionClient() {
-  const [mode, setMode] = useState<Mode>("current")
-  const isSimulated     = mode === "simulated"
-
-  const perception   = PERCEPTION[mode]
-  const observations = OBSERVATIONS[mode]
-
   return (
-    <div className="flex flex-col w-full">
+    <div className="flex flex-col gap-3">
 
-      {/* ── Hero ────────────────────────────────────────────────────────────── */}
-      <div className="pb-8 border-b border-border">
+      {/* ── Page header ─────────────────────────────────────────────────── */}
+      <div className="mb-3">
+        <h1 className="text-[24px] font-semibold leading-tight text-[#0a0a0a]">
+          Perception
+        </h1>
+        <p className="mt-1 text-[14px] leading-[1.4] text-[#737373]">
+          How each AI model sees and describes your brand.
+        </p>
+      </div>
 
-        {/* Label + toggle in one row */}
-        <div className="flex items-center justify-between mb-6">
-          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
-            AI Perception
-          </p>
+      {/* ── AI Model Summary card ───────────────────────────────────────── */}
+      <div className="card-kaelor flex flex-col gap-10 p-6">
 
-          {/* Subtle mode toggle */}
-          <div className="flex items-center rounded-md border border-border bg-zinc-100/60 dark:bg-zinc-800/40 p-0.5">
-            <button
-              onClick={() => setMode("current")}
-              className={`rounded px-3 py-1.5 text-[11px] font-semibold transition-colors duration-100 ${
-                !isSimulated
-                  ? "bg-background text-foreground"
-                  : "text-zinc-500 hover:text-foreground"
-              }`}
-              style={!isSimulated ? { boxShadow: "0 1px 3px 0 rgba(0,0,0,0.08)" } : undefined}
-            >
-              Current
-            </button>
-            <button
-              onClick={() => setMode("simulated")}
-              className={`rounded px-3 py-1.5 text-[11px] font-semibold transition-colors duration-100 ${
-                isSimulated
-                  ? "bg-background text-emerald-600 dark:text-emerald-400"
-                  : "text-zinc-500 hover:text-foreground"
-              }`}
-              style={isSimulated ? { boxShadow: "0 1px 3px 0 rgba(0,0,0,0.08)" } : undefined}
-            >
-              Improved
-            </button>
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <span className="text-[14px] font-semibold text-[#737373]">
+            AI Model Summary
+          </span>
+          <div className="flex items-center gap-1.5 text-[14px] text-[#737373]">
+            <span>Last updated:</span>
+            <span className="text-[#0a0a0a]">{LAST_UPDATED}</span>
+            <RefreshCw className="size-4 shrink-0" strokeWidth={1.75} />
           </div>
         </div>
 
-        {/* Perception statement */}
-        <p
-          className={`text-[21px] font-semibold italic leading-snug tracking-[-0.02em] mb-4 max-w-[56ch] transition-colors duration-300 ${
-            isSimulated ? "text-foreground" : "text-zinc-500"
-          }`}
-        >
-          &ldquo;{perception.statement}&rdquo;
-        </p>
-
-        {/* Summary */}
-        <p className="text-[13px] text-zinc-500 leading-relaxed max-w-[60ch] mb-6">
-          {perception.summary}
-        </p>
-
-        {/* Signal tags */}
-        <div className="flex flex-wrap items-center gap-6">
-          {[
-            { label: "ICP",            value: perception.icp            },
-            { label: "Category",       value: perception.category       },
-            { label: "Differentiator", value: perception.differentiator },
-          ].map((sig) => (
-            <div key={sig.label} className="flex items-baseline gap-2">
-              <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
-                {sig.label}
-              </span>
-              <span className={`text-[12px] font-semibold ${signalValueStyle(sig.value)}`}>
-                {sig.value}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ── What this means ─────────────────────────────────────────────────── */}
-      <div className="py-8 border-b border-border">
-        <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-6">
-          What this means
-        </p>
-
-        <div className="flex flex-col gap-5">
-          {observations.map((obs, i) => (
-            <div key={i} className="flex items-start gap-4">
-              <span className="text-[11px] font-bold tabular-nums text-zinc-300 dark:text-zinc-600 w-4 shrink-0 mt-[2px]">
-                {i + 1}
-              </span>
-              <div className="flex-1 min-w-0">
-                <p className="text-[14px] font-semibold text-foreground leading-snug tracking-[-0.01em] mb-1">
-                  {obs.headline}
-                </p>
-                <p className="text-[13px] text-zinc-500 leading-relaxed max-w-[60ch]">
-                  {obs.body}
-                </p>
+        {/* 4 model columns */}
+        <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+          {MODEL_SUMMARY.map((m) => (
+            <div
+              key={m.model}
+              className="flex flex-col gap-10 rounded-lg p-4"
+              style={{ backgroundColor: "#f9fafb" }}
+            >
+              {/* Model name + stance badge */}
+              <div className="flex items-center justify-between gap-6">
+                <div className="flex items-center gap-2">
+                  <ModelIcon model={m.model} className="size-4 shrink-0 text-[#0a0a0a]" />
+                  <span className="text-[14px] font-medium text-[#0a0a0a]">{m.model}</span>
+                </div>
+                <StanceBadge stance={m.stance} />
               </div>
-            </div>
-          ))}
-        </div>
-      </div>
 
-      {/* ── How each model sees you ──────────────────────────────────────────── */}
-      <div className="py-8 border-b border-border">
-        <div className="flex items-baseline justify-between mb-5">
-          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
-            How each model sees you
-          </p>
-          {isSimulated && (
-            <span className="text-[11px] text-zinc-400 italic">Projected with improved positioning</span>
-          )}
-        </div>
-
-        <div className="flex flex-col divide-y divide-border">
-          {MODELS.map((m) => {
-            const active = isSimulated ? m.simulated : m.current
-            return (
-              <div key={m.model} className="flex items-start gap-3 py-3.5 first:pt-0 last:pb-0">
-
-                {/* Icon + model name */}
-                <div className="flex items-center gap-2 w-[116px] shrink-0 pt-px">
-                  <ModelIcon
-                    model={m.model}
-                    className="w-[18px] h-[18px] shrink-0 text-foreground/40"
-                  />
-                  <span className="text-[13px] font-semibold text-foreground leading-none">
-                    {m.model}
+              {/* Score + stats */}
+              <div className="flex flex-col gap-4">
+                {/* Score */}
+                <div className="flex items-baseline gap-1 leading-none">
+                  <span
+                    className="text-[32px] font-semibold tabular-nums leading-none"
+                    style={{ color: "#d97706" }}
+                  >
+                    {m.score}
+                  </span>
+                  <span className="text-[16px] font-medium" style={{ color: "#d4d4d4" }}>
+                    /100
                   </span>
                 </div>
 
-                {/* Stance */}
-                <span
-                  className={`shrink-0 rounded px-1.5 py-px text-[10px] font-semibold mt-px ${STANCE_BADGE[active.stance]}`}
-                >
-                  {STANCE_LABEL[active.stance]}
-                </span>
-
-                {/* Note + prefers */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-[12px] text-zinc-500 leading-snug">
-                    {active.note}
-                  </p>
-                  <p className="text-[11px] text-zinc-400 mt-1">
-                    Prefers: {m.prefers}
-                  </p>
+                {/* Citations + Sentiment */}
+                <div className="flex gap-6">
+                  <div>
+                    <p className="text-[16px] font-semibold leading-[1.4] text-[#0a0a0a]">
+                      {m.citations}
+                    </p>
+                    <p className="text-[14px] leading-[1.4] text-[#737373]">Citations</p>
+                  </div>
+                  <div>
+                    <p className="text-[16px] font-semibold leading-[1.4] text-[#0a0a0a]">
+                      {m.sentiment}
+                    </p>
+                    <p className="text-[14px] leading-[1.4] text-[#737373]">Sentiment</p>
+                  </div>
                 </div>
               </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* ── Positioning improvements ─────────────────────────────────────────── */}
-      <div className="py-8 border-b border-border">
-        <div className="flex items-baseline justify-between mb-5">
-          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
-            Suggested language improvements
-          </p>
-          <Link
-            href="/recommendations"
-            className="text-[11px] text-zinc-400 hover:text-foreground transition-colors duration-150"
-          >
-            See all recommendations →
-          </Link>
-        </div>
-
-        <div className="flex flex-col gap-5">
-          {REWRITES.map((rw) => (
-            <div key={rw.label} className="flex flex-col gap-2">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">
-                {rw.label}
-              </p>
-
-              {/* Before */}
-              <div className="flex items-start gap-3">
-                <span className="text-[10px] font-semibold text-zinc-400 w-8 shrink-0 pt-[3px]">
-                  Before
-                </span>
-                <p className="text-[13px] text-zinc-400 italic leading-snug line-through decoration-zinc-300 dark:decoration-zinc-600">
-                  &ldquo;{rw.before}&rdquo;
-                </p>
-              </div>
-
-              {/* After */}
-              <div className="flex items-start gap-3">
-                <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 w-8 shrink-0 pt-[3px]">
-                  After
-                </span>
-                <p className="text-[13px] font-semibold text-foreground leading-snug">
-                  &ldquo;{rw.after}&rdquo;
-                </p>
-              </div>
-
-              {/* Note */}
-              <p className="text-[11px] text-zinc-400 leading-relaxed ml-11 max-w-[55ch]">
-                {rw.note}
-              </p>
             </div>
           ))}
         </div>
       </div>
 
-      {/* ── Footer ──────────────────────────────────────────────────────────── */}
-      <div className="pt-6 flex items-center gap-5">
-        <Link
-          href="/recommendations"
-          className="text-[12px] font-semibold text-foreground hover:text-foreground/70 transition-colors duration-150"
-        >
-          View all recommendations →
-        </Link>
-        <Link
-          href="/research"
-          className="text-[12px] text-zinc-400 hover:text-foreground transition-colors duration-150"
-        >
-          Deeper analysis in Research
-        </Link>
-      </div>
+      {/* ── Per-model detail cards ──────────────────────────────────────── */}
+      {MODEL_CARDS.map((m) => (
+        <div key={m.model} className="card-kaelor flex flex-col gap-8 p-6">
+
+          {/* Card header: model + stance + full analysis link */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              {/* Left: icon + name + badge */}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <ModelIcon model={m.model} className="size-4 shrink-0 text-[#0a0a0a]" />
+                  <span className="text-[16px] font-medium text-[#0a0a0a]">{m.model}</span>
+                </div>
+                <StanceBadge stance={m.stance} />
+              </div>
+
+              {/* Right: Full Analysis link */}
+              <Link
+                href="/research"
+                className="flex items-center gap-1 text-[14px] font-medium text-[#0a0a0a] opacity-60 transition-opacity hover:opacity-100"
+              >
+                Full Analysis
+                <ArrowRight className="size-3.5" strokeWidth={1.75} />
+              </Link>
+            </div>
+
+            {/* Description */}
+            <p className="text-[14px] leading-[1.4] text-[#737373]">
+              {m.description}
+            </p>
+          </div>
+
+          {/* Two-column content */}
+          <div className="flex gap-2">
+
+            {/* Left: query + response */}
+            <div
+              className="flex flex-1 flex-col gap-4 rounded-md p-4"
+              style={{ backgroundColor: "#f9fafb" }}
+            >
+              {/* User query */}
+              <div className="flex flex-col gap-2">
+                <p className="text-[12px] font-medium text-[#737373]">User query</p>
+                <p className="text-[14px] leading-[1.4] text-[#0a0a0a]">{m.query}</p>
+              </div>
+
+              {/* Divider */}
+              <div className="h-px w-full" style={{ backgroundColor: "#e5e7eb" }} />
+
+              {/* Model response */}
+              <div className="flex flex-col gap-2">
+                <p className="text-[12px] font-medium text-[#737373]">{m.model} response</p>
+                <p className="text-[14px] leading-[1.4] text-[#0a0a0a]">{m.response}</p>
+              </div>
+            </div>
+
+            {/* Right: top tracked queries */}
+            <div
+              className="flex flex-1 flex-col justify-between gap-4 self-stretch rounded-md p-4"
+              style={{ backgroundColor: "#f9fafb" }}
+            >
+              <p className="text-[12px] font-medium text-[#737373]">Top tracked queries</p>
+              <div className="flex flex-col gap-3">
+                {m.queries.map((q) => (
+                  <div key={q} className="flex items-start gap-2">
+                    <div
+                      className="mt-[6px] size-1 shrink-0 rounded-full"
+                      style={{ backgroundColor: "#0a0a0a" }}
+                    />
+                    <p className="text-[14px] leading-[1.4] text-[#0a0a0a]">{q}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
 
     </div>
   )
