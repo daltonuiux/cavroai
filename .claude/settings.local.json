@@ -25,7 +25,19 @@
       "Bash(xargs perl -i -pe 's/text-foreground\\\\/55\\(?=[^0-9]\\)/text-zinc-500/g')",
       "Bash(npx eslint *)",
       "Bash(echo \"TSC exit: $?\")",
-      "Bash(echo \"ESLint exit: $?\")"
+      "Bash(echo \"ESLint exit: $?\")",
+      "mcp__b8dceafa-fa63-4e5f-8694-ae77bd365062__get_metadata",
+      "mcp__b8dceafa-fa63-4e5f-8694-ae77bd365062__get_screenshot",
+      "mcp__b8dceafa-fa63-4e5f-8694-ae77bd365062__use_figma",
+      "Bash(curl -s -o /tmp/figma_overview.png \"https://www.figma.com/api/mcp/asset/b592923b-87e6-42e6-8439-1dbb9242bd13\")",
+      "Bash(curl -s -o /tmp/figma_recommendations.png \"https://www.figma.com/api/mcp/asset/232f0f3b-d468-4fa0-809d-f232661e1675\")",
+      "Bash(curl -s -o /tmp/figma_perception.png \"https://www.figma.com/api/mcp/asset/5acca62f-bddf-4aed-8d85-8f9cd7021175\")",
+      "Bash(curl -s -o /tmp/figma_research.png \"https://www.figma.com/api/mcp/asset/963d9c9f-7945-4b5c-9ec3-8ae6e350f7c4\")",
+      "Bash(curl -s -o /tmp/figma_login.png \"https://www.figma.com/api/mcp/asset/1552705d-123b-4151-ab75-3ce31e706f01\")",
+      "Bash(curl -s -o /tmp/figma_overview_quickwin.png \"https://www.figma.com/api/mcp/asset/e75f4ed4-6084-4465-af0d-938ff0e47bed\")",
+      "Bash(curl -s -o /tmp/figma_rec_checked.png \"https://www.figma.com/api/mcp/asset/eb310132-4e25-4011-ab72-84153fc895ac\")",
+      "Bash(curl -s -o /tmp/figma_fullpage.png \"https://www.figma.com/api/mcp/asset/ead15137-a36a-4c6d-9fe5-742154f1d49a\")",
+      "mcp__b8dceafa-fa63-4e5f-8694-ae77bd365062__get_design_context"
     ]
   }
 }

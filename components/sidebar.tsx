@@ -4,20 +4,31 @@ import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
-  LayoutDashboard,
+  LayoutGrid,
   Eye,
   Lightbulb,
   Database,
-  Settings2,
+  CircleUser,
+  ChevronsUpDown,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
+// ---------------------------------------------------------------------------
+// Nav items
+// Figma label: "Recommendation" (singular) — route href stays /recommendations
+// Settings removed from sidebar nav per Figma (route /settings still exists)
+// ---------------------------------------------------------------------------
+
 const navItems = [
-  { label: "Overview",        href: "/overview",        icon: LayoutDashboard },
-  { label: "Perception",      href: "/perception",      icon: Eye             },
-  { label: "Recommendations", href: "/recommendations", icon: Lightbulb       },
-  { label: "Research",        href: "/research",        icon: Database        },
+  { label: "Overview",       href: "/overview",        icon: LayoutGrid },
+  { label: "Perception",     href: "/perception",      icon: Eye        },
+  { label: "Recommendation", href: "/recommendations", icon: Lightbulb  },
+  { label: "Research",       href: "/research",        icon: Database   },
 ]
+
+// ---------------------------------------------------------------------------
+// NavItem
+// ---------------------------------------------------------------------------
 
 function NavItem({
   href,
@@ -34,51 +45,61 @@ function NavItem({
     <Link
       href={href}
       className={cn(
-        "group flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[13px] leading-none transition-colors duration-100",
+        // Figma: h=32px, px=12px, gap=8px, rounded=8px, font-medium 14px
+        "flex h-8 w-full items-center gap-2 rounded-lg px-3 text-[14px] font-medium leading-none transition-colors duration-100",
         active
-          ? "font-semibold text-foreground"
-          : "font-medium text-zinc-500 hover:text-foreground hover:bg-zinc-950/[0.04] dark:hover:bg-zinc-100/[0.04]",
+          ? "text-[#0a0a0a] dark:text-zinc-100"
+          : "text-[#737373] hover:text-[#0a0a0a] dark:text-zinc-400 dark:hover:text-zinc-100",
       )}
-      style={active ? { backgroundColor: "rgba(24, 24, 27, 0.07)" } : undefined}
+      // Figma active bg: rgba(10,10,10,0.06)
+      style={active ? { backgroundColor: "rgba(10,10,10,0.06)" } : undefined}
     >
       <Icon
+        // Figma: 16×16px icons
         className={cn(
-          "size-[14px] shrink-0",
+          "size-4 shrink-0",
           active
-            ? "text-foreground"
-            : "text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300",
+            ? "text-[#0a0a0a] dark:text-zinc-100"
+            : "text-[#9a9a9a] dark:text-zinc-500",
         )}
-        strokeWidth={active ? 2.25 : 1.75}
+        strokeWidth={active ? 2 : 1.75}
       />
-      <span className="tracking-[-0.005em]">{label}</span>
+      <span>{label}</span>
     </Link>
   )
 }
+
+// ---------------------------------------------------------------------------
+// Sidebar
+// ---------------------------------------------------------------------------
 
 export function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="flex h-full w-[220px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
+    // Figma: 240px wide, no bg fill (transparent — page bg gray shows through), no border-r
+    <aside className="flex h-full w-[240px] shrink-0 flex-col bg-transparent">
 
-      {/* Logo */}
+      {/* Logo — Figma: 24px padding, 68px total height, no border-b */}
       <Link
         href="/overview"
-        className="flex h-11 items-center border-b border-sidebar-border px-4"
+        className="flex h-[68px] shrink-0 items-center px-6"
       >
         <Image
           src="/logo.svg"
           alt="Kaelor AI"
-          width={88}
-          height={16}
+          width={93}
+          height={20}
           priority
           className="dark:invert"
         />
       </Link>
 
-      {/* Main nav */}
-      <nav className="flex flex-1 flex-col overflow-y-auto px-2 py-3">
-        <div className="flex flex-col gap-0.5">
+      {/* Nav + workspace — Figma: px-3 (12px), pb-3, flex-col justify-between */}
+      <div className="flex flex-1 flex-col justify-between overflow-y-auto px-3 pb-3">
+
+        {/* Main nav — Figma: gap=8px between items */}
+        <nav className="flex flex-col gap-2">
           {navItems.map(({ label, href, icon }) => (
             <NavItem
               key={href}
@@ -88,19 +109,34 @@ export function Sidebar() {
               active={pathname === href || pathname.startsWith(href + "/")}
             />
           ))}
+        </nav>
+
+        {/*
+          Workspace selector
+          Figma: white bg, rounded-8px, h=40px, px=12px, gap=8px
+          shadow: 0px 0px 0px 1px rgba(24,24,27,0.08) + 0px 2px 3px rgba(0,0,0,0.08)
+          Phase 1: static display. Phase 2+: add dropdown for org switching.
+        */}
+        <div
+          className="flex h-10 items-center gap-2 rounded-lg bg-white px-3 dark:bg-zinc-800"
+          style={{
+            boxShadow: "0px 0px 0px 1px rgba(24,24,27,0.08), 0px 2px 3px 0px rgba(0,0,0,0.08)",
+          }}
+        >
+          <CircleUser
+            className="size-4 shrink-0 text-[#737373] dark:text-zinc-400"
+            strokeWidth={1.75}
+          />
+          <span className="flex-1 truncate text-[14px] font-medium leading-none text-[#0a0a0a] dark:text-zinc-100">
+            Acme Inc.
+          </span>
+          <ChevronsUpDown
+            className="size-3 shrink-0 text-[#9a9a9a] dark:text-zinc-500"
+            strokeWidth={1.75}
+          />
         </div>
-      </nav>
 
-      {/* Bottom */}
-      <div className="border-t border-sidebar-border px-2 py-2.5">
-        <NavItem
-          href="/settings"
-          label="Settings"
-          icon={Settings2}
-          active={pathname === "/settings"}
-        />
       </div>
-
     </aside>
   )
 }

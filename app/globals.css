@@ -49,7 +49,8 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
+  /* Page chrome background — light gray (matches Figma shell) */
+  --background: oklch(0.963 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -167,10 +168,16 @@
   }
 
   /* ── Kaelor card ── */
+  /* Shadow matches Figma: 1px ring + 2px/3px drop */
   .card-kaelor {
-    border: 1px solid rgba(24, 24, 27, 0.12);
-    box-shadow: 0 1px 1px 0 rgba(0, 0, 0, 0.04);
+    box-shadow: 0px 0px 0px 1px rgba(24, 24, 27, 0.08), 0px 2px 3px 0px rgba(0, 0, 0, 0.08);
     background: #FFFFFF;
+    border-radius: 8px;
+  }
+
+  /* ── Content shell card (main area in layout) ── */
+  .shell-card {
+    box-shadow: 0px 0px 0px 1px rgba(24, 24, 27, 0.08), 0px 2px 3px 0px rgba(0, 0, 0, 0.08);
   }
 
   /* ── Kaelor input ── */
@@ -207,8 +214,10 @@
     background: oklch(0.24 0 0);
   }
   .dark .card-kaelor {
-    border-color: oklch(1 0 0 / 10%);
     background: oklch(0.205 0 0);
-    box-shadow: 0 1px 1px 0 rgba(0, 0, 0, 0.12);
+    box-shadow: 0px 0px 0px 1px oklch(1 0 0 / 10%), 0px 2px 3px 0px rgba(0, 0, 0, 0.24);
+  }
+  .dark .shell-card {
+    box-shadow: 0px 0px 0px 1px oklch(1 0 0 / 10%), 0px 2px 3px 0px rgba(0, 0, 0, 0.24);
   }
 }
